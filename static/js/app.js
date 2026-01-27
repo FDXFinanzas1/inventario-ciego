@@ -431,6 +431,11 @@ function renderProductosInventario() {
                             }).join('')}
                         </tbody>
                     </table>
+                    <div class="obs-footer">
+                        <button class="btn-guardar-obs" onclick="guardarTodasObservaciones()">
+                            <i class="fas fa-save"></i> Guardar Observaciones
+                        </button>
+                    </div>
                 </div>
             `;
         }
@@ -487,6 +492,55 @@ async function guardarConteoDirecto(input) {
 }
 
 // ==================== GUARDAR OBSERVACION ====================
+
+async function guardarTodasObservaciones() {
+    const inputs = document.querySelectorAll('.input-observacion');
+    if (inputs.length === 0) return;
+
+    const btn = document.querySelector('.btn-guardar-obs');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+    }
+
+    let errores = 0;
+    for (const input of inputs) {
+        const id = parseInt(input.dataset.id);
+        const observaciones = input.value.trim();
+
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, observaciones })
+            });
+
+            if (response.ok) {
+                const prod = state.productos.find(p => p.id === id);
+                if (prod) prod.observaciones = observaciones;
+                input.classList.add('guardado');
+                setTimeout(() => input.classList.remove('guardado'), 1500);
+            } else {
+                errores++;
+                input.classList.add('error');
+                setTimeout(() => input.classList.remove('error'), 1500);
+            }
+        } catch (error) {
+            errores++;
+        }
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Guardar Observaciones';
+    }
+
+    if (errores === 0) {
+        showToast('Observaciones guardadas correctamente', 'success');
+    } else {
+        showToast(`${errores} observaciones no se pudieron guardar`, 'error');
+    }
+}
 
 async function guardarObservacion(input) {
     const id = parseInt(input.dataset.id);

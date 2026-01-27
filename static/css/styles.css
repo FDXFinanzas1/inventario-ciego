@@ -907,6 +907,42 @@ main {
     font-style: italic;
 }
 
+.obs-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-guardar-obs {
+    padding: 10px 24px;
+    background: var(--success);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.btn-guardar-obs:hover {
+    background: #047857;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-guardar-obs:disabled {
+    background: var(--text-light);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 /* Valores ocultos (Inventario Ciego) */
 .tabla-inventario .oculto {
     color: var(--text-light);
@@ -1553,6 +1589,16 @@ main {
     .input-observacion {
         padding: 6px 6px;
         font-size: 12px;
+    }
+
+    .obs-footer {
+        padding: 10px 10px;
+    }
+
+    .btn-guardar-obs {
+        width: 100%;
+        justify-content: center;
+        padding: 12px;
     }
 
     .tabla-inventario th {
