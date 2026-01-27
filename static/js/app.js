@@ -436,7 +436,13 @@ function renderProductosInventario() {
         }
     }
 
-    container.innerHTML = tablaHtml + obsHtml;
+    container.innerHTML = tablaHtml;
+
+    // Renderizar observaciones en contenedor separado (fuera del scroll)
+    const obsContainer = document.getElementById('observaciones-container');
+    if (obsContainer) {
+        obsContainer.innerHTML = obsHtml;
+    }
 
     totalSpan.textContent = productosAMostrar.length;
     actualizarContador();
@@ -583,6 +589,8 @@ function renderProductosVacio() {
     `;
     document.getElementById('productos-total').textContent = '0';
     document.getElementById('productos-contados').textContent = '0';
+    const obsContainer = document.getElementById('observaciones-container');
+    if (obsContainer) obsContainer.innerHTML = '';
 }
 
 // ==================== PRODUCTOS ====================
