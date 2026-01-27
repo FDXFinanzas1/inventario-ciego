@@ -1,3 +1,283 @@
+// ==================== DASHBOARD & CHARTS ====================
+
+// Rastrear instancias de graficos para destruirlos antes de recrear
+let chartInstances = {};
+
+// Paleta de 6 colores corporativos (1 por bodega)
+const CHART_COLORS = [
+    '#1E3A5F',  // Azul corporativo
+    '#B91C1C',  // Rojo corporativo
+    '#059669',  // Verde
+    '#D97706',  // Naranja
+    '#7C3AED',  // Purpura
+    '#0891B2'   // Cyan
+];
+
+const CHART_COLORS_ALPHA = [
+    'rgba(30, 58, 95, 0.7)',
+    'rgba(185, 28, 28, 0.7)',
+    'rgba(5, 150, 105, 0.7)',
+    'rgba(217, 119, 6, 0.7)',
+    'rgba(124, 58, 237, 0.7)',
+    'rgba(8, 145, 178, 0.7)'
+];
+
+function configureChartDefaults() {
+    if (typeof Chart === 'undefined') return;
+    Chart.defaults.font.family = "'Poppins', sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.tooltip.backgroundColor = '#0F172A';
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.padding = 16;
+    Chart.defaults.elements.bar.borderRadius = 4;
+}
+
+function destroyChart(id) {
+    if (chartInstances[id]) {
+        chartInstances[id].destroy();
+        delete chartInstances[id];
+    }
+}
+
+async function cargarDashboard() {
+    const fechaDesde = document.getElementById('dash-fecha-desde').value;
+    const fechaHasta = document.getElementById('dash-fecha-hasta').value;
+
+    if (!fechaDesde || !fechaHasta) {
+        showToast('Selecciona las fechas desde y hasta', 'error');
+        return;
+    }
+
+    try {
+        const [resDash, resTend] = await Promise.all([
+            fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`),
+            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?dias=30`)
+        ]);
+
+        if (resDash.ok && resTend.ok) {
+            const datosDash = await resDash.json();
+            const datosTend = await resTend.json();
+
+            renderDashboardStats(datosDash);
+            renderChartDiferenciasBodega(datosDash);
+            renderChartDistribucion(datosDash);
+            renderChartFaltantesSobrantes(datosDash);
+            renderChartTendenciaTemporal(datosTend);
+        } else {
+            showToast('Error al cargar datos del dashboard', 'error');
+        }
+    } catch (error) {
+        console.error('Error cargando dashboard:', error);
+        showToast('Error de conexion al cargar dashboard', 'error');
+    }
+}
+
+function renderDashboardStats(datos) {
+    const container = document.getElementById('dashboard-stats');
+    if (!datos || datos.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-chart-bar"></i><p>No hay datos para el rango seleccionado</p></div>';
+        return;
+    }
+
+    const totales = datos.reduce((acc, d) => {
+        acc.productos += d.total_productos;
+        acc.contados += d.total_contados;
+        acc.diferencias += d.total_con_diferencia;
+        acc.sumDesv += d.promedio_diferencia_abs;
+        return acc;
+    }, { productos: 0, contados: 0, diferencias: 0, sumDesv: 0 });
+
+    const promDesv = datos.length > 0 ? (totales.sumDesv / datos.length).toFixed(2) : '0';
+
+    container.innerHTML = `
+        <div class="dashboard-stat-card">
+            <div class="stat-icon icon-productos"><i class="fas fa-boxes-stacked"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">${totales.productos.toLocaleString()}</div>
+                <div class="stat-label">Total Productos</div>
+            </div>
+        </div>
+        <div class="dashboard-stat-card">
+            <div class="stat-icon icon-contados"><i class="fas fa-clipboard-check"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">${totales.contados.toLocaleString()}</div>
+                <div class="stat-label">Contados</div>
+            </div>
+        </div>
+        <div class="dashboard-stat-card">
+            <div class="stat-icon icon-diferencias"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">${totales.diferencias.toLocaleString()}</div>
+                <div class="stat-label">Con Diferencia</div>
+            </div>
+        </div>
+        <div class="dashboard-stat-card">
+            <div class="stat-icon icon-desviacion"><i class="fas fa-chart-line"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">${promDesv}</div>
+                <div class="stat-label">Prom. Desviacion</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderChartDiferenciasBodega(datos) {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('diferencias-bodega');
+    const ctx = document.getElementById('chart-diferencias-bodega');
+    if (!ctx || !datos || datos.length === 0) return;
+
+    chartInstances['diferencias-bodega'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: datos.map(d => d.local_nombre),
+            datasets: [{
+                label: 'Productos con diferencia',
+                data: datos.map(d => d.total_con_diferencia),
+                backgroundColor: CHART_COLORS_ALPHA.slice(0, datos.length),
+                borderColor: CHART_COLORS.slice(0, datos.length),
+                borderWidth: 2
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: { beginAtZero: true, grid: { color: '#F1F5F9' } },
+                y: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+function renderChartDistribucion(datos) {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('distribucion');
+    const ctx = document.getElementById('chart-distribucion');
+    if (!ctx || !datos || datos.length === 0) return;
+
+    chartInstances['distribucion'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: datos.map(d => d.local_nombre),
+            datasets: [{
+                data: datos.map(d => d.total_con_diferencia),
+                backgroundColor: CHART_COLORS.slice(0, datos.length),
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { font: { size: 11 } }
+                }
+            },
+            cutout: '55%'
+        }
+    });
+}
+
+function renderChartFaltantesSobrantes(datos) {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('faltantes-sobrantes');
+    const ctx = document.getElementById('chart-faltantes-sobrantes');
+    if (!ctx || !datos || datos.length === 0) return;
+
+    chartInstances['faltantes-sobrantes'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: datos.map(d => d.local_nombre),
+            datasets: [
+                {
+                    label: 'Faltantes',
+                    data: datos.map(d => d.total_faltantes),
+                    backgroundColor: 'rgba(185, 28, 28, 0.7)',
+                    borderColor: '#B91C1C',
+                    borderWidth: 2
+                },
+                {
+                    label: 'Sobrantes',
+                    data: datos.map(d => d.total_sobrantes),
+                    backgroundColor: 'rgba(5, 150, 105, 0.7)',
+                    borderColor: '#059669',
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: { beginAtZero: true, grid: { color: '#F1F5F9' } }
+            }
+        }
+    });
+}
+
+function renderChartTendenciaTemporal(datos) {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('tendencia-temporal');
+    const ctx = document.getElementById('chart-tendencia-temporal');
+    if (!ctx || !datos || !datos.fechas || datos.fechas.length === 0) return;
+
+    const fechasCortas = datos.fechas.map(f => {
+        const parts = f.split('-');
+        return `${parts[2]}/${parts[1]}`;
+    });
+
+    const datasets = [];
+    let colorIdx = 0;
+    for (const [local, info] of Object.entries(datos.series)) {
+        datasets.push({
+            label: info.nombre,
+            data: info.datos,
+            borderColor: CHART_COLORS[colorIdx % CHART_COLORS.length],
+            backgroundColor: CHART_COLORS_ALPHA[colorIdx % CHART_COLORS_ALPHA.length],
+            fill: false,
+            tension: 0.3,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            borderWidth: 2
+        });
+        colorIdx++;
+    }
+
+    chartInstances['tendencia-temporal'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: fechasCortas,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' }
+            },
+            scales: {
+                x: { grid: { color: '#F1F5F9' } },
+                y: { beginAtZero: true, grid: { color: '#F1F5F9' }, title: { display: true, text: 'Productos con diferencia' } }
+            }
+        }
+    });
+}
+
+// ==================== FIN DASHBOARD ====================
+
 // Estado de la aplicacion
 let state = {
     user: null,
@@ -31,6 +311,9 @@ function initApp() {
 
     // Cargar bodegas
     cargarBodegas();
+
+    // Chart.js defaults
+    configureChartDefaults();
 }
 
 
@@ -55,6 +338,9 @@ function setupEventListeners() {
 
     // Historico
     document.getElementById('btn-buscar-historico').addEventListener('click', buscarHistorico);
+
+    // Dashboard
+    document.getElementById('btn-cargar-dashboard').addEventListener('click', cargarDashboard);
 }
 
 // ==================== AUTENTICACION ====================
@@ -136,6 +422,20 @@ function cambiarVista(viewName) {
         view.classList.remove('active');
     });
     document.getElementById(`view-${viewName}`).classList.add('active');
+
+    // Auto-cargar dashboard al entrar
+    if (viewName === 'dashboard') {
+        const dashDesde = document.getElementById('dash-fecha-desde');
+        const dashHasta = document.getElementById('dash-fecha-hasta');
+        if (!dashDesde.value || !dashHasta.value) {
+            const hoy = new Date();
+            const hace30 = new Date();
+            hace30.setDate(hoy.getDate() - 30);
+            dashDesde.value = hace30.toISOString().split('T')[0];
+            dashHasta.value = hoy.toISOString().split('T')[0];
+        }
+        cargarDashboard();
+    }
 }
 
 // ==================== BODEGAS ====================
@@ -908,8 +1208,8 @@ async function verDiferencias() {
     const fecha = document.getElementById('reporte-fecha-desde').value;
     const bodega = document.getElementById('reporte-bodega').value;
 
-    if (!fecha || !bodega) {
-        showToast('Selecciona una fecha (Desde) y una bodega para ver diferencias', 'error');
+    if (!fecha) {
+        showToast('Selecciona una fecha (Desde) para ver diferencias', 'error');
         return;
     }
 
@@ -918,21 +1218,28 @@ async function verDiferencias() {
         return b ? b.nombre : id;
     };
 
+    const mostrarTodas = !bodega;
+
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/reportes/diferencias?fecha=${fecha}&bodega=${bodega}`);
+        let url = `${CONFIG.API_URL}/api/reportes/diferencias?fecha=${fecha}`;
+        if (bodega) url += `&bodega=${bodega}`;
+
+        const response = await fetch(url);
         if (response.ok) {
             const datos = await response.json();
             const panel = document.getElementById('reporte-resultado');
             const titulo = document.getElementById('reporte-titulo');
             const contenido = document.getElementById('reporte-contenido');
 
-            titulo.textContent = `Diferencias - ${getNombreBodega(bodega)} - ${formatearFecha(fecha)}`;
+            titulo.textContent = mostrarTodas
+                ? `Diferencias - Todas las Bodegas - ${formatearFecha(fecha)}`
+                : `Diferencias - ${getNombreBodega(bodega)} - ${formatearFecha(fecha)}`;
 
             if (datos.length === 0) {
                 contenido.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-check-circle"></i>
-                        <p>No hay productos con diferencias para esta fecha y bodega</p>
+                        <p>No hay productos con diferencias para esta fecha${mostrarTodas ? '' : ' y bodega'}</p>
                     </div>
                 `;
             } else {
@@ -941,6 +1248,7 @@ async function verDiferencias() {
                         <table class="tabla-reporte">
                             <thead>
                                 <tr>
+                                    ${mostrarTodas ? '<th>Bodega</th>' : ''}
                                     <th>Codigo</th>
                                     <th>Producto</th>
                                     <th>Unidad</th>
@@ -956,6 +1264,7 @@ async function verDiferencias() {
                                     const difClass = p.diferencia < 0 ? 'negativa' : 'positiva';
                                     return `
                                         <tr>
+                                            ${mostrarTodas ? `<td><strong>${p.local_nombre || p.local}</strong></td>` : ''}
                                             <td class="col-codigo">${p.codigo}</td>
                                             <td>${p.nombre}</td>
                                             <td>${p.unidad || '-'}</td>
@@ -1053,6 +1362,9 @@ async function verTendencias() {
                 `;
             } else {
                 contenido.innerHTML = `
+                    <div class="reporte-chart-container">
+                        <canvas id="chart-tendencias-reporte"></canvas>
+                    </div>
                     <div class="tabla-reporte-wrapper">
                         <table class="tabla-reporte">
                             <thead>
@@ -1083,6 +1395,38 @@ async function verTendencias() {
                         </table>
                     </div>
                 `;
+
+                // Renderizar grafico de barras horizontal en el reporte
+                if (typeof Chart !== 'undefined') {
+                    destroyChart('tendencias-reporte');
+                    const ctxTend = document.getElementById('chart-tendencias-reporte');
+                    if (ctxTend) {
+                        const top10 = datos.slice(0, 10);
+                        chartInstances['tendencias-reporte'] = new Chart(ctxTend, {
+                            type: 'bar',
+                            data: {
+                                labels: top10.map(p => p.nombre.length > 20 ? p.nombre.substring(0, 20) + '...' : p.nombre),
+                                datasets: [{
+                                    label: 'Frecuencia de descuadre',
+                                    data: top10.map(p => p.frecuencia),
+                                    backgroundColor: top10.map((_, i) => CHART_COLORS_ALPHA[i % CHART_COLORS_ALPHA.length]),
+                                    borderColor: top10.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+                                    borderWidth: 2
+                                }]
+                            },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    x: { beginAtZero: true, grid: { color: '#F1F5F9' } },
+                                    y: { grid: { display: false } }
+                                }
+                            }
+                        });
+                    }
+                }
             }
 
             panel.classList.remove('hidden');

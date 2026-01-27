@@ -27,6 +27,16 @@ DB_CONFIG = {
 def get_db():
     return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
 
+# Helper: mapeo de IDs de bodega a nombres legibles
+BODEGAS_NOMBRES = {
+    'real_audiencia': 'Real Audiencia',
+    'floreana': 'Floreana',
+    'portugal': 'Portugal',
+    'santo_cachon_real': 'Santo Cachon Real',
+    'santo_cachon_portugal': 'Santo Cachon Portugal',
+    'simon_bolon': 'Simon Bolon'
+}
+
 # ==================== RUTAS ESTATICAS ====================
 
 @app.route('/')
@@ -286,33 +296,41 @@ def reporte_diferencias():
     fecha = request.args.get('fecha')
     bodega = request.args.get('bodega')
 
-    if not fecha or not bodega:
-        return jsonify({'error': 'fecha y bodega son requeridos'}), 400
+    if not fecha:
+        return jsonify({'error': 'fecha es requerida'}), 400
 
     try:
         conn = get_db()
         cur = conn.cursor()
 
-        cur.execute("""
+        query = """
             SELECT codigo, nombre, unidad, cantidad as sistema,
                    cantidad_contada as conteo1,
                    cantidad_contada_2 as conteo2,
                    COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
-                   observaciones
+                   observaciones,
+                   local
             FROM inventario_diario.inventario_ciego_conteos
-            WHERE fecha = %s AND local = %s
+            WHERE fecha = %s
               AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
               AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
-            ORDER BY ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) DESC
-        """, (fecha, bodega))
+        """
+        params = [fecha]
 
+        if bodega:
+            query += " AND local = %s"
+            params.append(bodega)
+
+        query += " ORDER BY ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) DESC"
+
+        cur.execute(query, params)
         productos = cur.fetchall()
         conn.close()
 
         # Convertir Decimal a float
         datos = []
         for p in productos:
-            datos.append({
+            item = {
                 'codigo': p['codigo'],
                 'nombre': p['nombre'],
                 'unidad': p['unidad'],
@@ -321,7 +339,11 @@ def reporte_diferencias():
                 'conteo2': float(p['conteo2']) if p['conteo2'] is not None else None,
                 'diferencia': float(p['diferencia']) if p['diferencia'] is not None else 0,
                 'observaciones': p['observaciones'] or ''
-            })
+            }
+            if not bodega:
+                item['local'] = p['local']
+                item['local_nombre'] = BODEGAS_NOMBRES.get(p['local'], p['local'])
+            datos.append(item)
 
         return jsonify(datos)
     except Exception as e:
@@ -506,6 +528,122 @@ def reporte_tendencias():
             })
 
         return jsonify(datos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reportes/dashboard', methods=['GET'])
+def reporte_dashboard():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+
+    if not fecha_desde or not fecha_hasta:
+        return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT
+                local,
+                COUNT(*) as total_productos,
+                COUNT(cantidad_contada) as total_contados,
+                COUNT(CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+                    AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+                    THEN 1 END) as total_con_diferencia,
+                COALESCE(ROUND(AVG(ABS(
+                    CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+                         AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+                    THEN COALESCE(cantidad_contada_2, cantidad_contada) - cantidad END
+                ))::numeric, 3), 0) as promedio_diferencia_abs,
+                COUNT(CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+                    AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad < 0
+                    THEN 1 END) as total_faltantes,
+                COUNT(CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+                    AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad > 0
+                    THEN 1 END) as total_sobrantes
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha >= %s AND fecha <= %s
+            GROUP BY local
+            ORDER BY local
+        """, (fecha_desde, fecha_hasta))
+
+        resultados = cur.fetchall()
+        conn.close()
+
+        datos = []
+        for r in resultados:
+            datos.append({
+                'local': r['local'],
+                'local_nombre': BODEGAS_NOMBRES.get(r['local'], r['local']),
+                'total_productos': r['total_productos'],
+                'total_contados': r['total_contados'],
+                'total_con_diferencia': r['total_con_diferencia'],
+                'promedio_diferencia_abs': float(r['promedio_diferencia_abs']),
+                'total_faltantes': r['total_faltantes'],
+                'total_sobrantes': r['total_sobrantes']
+            })
+
+        return jsonify(datos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reportes/tendencias-temporal', methods=['GET'])
+def reporte_tendencias_temporal():
+    bodega = request.args.get('bodega')
+    dias = request.args.get('dias', 30, type=int)
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        query = """
+            SELECT
+                fecha,
+                local,
+                COUNT(CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+                    AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+                    THEN 1 END) as total_con_diferencia
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha >= CURRENT_DATE - %s
+        """
+        params = [dias]
+
+        if bodega:
+            query += " AND local = %s"
+            params.append(bodega)
+
+        query += " GROUP BY fecha, local ORDER BY fecha, local"
+
+        cur.execute(query, params)
+        resultados = cur.fetchall()
+        conn.close()
+
+        # Agrupar por fecha y series por bodega
+        fechas_set = set()
+        series_dict = {}
+        for r in resultados:
+            fecha_str = str(r['fecha'])
+            local = r['local']
+            fechas_set.add(fecha_str)
+            if local not in series_dict:
+                series_dict[local] = {}
+            series_dict[local][fecha_str] = r['total_con_diferencia']
+
+        fechas = sorted(fechas_set)
+        series = {}
+        for local, valores in series_dict.items():
+            series[local] = {
+                'nombre': BODEGAS_NOMBRES.get(local, local),
+                'datos': [valores.get(f, 0) for f in fechas]
+            }
+
+        return jsonify({
+            'fechas': fechas,
+            'series': series
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
