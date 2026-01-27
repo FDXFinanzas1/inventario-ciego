@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario Ciego - FOODIX</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen active">
+            <div class="login-card">
+                <div class="logo">
+                    <i class="fas fa-boxes-stacked"></i>
+                    <h1>FOODIX</h1>
+                    <p>Sistema de Inventario Ciego</p>
+                </div>
+                <form id="login-form">
+                    <div class="input-group">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="username" placeholder="Usuario" required>
+                    </div>
+                    <div class="input-group">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="password" placeholder="Contraseña" required>
+                    </div>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-sign-in-alt"></i> Ingresar
+                    </button>
+                </form>
+                <div id="login-error" class="error-msg hidden"></div>
+            </div>
+        </div>
+
+        <!-- Main Screen -->
+        <div id="main-screen" class="screen">
+            <header>
+                <div class="header-left">
+                    <i class="fas fa-boxes-stacked"></i>
+                    <span>FOODIX - Inventario</span>
+                </div>
+                <div class="header-right">
+                    <span id="user-name">Usuario</span>
+                    <button id="btn-logout" class="btn-icon" title="Cerrar sesión">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <nav class="main-nav">
+                <button class="nav-btn active" data-view="conteo">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Conteo</span>
+                </button>
+                <button class="nav-btn" data-view="historico">
+                    <i class="fas fa-history"></i>
+                    <span>Histórico</span>
+                </button>
+                <button class="nav-btn" data-view="reportes">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Reportes</span>
+                </button>
+            </nav>
+
+            <main>
+                <!-- Vista Conteo -->
+                <div id="view-conteo" class="view active">
+                    <div class="view-header">
+                        <h2><i class="fas fa-clipboard-list"></i> Registro de Conteo</h2>
+                    </div>
+
+                    <div class="form-section">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label><i class="fas fa-calendar"></i> Fecha</label>
+                                <input type="date" id="fecha-conteo">
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-warehouse"></i> Bodega</label>
+                                <select id="bodega-select">
+                                    <option value="">Seleccionar bodega...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-tags"></i> Categoría</label>
+                                <select id="categoria-select">
+                                    <option value="">Todas las categorías</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row botones-accion">
+                            <button id="btn-consultar" class="btn-primary">
+                                <i class="fas fa-search"></i> Consultar
+                            </button>
+                            <button id="btn-cargar-productos" class="btn-secondary">
+                                <i class="fas fa-download"></i> Cargar desde Catálogo
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="buscar-producto" placeholder="Buscar producto por nombre o código...">
+                    </div>
+
+                    <div class="productos-container">
+                        <div id="productos-list" class="productos-grid">
+                            <!-- Los productos se cargan dinámicamente -->
+                            <div class="empty-state">
+                                <i class="fas fa-box-open"></i>
+                                <p>Selecciona una categoría y carga los productos</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-bar">
+                        <div class="contador">
+                            <span id="productos-contados">0</span> / <span id="productos-total">0</span> contados
+                        </div>
+                        <button id="btn-guardar-conteo" class="btn-primary" disabled>
+                            <i class="fas fa-save"></i> Guardar Conteo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Vista Histórico -->
+                <div id="view-historico" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-history"></i> Histórico de Conteos</h2>
+                    </div>
+
+                    <div class="filtros-historico">
+                        <div class="form-group">
+                            <label>Desde</label>
+                            <input type="text" id="fecha-desde" placeholder="DD/MM/YYYY" maxlength="10">
+                        </div>
+                        <div class="form-group">
+                            <label>Hasta</label>
+                            <input type="text" id="fecha-hasta" placeholder="DD/MM/YYYY" maxlength="10">
+                        </div>
+                        <div class="form-group">
+                            <label>Bodega</label>
+                            <select id="filtro-bodega">
+                                <option value="">Todas</option>
+                            </select>
+                        </div>
+                        <button id="btn-buscar-historico" class="btn-secondary">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+
+                    <div id="historico-list" class="historico-container">
+                        <div class="empty-state">
+                            <i class="fas fa-calendar-alt"></i>
+                            <p>Selecciona un rango de fechas para ver el histórico</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Reportes -->
+                <div id="view-reportes" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-chart-bar"></i> Reportes</h2>
+                    </div>
+
+                    <div class="reportes-grid">
+                        <div class="reporte-card">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <h3>Diferencias</h3>
+                            <p>Ver productos con diferencias en el conteo</p>
+                            <button class="btn-secondary" onclick="verDiferencias()">
+                                <i class="fas fa-eye"></i> Ver Reporte
+                            </button>
+                        </div>
+                        <div class="reporte-card">
+                            <i class="fas fa-file-excel"></i>
+                            <h3>Exportar Excel</h3>
+                            <p>Descargar conteos en formato Excel</p>
+                            <button class="btn-secondary" onclick="exportarExcel()">
+                                <i class="fas fa-download"></i> Descargar
+                            </button>
+                        </div>
+                        <div class="reporte-card">
+                            <i class="fas fa-chart-line"></i>
+                            <h3>Tendencias</h3>
+                            <p>Análisis de tendencias por producto</p>
+                            <button class="btn-secondary" onclick="verTendencias()">
+                                <i class="fas fa-eye"></i> Ver Reporte
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="reporte-resultado" class="reporte-resultado hidden">
+                        <!-- Resultados de reportes -->
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal para editar cantidad -->
+    <div id="modal-cantidad" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-producto-nombre">Producto</h3>
+                <button class="btn-close" onclick="cerrarModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-producto-codigo" class="producto-codigo"></p>
+                <div class="cantidad-input">
+                    <button class="btn-cantidad" onclick="ajustarCantidad(-1)">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <input type="number" id="modal-cantidad-input" min="0" step="0.01" value="0">
+                    <button class="btn-cantidad" onclick="ajustarCantidad(1)">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="cerrarModal()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarCantidad()">
+                    <i class="fas fa-check"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toast-container"></div>
+
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
