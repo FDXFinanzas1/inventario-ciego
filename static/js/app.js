@@ -206,7 +206,8 @@ async function consultarInventario() {
                 unidad: p.unidad,
                 cantidad_sistema: parseFloat(p.cantidad),
                 cantidad_contada: p.cantidad_contada,
-                cantidad_contada_2: p.cantidad_contada_2
+                cantidad_contada_2: p.cantidad_contada_2,
+                observaciones: p.observaciones || ''
             }));
 
             // Verificar si ya se finalizó el conteo (tiene conteo_2)
@@ -301,7 +302,8 @@ function renderProductosInventario() {
                      state.etapaConteo === 2 ? `SEGUNDO CONTEO (${productosAMostrar.length} con diferencia)` :
                      'CONTEO FINALIZADO';
 
-    container.innerHTML = `
+    // Construir tabla principal
+    let tablaHtml = `
         <div class="etapa-indicator etapa-${state.etapaConteo}">
             <i class="fas fa-${state.etapaConteo === 1 ? 'edit' : state.etapaConteo === 2 ? 'exclamation-triangle' : 'check-circle'}"></i>
             ${etapaTexto}
@@ -381,6 +383,61 @@ function renderProductosInventario() {
         </table>
     `;
 
+    // Tabla de observaciones separada (solo en etapa 3, productos con diferencia)
+    let obsHtml = '';
+    if (state.etapaConteo === 3) {
+        const productosConDif = productosAMostrar.filter(prod => {
+            const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+            const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+            return cantidadFinal - prod.cantidad_sistema !== 0;
+        });
+
+        if (productosConDif.length > 0) {
+            obsHtml = `
+                <div class="tabla-obs-container">
+                    <div class="obs-header">
+                        <i class="fas fa-clipboard-list"></i>
+                        Observaciones (${productosConDif.length} con diferencia)
+                    </div>
+                    <table class="tabla-observaciones">
+                        <thead>
+                            <tr>
+                                <th class="obs-col-producto">Producto</th>
+                                <th class="obs-col-dif">Dif</th>
+                                <th class="obs-col-obs">Observación</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${productosConDif.map(prod => {
+                                const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+                                const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+                                const diferencia = cantidadFinal - prod.cantidad_sistema;
+                                const difClass = diferencia < 0 ? 'negativa' : 'positiva';
+                                return `
+                                    <tr>
+                                        <td class="obs-nombre">${prod.nombre}</td>
+                                        <td class="obs-dif ${difClass}">${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</td>
+                                        <td class="obs-input-cell">
+                                            <input type="text"
+                                                   class="input-observacion"
+                                                   value="${(prod.observaciones || '').replace(/"/g, '&quot;')}"
+                                                   placeholder="Escribir motivo..."
+                                                   data-id="${prod.id}"
+                                                   onchange="guardarObservacion(this)"
+                                                   onkeypress="if(event.key==='Enter') this.blur()">
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+    }
+
+    container.innerHTML = tablaHtml + obsHtml;
+
     totalSpan.textContent = productosAMostrar.length;
     actualizarContador();
 }
@@ -414,6 +471,37 @@ async function guardarConteoDirecto(input) {
             setTimeout(() => input.classList.remove('guardado'), 500);
         } else {
             showToast('Error al guardar', 'error');
+            input.classList.add('error');
+            setTimeout(() => input.classList.remove('error'), 500);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error de conexion', 'error');
+    }
+}
+
+// ==================== GUARDAR OBSERVACION ====================
+
+async function guardarObservacion(input) {
+    const id = parseInt(input.dataset.id);
+    const observaciones = input.value.trim();
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, observaciones })
+        });
+
+        if (response.ok) {
+            const prod = state.productos.find(p => p.id === id);
+            if (prod) {
+                prod.observaciones = observaciones;
+            }
+            input.classList.add('guardado');
+            setTimeout(() => input.classList.remove('guardado'), 500);
+        } else {
+            showToast('Error al guardar observacion', 'error');
             input.classList.add('error');
             setTimeout(() => input.classList.remove('error'), 500);
         }

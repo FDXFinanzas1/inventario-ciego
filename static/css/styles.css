@@ -788,6 +788,125 @@ main {
     background: #ECFDF5;
 }
 
+/* Tabla de Observaciones separada */
+.tabla-obs-container {
+    margin-top: 16px;
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg-white);
+}
+
+.obs-header {
+    padding: 10px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    background: #FEF3C7;
+    color: #92400E;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--warning);
+}
+
+.obs-header i {
+    font-size: 15px;
+}
+
+.tabla-observaciones {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.tabla-observaciones thead {
+    background: var(--primary);
+    color: white;
+}
+
+.tabla-observaciones th {
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.tabla-observaciones .obs-col-producto { width: 40%; }
+.tabla-observaciones .obs-col-dif { width: 15%; text-align: center; }
+.tabla-observaciones .obs-col-obs { width: 45%; }
+
+.tabla-observaciones tbody tr {
+    border-bottom: 1px solid var(--border);
+}
+
+.tabla-observaciones tbody tr:nth-child(even) {
+    background: #FAFBFC;
+}
+
+.tabla-observaciones td {
+    padding: 8px 10px;
+    vertical-align: middle;
+}
+
+.tabla-observaciones .obs-nombre {
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--text-dark);
+}
+
+.tabla-observaciones .obs-dif {
+    text-align: center;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.tabla-observaciones .obs-dif.positiva {
+    color: var(--success);
+}
+
+.tabla-observaciones .obs-dif.negativa {
+    color: var(--accent);
+}
+
+.tabla-observaciones .obs-input-cell {
+    padding: 5px 8px;
+}
+
+.input-observacion {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s;
+    background: #FFFBEB;
+}
+
+.input-observacion:focus {
+    outline: none;
+    border-color: var(--warning);
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
+    background: white;
+}
+
+.input-observacion.guardado {
+    border-color: var(--success);
+    background: #F0FDF4;
+}
+
+.input-observacion.error {
+    border-color: var(--accent);
+    background: #FEF2F2;
+}
+
+.input-observacion::placeholder {
+    color: var(--text-light);
+    font-style: italic;
+}
+
 /* Valores ocultos (Inventario Ciego) */
 .tabla-inventario .oculto {
     color: var(--text-light);
@@ -1396,6 +1515,46 @@ main {
     .tabla-inventario th:nth-child(7),
     .tabla-inventario td:nth-child(7) { width: 45px; }  /* Dif */
 
+    /* Tabla observaciones en movil */
+    .tabla-obs-container {
+        margin-top: 10px;
+    }
+
+    .obs-header {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .tabla-observaciones {
+        font-size: 11px;
+    }
+
+    .tabla-observaciones th {
+        padding: 6px 6px;
+        font-size: 9px;
+    }
+
+    .tabla-observaciones td {
+        padding: 6px 6px;
+    }
+
+    .tabla-observaciones .obs-nombre {
+        font-size: 11px;
+    }
+
+    .tabla-observaciones .obs-dif {
+        font-size: 11px;
+    }
+
+    .tabla-observaciones .obs-col-producto { width: 35%; }
+    .tabla-observaciones .obs-col-dif { width: 15%; }
+    .tabla-observaciones .obs-col-obs { width: 50%; }
+
+    .input-observacion {
+        padding: 6px 6px;
+        font-size: 12px;
+    }
+
     .tabla-inventario th {
         padding: 8px 4px;
         font-size: 9px;
@@ -1421,6 +1580,10 @@ main {
     .tabla-inventario .col-diferencia {
         font-size: 11px;
         min-width: unset;
+    }
+
+    .tabla-inventario .valor-contado {
+        font-size: 11px;
     }
 
     /* Inputs de conteo - font-size 16px evita auto-zoom iOS */

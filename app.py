@@ -102,8 +102,15 @@ def consultar_inventario():
         conn = get_db()
         cur = conn.cursor()
 
+        # Asegurar que la columna observaciones existe
         cur.execute("""
-            SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2
+            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ADD COLUMN IF NOT EXISTS observaciones TEXT
+        """)
+        conn.commit()
+
+        cur.execute("""
+            SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2, observaciones
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
             ORDER BY codigo
@@ -140,6 +147,27 @@ def guardar_conteo():
                 WHERE id = %s
             """, (cantidad, id_producto))
 
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/inventario/guardar-observacion', methods=['POST'])
+def guardar_observacion():
+    data = request.json
+    id_producto = data.get('id')
+    observaciones = data.get('observaciones', '')
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE inventario_diario.inventario_ciego_conteos
+            SET observaciones = %s
+            WHERE id = %s
+        """, (observaciones, id_producto))
         conn.commit()
         conn.close()
 
