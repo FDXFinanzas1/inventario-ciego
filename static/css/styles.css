@@ -1373,25 +1373,28 @@ main {
         font-size: 11px;
     }
 
-    /* Ocultar columna Unidad en movil */
+    /* Mostrar Unidad en movil (override del 768px) */
+    .tabla-inventario .col-unidad,
     .tabla-inventario th:nth-child(3),
     .tabla-inventario td:nth-child(3) {
-        display: none;
+        display: table-cell;
     }
 
     /* Columnas auto-ajustables */
     .tabla-inventario th:nth-child(1),
-    .tabla-inventario td:nth-child(1) { width: 60px; }
+    .tabla-inventario td:nth-child(1) { width: 55px; }  /* Codigo */
     .tabla-inventario th:nth-child(2),
-    .tabla-inventario td:nth-child(2) { width: auto; }
+    .tabla-inventario td:nth-child(2) { width: auto; }  /* Producto */
+    .tabla-inventario th:nth-child(3),
+    .tabla-inventario td:nth-child(3) { width: 45px; }  /* Unidad */
     .tabla-inventario th:nth-child(4),
-    .tabla-inventario td:nth-child(4) { width: 50px; }
+    .tabla-inventario td:nth-child(4) { width: 48px; }  /* Sistema */
     .tabla-inventario th:nth-child(5),
-    .tabla-inventario td:nth-child(5) { width: 65px; }
+    .tabla-inventario td:nth-child(5) { width: 60px; }  /* Conteo */
     .tabla-inventario th:nth-child(6),
-    .tabla-inventario td:nth-child(6) { width: 65px; }
+    .tabla-inventario td:nth-child(6) { width: 60px; }  /* Conteo 2 */
     .tabla-inventario th:nth-child(7),
-    .tabla-inventario td:nth-child(7) { width: 50px; }
+    .tabla-inventario td:nth-child(7) { width: 45px; }  /* Dif */
 
     .tabla-inventario th {
         padding: 8px 4px;
