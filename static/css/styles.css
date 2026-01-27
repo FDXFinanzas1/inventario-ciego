@@ -852,6 +852,7 @@ main {
 @media (max-width: 768px) {
     .tabla-inventario {
         font-size: 12px;
+        min-width: 600px;
     }
 
     .tabla-inventario th,
@@ -1270,5 +1271,263 @@ main {
 
     main {
         padding: 16px;
+    }
+}
+
+/* ==================== MOBILE - 576px ==================== */
+@media (max-width: 576px) {
+    /* Header compacto */
+    header {
+        height: 48px;
+        padding: 0 12px;
+    }
+
+    .header-left {
+        font-size: 14px;
+        gap: 8px;
+    }
+
+    .header-left i {
+        font-size: 18px;
+    }
+
+    #user-name {
+        display: none;
+    }
+
+    /* Navegacion compacta */
+    .main-nav {
+        top: 48px;
+    }
+
+    .nav-btn {
+        padding: 8px 4px;
+        font-size: 10px;
+        gap: 2px;
+    }
+
+    .nav-btn i {
+        font-size: 16px;
+    }
+
+    /* Contenido principal */
+    main {
+        padding: 10px;
+    }
+
+    .view-header {
+        margin-bottom: 12px;
+    }
+
+    .view-header h2 {
+        font-size: 16px;
+    }
+
+    /* Formularios apilados */
+    .form-section {
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+
+    .form-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .form-group input,
+    .form-group select {
+        font-size: 16px;
+        padding: 12px;
+    }
+
+    .form-row.botones-accion {
+        flex-direction: column;
+    }
+
+    .form-row.botones-accion .btn-primary,
+    .form-row.botones-accion .btn-secondary {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Buscador */
+    .search-box {
+        padding: 10px 12px;
+        margin-bottom: 10px;
+    }
+
+    .search-box input {
+        font-size: 16px;
+    }
+
+    /* TABLA - Sin scroll horizontal */
+    .productos-container {
+        max-height: calc(100vh - 320px);
+        min-height: 250px;
+    }
+
+    .tabla-inventario {
+        min-width: unset;
+        width: 100%;
+        table-layout: auto;
+        font-size: 11px;
+    }
+
+    /* Ocultar columna Unidad en movil */
+    .tabla-inventario th:nth-child(3),
+    .tabla-inventario td:nth-child(3) {
+        display: none;
+    }
+
+    /* Columnas auto-ajustables */
+    .tabla-inventario th:nth-child(1),
+    .tabla-inventario td:nth-child(1) { width: 60px; }
+    .tabla-inventario th:nth-child(2),
+    .tabla-inventario td:nth-child(2) { width: auto; }
+    .tabla-inventario th:nth-child(4),
+    .tabla-inventario td:nth-child(4) { width: 50px; }
+    .tabla-inventario th:nth-child(5),
+    .tabla-inventario td:nth-child(5) { width: 65px; }
+    .tabla-inventario th:nth-child(6),
+    .tabla-inventario td:nth-child(6) { width: 65px; }
+    .tabla-inventario th:nth-child(7),
+    .tabla-inventario td:nth-child(7) { width: 50px; }
+
+    .tabla-inventario th {
+        padding: 8px 4px;
+        font-size: 9px;
+        letter-spacing: 0;
+    }
+
+    .tabla-inventario td {
+        padding: 6px 4px;
+    }
+
+    .tabla-inventario .col-codigo {
+        font-size: 9px;
+    }
+
+    .tabla-inventario .col-nombre {
+        font-size: 11px;
+    }
+
+    .tabla-inventario .col-sistema {
+        font-size: 11px;
+    }
+
+    .tabla-inventario .col-diferencia {
+        font-size: 11px;
+        min-width: unset;
+    }
+
+    /* Inputs de conteo - font-size 16px evita auto-zoom iOS */
+    .tabla-inventario .input-contado {
+        width: 100%;
+        max-width: 55px;
+        padding: 6px 2px;
+        font-size: 16px;
+        border-width: 1.5px;
+    }
+
+    /* Etapa indicator */
+    .etapa-indicator {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .etapa-indicator i {
+        font-size: 14px;
+    }
+
+    /* Action bar */
+    .action-bar {
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        margin-top: 10px;
+    }
+
+    .action-bar .btn-primary {
+        width: 100%;
+        padding: 12px;
+    }
+
+    .contador {
+        font-size: 14px;
+        text-align: center;
+    }
+
+    /* Modal adaptado */
+    .modal {
+        padding: 10px;
+        align-items: flex-end;
+    }
+
+    .modal-content {
+        max-width: 100%;
+        width: 100%;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+
+    .modal-body {
+        padding: 20px 16px;
+    }
+
+    .cantidad-input input {
+        font-size: 16px;
+        width: 80px;
+    }
+
+    .btn-cantidad {
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+    }
+
+    /* Login */
+    .login-card {
+        padding: 24px 16px;
+        max-width: 100%;
+        border-radius: var(--radius);
+    }
+
+    .logo h1 {
+        font-size: 22px;
+    }
+
+    .logo i {
+        font-size: 36px;
+    }
+
+    .input-group input {
+        font-size: 16px;
+    }
+
+    /* Reportes */
+    .reportes-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .reporte-card {
+        padding: 16px;
+    }
+
+    /* Historico */
+    .filtros-historico {
+        padding: 10px;
+        gap: 8px;
+    }
+
+    /* Toast ancho completo */
+    #toast-container {
+        left: 10px;
+        right: 10px;
+        transform: none;
+    }
+
+    .toast {
+        width: 100%;
+        text-align: center;
     }
 }
