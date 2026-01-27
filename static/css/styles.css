@@ -1094,50 +1094,154 @@ main {
 }
 
 .historico-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+/* Historico Cards */
+.historico-card {
     background: var(--bg-white);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow);
-    padding: 8px;
     border: 1px solid var(--border);
+    padding: 18px;
+    transition: all 0.2s;
 }
 
-.historico-item {
-    padding: 14px 16px;
-    border-radius: var(--radius);
+.historico-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.historico-card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    transition: background 0.2s;
+    align-items: flex-start;
+    margin-bottom: 14px;
 }
 
-.historico-item:hover {
-    background: var(--bg-light);
+.historico-card-info {
+    flex: 1;
 }
 
-.historico-item + .historico-item {
-    border-top: 1px solid var(--border);
+.historico-bodega-nombre {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--primary);
+    margin-bottom: 2px;
 }
 
-.historico-fecha {
-    font-weight: 600;
-    color: var(--text-dark);
-    font-size: 13px;
-}
-
-.historico-bodega {
+.historico-card-fecha {
     font-size: 12px;
     color: var(--text-gray);
-    margin-top: 2px;
 }
 
-.historico-stats {
-    text-align: right;
+/* Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
-.historico-total {
+.badge i {
+    font-size: 10px;
+}
+
+.badge-completo {
+    background: #ECFDF5;
+    color: #047857;
+}
+
+.badge-proceso {
+    background: #FEF3C7;
+    color: #B45309;
+}
+
+.badge-pendiente {
+    background: #F1F5F9;
+    color: #64748B;
+}
+
+/* Historico Stats */
+.historico-card-stats {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.historico-stat {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
+    background: var(--bg-light);
+    border-radius: var(--radius-sm);
+}
+
+.historico-stat .stat-valor {
+    display: block;
     font-size: 18px;
     font-weight: 700;
     color: var(--primary);
+}
+
+.historico-stat .stat-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-gray);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+}
+
+.historico-stat.stat-diferencias .stat-valor {
+    color: var(--warning);
+}
+
+/* Progress Bar */
+.historico-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background: #E2E8F0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.progress-fill.badge-completo {
+    background: #059669;
+}
+
+.progress-fill.badge-proceso {
+    background: #D97706;
+}
+
+.progress-fill.badge-pendiente {
+    background: #94A3B8;
+}
+
+.progress-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-gray);
+    min-width: 36px;
+    text-align: right;
 }
 
 /* Reportes */
@@ -1183,12 +1287,167 @@ main {
     line-height: 1.4;
 }
 
+/* Filtros Reportes */
+.filtros-reportes {
+    background: var(--bg-white);
+    padding: 16px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    border: 1px solid var(--border);
+}
+
 .reporte-resultado {
     background: var(--bg-white);
-    padding: 20px;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow);
     border: 1px solid var(--border);
+    margin-top: 16px;
+    overflow: hidden;
+}
+
+.reporte-resultado-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: var(--primary);
+    color: white;
+}
+
+.reporte-resultado-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.reporte-resultado-header .btn-close {
+    color: white;
+    opacity: 0.8;
+}
+
+.reporte-resultado-header .btn-close:hover {
+    opacity: 1;
+}
+
+.reporte-contenido {
+    padding: 16px;
+    max-height: 500px;
+    overflow: auto;
+}
+
+/* Tabla Reporte */
+.tabla-reporte-wrapper {
+    overflow-x: auto;
+}
+
+.tabla-reporte {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.tabla-reporte thead {
+    background: var(--primary);
+    color: white;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.tabla-reporte th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.tabla-reporte tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+}
+
+.tabla-reporte tbody tr:hover {
+    background: var(--bg-light);
+}
+
+.tabla-reporte tbody tr:nth-child(even) {
+    background: #FAFBFC;
+}
+
+.tabla-reporte tbody tr:nth-child(even):hover {
+    background: var(--bg-light);
+}
+
+.tabla-reporte td {
+    padding: 9px 12px;
+    vertical-align: middle;
+}
+
+.tabla-reporte .col-codigo {
+    font-family: 'Consolas', monospace;
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.tabla-reporte .text-center {
+    text-align: center;
+}
+
+.tabla-reporte .col-diferencia {
+    text-align: center;
+    font-weight: 700;
+}
+
+.tabla-reporte .col-diferencia.positiva {
+    color: var(--success);
+    background: #ECFDF5;
+}
+
+.tabla-reporte .col-diferencia.negativa {
+    color: var(--accent);
+    background: #FEF2F2;
+}
+
+.tabla-reporte .col-obs {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-gray);
+    font-size: 12px;
+}
+
+.tabla-reporte .ranking {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 14px;
+}
+
+.badge-freq {
+    display: inline-block;
+    background: var(--primary);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.reporte-resumen {
+    padding: 12px 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-gray);
 }
 
 /* Modal */
@@ -1405,6 +1664,14 @@ main {
 
     .filtros-historico {
         flex-direction: column;
+    }
+
+    .filtros-reportes {
+        flex-direction: column;
+    }
+
+    .historico-container {
+        grid-template-columns: 1fr;
     }
 
     .action-bar {
@@ -1726,6 +1993,65 @@ main {
     }
 
     /* Historico */
+    .historico-container {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .historico-card {
+        padding: 14px;
+    }
+
+    .historico-bodega-nombre {
+        font-size: 13px;
+    }
+
+    .historico-card-stats {
+        gap: 6px;
+    }
+
+    .historico-stat .stat-valor {
+        font-size: 15px;
+    }
+
+    .historico-stat .stat-label {
+        font-size: 9px;
+    }
+
+    /* Filtros reportes */
+    .filtros-reportes {
+        padding: 10px;
+        gap: 8px;
+        flex-direction: column;
+    }
+
+    /* Reporte resultado */
+    .reporte-resultado-header {
+        padding: 10px 14px;
+    }
+
+    .reporte-resultado-header h3 {
+        font-size: 12px;
+    }
+
+    .reporte-contenido {
+        padding: 10px;
+        max-height: 400px;
+    }
+
+    .tabla-reporte {
+        font-size: 11px;
+    }
+
+    .tabla-reporte th {
+        padding: 8px 6px;
+        font-size: 9px;
+    }
+
+    .tabla-reporte td {
+        padding: 7px 6px;
+    }
+
     .filtros-historico {
         padding: 10px;
         gap: 8px;

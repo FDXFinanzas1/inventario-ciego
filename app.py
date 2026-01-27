@@ -2,11 +2,14 @@
 Backend Flask para Inventario Ciego - Render Deploy
 Conecta a Azure PostgreSQL
 """
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 app = Flask(__name__, static_folder='static')
 CORS(app, origins=['*'])
@@ -207,6 +210,305 @@ def cargar_inventario():
         return jsonify({'success': True, 'registros': registros})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/historico', methods=['GET'])
+def historico():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    bodega = request.args.get('bodega')
+
+    if not fecha_desde or not fecha_hasta:
+        return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        query = """
+            SELECT
+                fecha,
+                local,
+                COUNT(*) as total_productos,
+                COUNT(cantidad_contada) as total_contados,
+                COUNT(CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+                    AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+                    THEN 1 END) as total_con_diferencia,
+                COUNT(CASE WHEN cantidad_contada IS NOT NULL THEN 1 END) as total_con_conteo1,
+                COUNT(CASE WHEN cantidad_contada_2 IS NOT NULL THEN 1 END) as total_con_conteo2
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha >= %s AND fecha <= %s
+        """
+        params = [fecha_desde, fecha_hasta]
+
+        if bodega:
+            query += " AND local = %s"
+            params.append(bodega)
+
+        query += " GROUP BY fecha, local ORDER BY fecha DESC, local"
+
+        cur.execute(query, params)
+        resultados = cur.fetchall()
+        conn.close()
+
+        # Calcular estado para cada registro
+        datos = []
+        for r in resultados:
+            total = r['total_productos']
+            contados = r['total_contados']
+            con_conteo2 = r['total_con_conteo2']
+
+            if con_conteo2 > 0 or (contados == total and r['total_con_diferencia'] == 0):
+                estado = 'completo'
+            elif contados > 0:
+                estado = 'en_proceso'
+            else:
+                estado = 'pendiente'
+
+            porcentaje = round((contados / total * 100) if total > 0 else 0)
+
+            datos.append({
+                'fecha': str(r['fecha']),
+                'local': r['local'],
+                'total_productos': total,
+                'total_contados': contados,
+                'total_con_diferencia': r['total_con_diferencia'],
+                'estado': estado,
+                'porcentaje': porcentaje
+            })
+
+        return jsonify(datos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reportes/diferencias', methods=['GET'])
+def reporte_diferencias():
+    fecha = request.args.get('fecha')
+    bodega = request.args.get('bodega')
+
+    if not fecha or not bodega:
+        return jsonify({'error': 'fecha y bodega son requeridos'}), 400
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT codigo, nombre, unidad, cantidad as sistema,
+                   cantidad_contada as conteo1,
+                   cantidad_contada_2 as conteo2,
+                   COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
+                   observaciones
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha = %s AND local = %s
+              AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+              AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+            ORDER BY ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) DESC
+        """, (fecha, bodega))
+
+        productos = cur.fetchall()
+        conn.close()
+
+        # Convertir Decimal a float
+        datos = []
+        for p in productos:
+            datos.append({
+                'codigo': p['codigo'],
+                'nombre': p['nombre'],
+                'unidad': p['unidad'],
+                'sistema': float(p['sistema']) if p['sistema'] is not None else 0,
+                'conteo1': float(p['conteo1']) if p['conteo1'] is not None else None,
+                'conteo2': float(p['conteo2']) if p['conteo2'] is not None else None,
+                'diferencia': float(p['diferencia']) if p['diferencia'] is not None else 0,
+                'observaciones': p['observaciones'] or ''
+            })
+
+        return jsonify(datos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reportes/exportar-excel', methods=['GET'])
+def exportar_excel():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    bodega = request.args.get('bodega')
+
+    if not fecha_desde or not fecha_hasta:
+        return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        query = """
+            SELECT fecha, local, codigo, nombre, unidad,
+                   cantidad as sistema,
+                   cantidad_contada as conteo1,
+                   cantidad_contada_2 as conteo2,
+                   COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
+                   observaciones
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha >= %s AND fecha <= %s
+        """
+        params = [fecha_desde, fecha_hasta]
+
+        if bodega:
+            query += " AND local = %s"
+            params.append(bodega)
+
+        query += " ORDER BY fecha, local, codigo"
+
+        cur.execute(query, params)
+        registros = cur.fetchall()
+        conn.close()
+
+        # Crear workbook
+        wb = Workbook()
+        wb.remove(wb.active)
+
+        # Estilos
+        header_font = Font(name='Calibri', bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1E3A5F', end_color='1E3A5F', fill_type='solid')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+        dif_neg_fill = PatternFill(start_color='FEF2F2', end_color='FEF2F2', fill_type='solid')
+        dif_neg_font = Font(name='Calibri', bold=True, color='B91C1C')
+        dif_pos_fill = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
+        dif_pos_font = Font(name='Calibri', bold=True, color='059669')
+
+        # Agrupar por fecha+local
+        grupos = {}
+        for r in registros:
+            key = (str(r['fecha']), r['local'])
+            if key not in grupos:
+                grupos[key] = []
+            grupos[key].append(r)
+
+        headers = ['Codigo', 'Producto', 'Unidad', 'Sistema', 'Conteo 1', 'Conteo 2', 'Diferencia', 'Observaciones']
+
+        for (fecha, local), items in grupos.items():
+            sheet_name = f"{fecha}_{local}"[:31]
+            ws = wb.create_sheet(title=sheet_name)
+
+            # Headers
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_idx, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = thin_border
+
+            # Datos
+            for row_idx, item in enumerate(items, 2):
+                vals = [
+                    item['codigo'],
+                    item['nombre'],
+                    item['unidad'],
+                    float(item['sistema']) if item['sistema'] is not None else 0,
+                    float(item['conteo1']) if item['conteo1'] is not None else '',
+                    float(item['conteo2']) if item['conteo2'] is not None else '',
+                    float(item['diferencia']) if item['diferencia'] is not None else '',
+                    item['observaciones'] or ''
+                ]
+                for col_idx, val in enumerate(vals, 1):
+                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                    cell.border = thin_border
+                    # Colorear diferencias
+                    if col_idx == 7 and val != '' and val != 0:
+                        if val < 0:
+                            cell.fill = dif_neg_fill
+                            cell.font = dif_neg_font
+                        else:
+                            cell.fill = dif_pos_fill
+                            cell.font = dif_pos_font
+
+            # Auto-width
+            for col in ws.columns:
+                max_length = 0
+                column_letter = col[0].column_letter
+                for cell in col:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                ws.column_dimensions[column_letter].width = min(max_length + 4, 40)
+
+        if not wb.sheetnames:
+            ws = wb.create_sheet(title='Sin datos')
+            ws.cell(row=1, column=1, value='No se encontraron registros para el rango seleccionado')
+
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"inventario_{fecha_desde}_a_{fecha_hasta}.xlsx"
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reportes/tendencias', methods=['GET'])
+def reporte_tendencias():
+    bodega = request.args.get('bodega')
+    limite = request.args.get('limite', 20, type=int)
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        query = """
+            SELECT
+                codigo,
+                nombre,
+                COUNT(*) as frecuencia,
+                ROUND(AVG(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad))::numeric, 3) as promedio_desviacion,
+                ROUND(SUM(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad)::numeric, 3) as diferencia_acumulada
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+              AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+        """
+        params = []
+
+        if bodega:
+            query += " AND local = %s"
+            params.append(bodega)
+
+        query += """
+            GROUP BY codigo, nombre
+            ORDER BY frecuencia DESC, promedio_desviacion DESC
+            LIMIT %s
+        """
+        params.append(limite)
+
+        cur.execute(query, params)
+        productos = cur.fetchall()
+        conn.close()
+
+        datos = []
+        for i, p in enumerate(productos, 1):
+            datos.append({
+                'ranking': i,
+                'codigo': p['codigo'],
+                'nombre': p['nombre'],
+                'frecuencia': p['frecuencia'],
+                'promedio_desviacion': float(p['promedio_desviacion']) if p['promedio_desviacion'] else 0,
+                'diferencia_acumulada': float(p['diferencia_acumulada']) if p['diferencia_acumulada'] else 0
+            })
+
+        return jsonify(datos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/health', methods=['GET'])
 def health():

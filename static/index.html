@@ -136,15 +136,15 @@
 
                     <div class="filtros-historico">
                         <div class="form-group">
-                            <label>Desde</label>
-                            <input type="text" id="fecha-desde" placeholder="DD/MM/YYYY" maxlength="10">
+                            <label><i class="fas fa-calendar"></i> Desde</label>
+                            <input type="date" id="fecha-desde">
                         </div>
                         <div class="form-group">
-                            <label>Hasta</label>
-                            <input type="text" id="fecha-hasta" placeholder="DD/MM/YYYY" maxlength="10">
+                            <label><i class="fas fa-calendar"></i> Hasta</label>
+                            <input type="date" id="fecha-hasta">
                         </div>
                         <div class="form-group">
-                            <label>Bodega</label>
+                            <label><i class="fas fa-warehouse"></i> Bodega</label>
                             <select id="filtro-bodega">
                                 <option value="">Todas</option>
                             </select>
@@ -166,6 +166,23 @@
                 <div id="view-reportes" class="view">
                     <div class="view-header">
                         <h2><i class="fas fa-chart-bar"></i> Reportes</h2>
+                    </div>
+
+                    <div class="filtros-reportes">
+                        <div class="form-group">
+                            <label><i class="fas fa-calendar"></i> Desde</label>
+                            <input type="date" id="reporte-fecha-desde">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-calendar"></i> Hasta</label>
+                            <input type="date" id="reporte-fecha-hasta">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-warehouse"></i> Bodega</label>
+                            <select id="reporte-bodega">
+                                <option value="">Todas</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="reportes-grid">
@@ -196,7 +213,15 @@
                     </div>
 
                     <div id="reporte-resultado" class="reporte-resultado hidden">
-                        <!-- Resultados de reportes -->
+                        <div class="reporte-resultado-header">
+                            <h3 id="reporte-titulo">Resultado</h3>
+                            <button class="btn-close" onclick="cerrarReporte()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div id="reporte-contenido" class="reporte-contenido">
+                            <!-- Resultados dinámicos -->
+                        </div>
                     </div>
                 </div>
             </main>

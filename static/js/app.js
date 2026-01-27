@@ -143,10 +143,13 @@ function cambiarVista(viewName) {
 function cargarBodegas() {
     const selectBodega = document.getElementById('bodega-select');
     const filtroBodega = document.getElementById('filtro-bodega');
+    const reporteBodega = document.getElementById('reporte-bodega');
 
     CONFIG.BODEGAS.forEach(bodega => {
-        selectBodega.innerHTML += `<option value="${bodega.id}">${bodega.nombre}</option>`;
-        filtroBodega.innerHTML += `<option value="${bodega.id}">${bodega.nombre}</option>`;
+        const opt = `<option value="${bodega.id}">${bodega.nombre}</option>`;
+        selectBodega.innerHTML += opt;
+        filtroBodega.innerHTML += opt;
+        if (reporteBodega) reporteBodega.innerHTML += opt;
     });
 }
 
@@ -809,22 +812,19 @@ document.addEventListener('keydown', (e) => {
 // ==================== HISTORICO ====================
 
 async function buscarHistorico() {
-    const fechaDesdeInput = document.getElementById('fecha-desde').value;
-    const fechaHastaInput = document.getElementById('fecha-hasta').value;
+    const fechaDesde = document.getElementById('fecha-desde').value;
+    const fechaHasta = document.getElementById('fecha-hasta').value;
     const bodega = document.getElementById('filtro-bodega').value;
 
     const container = document.getElementById('historico-list');
 
-    if (!fechaDesdeInput || fechaDesdeInput.length < 10 || !fechaHastaInput || fechaHastaInput.length < 10) {
-        showToast('Ingresa las fechas en formato DD/MM/YYYY', 'error');
+    if (!fechaDesde || !fechaHasta) {
+        showToast('Selecciona las fechas desde y hasta', 'error');
         return;
     }
 
-    const fechaDesde = fechaToISO(fechaDesdeInput);
-    const fechaHasta = fechaToISO(fechaHastaInput);
-
     try {
-        let url = `${CONFIG.API_URL}/api/conteos/fecha?fecha=${fechaDesde}`;
+        let url = `${CONFIG.API_URL}/api/historico?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`;
         if (bodega) url += `&bodega=${bodega}`;
 
         const response = await fetch(url);
@@ -835,23 +835,60 @@ async function buscarHistorico() {
                 container.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-search"></i>
-                        <p>No se encontraron registros</p>
+                        <p>No se encontraron registros para el rango seleccionado</p>
                     </div>
                 `;
                 return;
             }
 
-            container.innerHTML = datos.map(item => `
-                <div class="historico-item">
-                    <div>
-                        <div class="historico-fecha">${item.nombre_producto}</div>
-                        <div class="historico-bodega">${item.codigo_producto}</div>
+            // Buscar nombre de bodega
+            const getNombreBodega = (id) => {
+                const b = CONFIG.BODEGAS.find(b => b.id === id);
+                return b ? b.nombre : id;
+            };
+
+            container.innerHTML = datos.map(item => {
+                const badgeClass = item.estado === 'completo' ? 'badge-completo' :
+                                   item.estado === 'en_proceso' ? 'badge-proceso' : 'badge-pendiente';
+                const badgeText = item.estado === 'completo' ? 'Completo' :
+                                  item.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente';
+                const badgeIcon = item.estado === 'completo' ? 'check-circle' :
+                                  item.estado === 'en_proceso' ? 'clock' : 'hourglass-start';
+
+                return `
+                    <div class="historico-card">
+                        <div class="historico-card-header">
+                            <div class="historico-card-info">
+                                <div class="historico-bodega-nombre">${getNombreBodega(item.local)}</div>
+                                <div class="historico-card-fecha">${formatearFecha(item.fecha)}</div>
+                            </div>
+                            <span class="badge ${badgeClass}">
+                                <i class="fas fa-${badgeIcon}"></i> ${badgeText}
+                            </span>
+                        </div>
+                        <div class="historico-card-stats">
+                            <div class="historico-stat">
+                                <span class="stat-valor">${item.total_productos}</span>
+                                <span class="stat-label">Productos</span>
+                            </div>
+                            <div class="historico-stat">
+                                <span class="stat-valor">${item.total_contados}</span>
+                                <span class="stat-label">Contados</span>
+                            </div>
+                            <div class="historico-stat stat-diferencias">
+                                <span class="stat-valor">${item.total_con_diferencia}</span>
+                                <span class="stat-label">Con Dif.</span>
+                            </div>
+                        </div>
+                        <div class="historico-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill ${badgeClass}" style="width: ${item.porcentaje}%"></div>
+                            </div>
+                            <span class="progress-text">${item.porcentaje}%</span>
+                        </div>
                     </div>
-                    <div class="historico-stats">
-                        <div class="historico-total">${item.cantidad_contada}</div>
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
     } catch (error) {
         console.error('Error buscando historico:', error);
@@ -859,24 +896,206 @@ async function buscarHistorico() {
     }
 }
 
-function fechaToISO(fechaStr) {
-    if (fechaStr.includes('-')) return fechaStr;
-    const [d, m, y] = fechaStr.split('/');
-    return `${y}-${m}-${d}`;
+function formatearFecha(fechaStr) {
+    if (!fechaStr) return '';
+    const [y, m, d] = fechaStr.split('-');
+    return `${d}/${m}/${y}`;
 }
 
 // ==================== REPORTES ====================
 
-function verDiferencias() {
-    showToast('Funcion en desarrollo', 'warning');
+async function verDiferencias() {
+    const fecha = document.getElementById('reporte-fecha-desde').value;
+    const bodega = document.getElementById('reporte-bodega').value;
+
+    if (!fecha || !bodega) {
+        showToast('Selecciona una fecha (Desde) y una bodega para ver diferencias', 'error');
+        return;
+    }
+
+    const getNombreBodega = (id) => {
+        const b = CONFIG.BODEGAS.find(b => b.id === id);
+        return b ? b.nombre : id;
+    };
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/reportes/diferencias?fecha=${fecha}&bodega=${bodega}`);
+        if (response.ok) {
+            const datos = await response.json();
+            const panel = document.getElementById('reporte-resultado');
+            const titulo = document.getElementById('reporte-titulo');
+            const contenido = document.getElementById('reporte-contenido');
+
+            titulo.textContent = `Diferencias - ${getNombreBodega(bodega)} - ${formatearFecha(fecha)}`;
+
+            if (datos.length === 0) {
+                contenido.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-check-circle"></i>
+                        <p>No hay productos con diferencias para esta fecha y bodega</p>
+                    </div>
+                `;
+            } else {
+                contenido.innerHTML = `
+                    <div class="tabla-reporte-wrapper">
+                        <table class="tabla-reporte">
+                            <thead>
+                                <tr>
+                                    <th>Codigo</th>
+                                    <th>Producto</th>
+                                    <th>Unidad</th>
+                                    <th>Sistema</th>
+                                    <th>Conteo 1</th>
+                                    <th>Conteo 2</th>
+                                    <th>Diferencia</th>
+                                    <th>Observacion</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${datos.map(p => {
+                                    const difClass = p.diferencia < 0 ? 'negativa' : 'positiva';
+                                    return `
+                                        <tr>
+                                            <td class="col-codigo">${p.codigo}</td>
+                                            <td>${p.nombre}</td>
+                                            <td>${p.unidad || '-'}</td>
+                                            <td class="text-center">${p.sistema}</td>
+                                            <td class="text-center">${p.conteo1 !== null ? p.conteo1 : '-'}</td>
+                                            <td class="text-center">${p.conteo2 !== null ? p.conteo2 : '-'}</td>
+                                            <td class="col-diferencia ${difClass}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
+                                            <td class="col-obs">${p.observaciones || '-'}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="reporte-resumen">
+                        <span><strong>${datos.length}</strong> productos con diferencias</span>
+                    </div>
+                `;
+            }
+
+            panel.classList.remove('hidden');
+            panel.scrollIntoView({ behavior: 'smooth' });
+        }
+    } catch (error) {
+        console.error('Error cargando diferencias:', error);
+        showToast('Error al cargar reporte de diferencias', 'error');
+    }
 }
 
-function exportarExcel() {
-    showToast('Funcion en desarrollo', 'warning');
+async function exportarExcel() {
+    const fechaDesde = document.getElementById('reporte-fecha-desde').value;
+    const fechaHasta = document.getElementById('reporte-fecha-hasta').value;
+    const bodega = document.getElementById('reporte-bodega').value;
+
+    if (!fechaDesde || !fechaHasta) {
+        showToast('Selecciona las fechas desde y hasta para exportar', 'error');
+        return;
+    }
+
+    try {
+        let url = `${CONFIG.API_URL}/api/reportes/exportar-excel?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`;
+        if (bodega) url += `&bodega=${bodega}`;
+
+        showToast('Generando archivo Excel...', 'info');
+
+        const response = await fetch(url);
+        if (response.ok) {
+            const blob = await response.blob();
+            const urlBlob = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = urlBlob;
+            a.download = `inventario_${fechaDesde}_a_${fechaHasta}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(urlBlob);
+            showToast('Archivo Excel descargado', 'success');
+        } else {
+            const err = await response.json();
+            showToast(err.error || 'Error al exportar', 'error');
+        }
+    } catch (error) {
+        console.error('Error exportando Excel:', error);
+        showToast('Error al descargar el archivo', 'error');
+    }
 }
 
-function verTendencias() {
-    showToast('Funcion en desarrollo', 'warning');
+async function verTendencias() {
+    const bodega = document.getElementById('reporte-bodega').value;
+
+    try {
+        let url = `${CONFIG.API_URL}/api/reportes/tendencias?limite=20`;
+        if (bodega) url += `&bodega=${bodega}`;
+
+        const response = await fetch(url);
+        if (response.ok) {
+            const datos = await response.json();
+            const panel = document.getElementById('reporte-resultado');
+            const titulo = document.getElementById('reporte-titulo');
+            const contenido = document.getElementById('reporte-contenido');
+
+            const getNombreBodega = (id) => {
+                const b = CONFIG.BODEGAS.find(b => b.id === id);
+                return b ? b.nombre : id;
+            };
+
+            titulo.textContent = `Top 20 Productos con Mayor Descuadre${bodega ? ' - ' + getNombreBodega(bodega) : ''}`;
+
+            if (datos.length === 0) {
+                contenido.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-chart-line"></i>
+                        <p>No hay datos de tendencias disponibles</p>
+                    </div>
+                `;
+            } else {
+                contenido.innerHTML = `
+                    <div class="tabla-reporte-wrapper">
+                        <table class="tabla-reporte">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Codigo</th>
+                                    <th>Producto</th>
+                                    <th>Frecuencia</th>
+                                    <th>Prom. Desviacion</th>
+                                    <th>Dif. Acumulada</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${datos.map(p => {
+                                    const acumClass = p.diferencia_acumulada < 0 ? 'negativa' : p.diferencia_acumulada > 0 ? 'positiva' : '';
+                                    return `
+                                        <tr>
+                                            <td class="text-center ranking">${p.ranking}</td>
+                                            <td class="col-codigo">${p.codigo}</td>
+                                            <td>${p.nombre}</td>
+                                            <td class="text-center"><span class="badge-freq">${p.frecuencia}</span></td>
+                                            <td class="text-center">${p.promedio_desviacion.toFixed(3)}</td>
+                                            <td class="col-diferencia ${acumClass}">${p.diferencia_acumulada > 0 ? '+' : ''}${p.diferencia_acumulada.toFixed(3)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            panel.classList.remove('hidden');
+            panel.scrollIntoView({ behavior: 'smooth' });
+        }
+    } catch (error) {
+        console.error('Error cargando tendencias:', error);
+        showToast('Error al cargar reporte de tendencias', 'error');
+    }
+}
+
+function cerrarReporte() {
+    document.getElementById('reporte-resultado').classList.add('hidden');
 }
 
 // ==================== UTILIDADES ====================
