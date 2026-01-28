@@ -378,7 +378,7 @@ async function handleLogin(e) {
     // Fallback: autenticacion local
     const localUser = CONFIG.USUARIOS_LOCAL[username];
     if (localUser && localUser.password === password) {
-        state.user = { username, nombre: localUser.nombre, rol: localUser.rol };
+        state.user = { username, nombre: localUser.nombre, rol: localUser.rol, bodega: localUser.bodega || null };
         localStorage.setItem('user', JSON.stringify(state.user));
         showMainScreen();
         showToast(`Bienvenido, ${localUser.nombre}`, 'success');
@@ -404,6 +404,9 @@ function showMainScreen() {
     document.getElementById('login-screen').classList.remove('active');
     document.getElementById('main-screen').classList.add('active');
     document.getElementById('user-name').textContent = state.user.nombre;
+
+    // Recargar bodegas filtradas segun usuario
+    cargarBodegas();
 
     // Cargar datos iniciales
     cargarCategorias();
@@ -445,12 +448,31 @@ function cargarBodegas() {
     const filtroBodega = document.getElementById('filtro-bodega');
     const reporteBodega = document.getElementById('reporte-bodega');
 
-    CONFIG.BODEGAS.forEach(bodega => {
+    // Bodega asignada al usuario (null = ve todas)
+    const bodegaUsuario = state.user ? state.user.bodega : null;
+
+    const bodegas = bodegaUsuario
+        ? CONFIG.BODEGAS.filter(b => b.id === bodegaUsuario)
+        : CONFIG.BODEGAS;
+
+    // Limpiar selects
+    selectBodega.innerHTML = bodegaUsuario ? '' : '<option value="">Seleccionar bodega...</option>';
+    filtroBodega.innerHTML = bodegaUsuario ? '' : '<option value="">Todas las bodegas</option>';
+    if (reporteBodega) reporteBodega.innerHTML = bodegaUsuario ? '' : '<option value="">Seleccionar bodega...</option>';
+
+    bodegas.forEach(bodega => {
         const opt = `<option value="${bodega.id}">${bodega.nombre}</option>`;
         selectBodega.innerHTML += opt;
         filtroBodega.innerHTML += opt;
         if (reporteBodega) reporteBodega.innerHTML += opt;
     });
+
+    // Si tiene bodega asignada, seleccionarla automaticamente
+    if (bodegaUsuario) {
+        selectBodega.value = bodegaUsuario;
+        filtroBodega.value = bodegaUsuario;
+        if (reporteBodega) reporteBodega.value = bodegaUsuario;
+    }
 }
 
 // ==================== CATEGORIAS ====================

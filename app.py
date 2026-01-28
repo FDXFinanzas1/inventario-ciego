@@ -37,6 +37,19 @@ BODEGAS_NOMBRES = {
     'simon_bolon': 'Simon Bolon'
 }
 
+# Mapeo de usuario a bodega asignada (None = acceso a todas)
+USUARIO_BODEGA = {
+    'admin': None,
+    'contador1': None,
+    'contador2': None,
+    'real': 'real_audiencia',
+    'floreana': 'floreana',
+    'portugal': 'portugal',
+    'santocachonreal': 'santo_cachon_real',
+    'santocachonportugal': 'santo_cachon_portugal',
+    'simonbolon': 'simon_bolon'
+}
+
 # ==================== RUTAS ESTATICAS ====================
 
 @app.route('/')
@@ -66,12 +79,14 @@ def login():
         conn.close()
 
         if user:
+            bodega_asignada = USUARIO_BODEGA.get(user['username'])
             return jsonify({
                 'success': True,
                 'user': {
                     'username': user['username'],
                     'nombre': user['nombre'],
-                    'rol': user['rol']
+                    'rol': user['rol'],
+                    'bodega': bodega_asignada
                 }
             })
 
