@@ -774,8 +774,8 @@ main {
 }
 
 .tabla-inventario .col-diferencia.positiva {
-    color: var(--success);
-    background: #ECFDF5;
+    color: #B45309;
+    background: #FEF3C7;
 }
 
 .tabla-inventario .col-diferencia.negativa {
