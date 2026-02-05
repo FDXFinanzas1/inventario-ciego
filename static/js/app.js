@@ -657,6 +657,7 @@ function renderProductosInventario() {
                                            data-codigo="${prod.codigo}"
                                            data-conteo="1"
                                            onchange="guardarConteoDirecto(this)"
+                                           onblur="guardarConteoDirecto(this)"
                                            onkeypress="if(event.key==='Enter') this.blur()">
                                 ` : `
                                     <span class="valor-contado">${conteo1 ? prod.cantidad_contada : '-'}</span>
@@ -674,6 +675,7 @@ function renderProductosInventario() {
                                                data-codigo="${prod.codigo}"
                                                data-conteo="2"
                                                onchange="guardarConteoDirecto(this)"
+                                               onblur="guardarConteoDirecto(this)"
                                                onkeypress="if(event.key==='Enter') this.blur()">
                                     ` : `
                                         <span class="valor-contado">${conteo2 ? prod.cantidad_contada_2 : '-'}</span>
@@ -763,6 +765,13 @@ async function guardarConteoDirecto(input) {
     const codigo = input.dataset.codigo;
     const conteoNum = parseInt(input.dataset.conteo) || 1;
     const cantidad = input.value !== '' ? parseFloat(input.value) : null;
+
+    // Evitar guardado duplicado si el valor no cambio
+    const prod = state.productos.find(p => p.id === id);
+    if (prod) {
+        const valorActual = conteoNum === 2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+        if (valorActual === cantidad) return;
+    }
 
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-conteo`, {
@@ -878,7 +887,49 @@ async function guardarObservacion(input) {
 
 // ==================== GUARDAR CONTEO POR ETAPA ====================
 
+// Guardar todos los inputs visibles (para celulares donde onchange no dispara bien)
+async function guardarTodosLosConteos() {
+    const inputs = document.querySelectorAll('.input-contado');
+    const promesas = [];
+
+    for (const input of inputs) {
+        const id = parseInt(input.dataset.id);
+        const conteoNum = parseInt(input.dataset.conteo) || 1;
+        const cantidad = input.value !== '' ? parseFloat(input.value) : null;
+
+        // Verificar si el valor cambio
+        const prod = state.productos.find(p => p.id === id);
+        if (prod) {
+            const valorActual = conteoNum === 2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+            if (valorActual !== cantidad) {
+                promesas.push(
+                    fetch(`${CONFIG.API_URL}/api/inventario/guardar-conteo`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id, cantidad_contada: cantidad, conteo: conteoNum })
+                    }).then(response => {
+                        if (response.ok && prod) {
+                            if (conteoNum === 2) {
+                                prod.cantidad_contada_2 = cantidad;
+                            } else {
+                                prod.cantidad_contada = cantidad;
+                            }
+                        }
+                    }).catch(err => console.error('Error guardando:', err))
+                );
+            }
+        }
+    }
+
+    if (promesas.length > 0) {
+        await Promise.all(promesas);
+    }
+}
+
 async function guardarConteoEtapa() {
+    // Primero guardar todos los inputs pendientes (importante para celulares)
+    await guardarTodosLosConteos();
+
     if (state.etapaConteo === 1) {
         // Verificar que TODOS los productos tengan conteo
         const productosSinConteo = state.productos.filter(p =>
