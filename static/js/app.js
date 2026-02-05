@@ -407,9 +407,6 @@ function showMainScreen() {
 
     // Recargar bodegas filtradas segun usuario
     cargarBodegas();
-
-    // Cargar datos iniciales
-    cargarCategorias();
 }
 
 // ==================== NAVEGACION ====================
@@ -475,25 +472,8 @@ function cargarBodegas() {
     }
 }
 
-// ==================== CATEGORIAS ====================
-
-async function cargarCategorias() {
-    const select = document.getElementById('categoria-select');
-
-    try {
-        const response = await fetch(`${CONFIG.API_URL}/api/categorias`);
-        if (response.ok) {
-            state.categorias = await response.json();
-            select.innerHTML = '<option value="">Seleccionar categoria...</option>';
-            state.categorias.forEach(cat => {
-                select.innerHTML += `<option value="${cat.id}">${cat.nombre}</option>`;
-            });
-        }
-    } catch (error) {
-        console.error('Error cargando categorias:', error);
-        showToast('Error al conectar con el servidor', 'error');
-    }
-}
+// ==================== CATEGORIAS (DESHABILITADO) ====================
+// Funcionalidad de categorías deshabilitada temporalmente
 
 // ==================== CONSULTA INVENTARIO ====================
 
@@ -975,13 +955,7 @@ function renderProductosVacio() {
 // ==================== PRODUCTOS ====================
 
 async function cargarProductos() {
-    const categoriaId = document.getElementById('categoria-select').value;
     const bodega = document.getElementById('bodega-select').value;
-
-    if (!categoriaId) {
-        showToast('Selecciona una categoria', 'error');
-        return;
-    }
 
     if (!bodega) {
         showToast('Selecciona una bodega', 'error');
@@ -989,7 +963,7 @@ async function cargarProductos() {
     }
 
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/productos?categoria_id=${categoriaId}`);
+        const response = await fetch(`${CONFIG.API_URL}/api/productos`);
         if (response.ok) {
             state.productos = await response.json();
             renderProductos();
@@ -1009,7 +983,7 @@ function renderProductos() {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-box-open"></i>
-                <p>No hay productos en esta categoria</p>
+                <p>No hay productos disponibles</p>
             </div>
         `;
         totalSpan.textContent = '0';
