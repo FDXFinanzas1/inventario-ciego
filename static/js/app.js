@@ -1015,16 +1015,15 @@ function renderAsignacionesDiferencias(container, productosConDif) {
 }
 
 function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad) {
-    const opciones = state.personas.map(p =>
-        `<option value="${p}" ${p === personaSeleccionada ? 'selected' : ''}>${p}</option>`
-    ).join('');
+    const opciones = state.personas.map(p => `<option value="${p}">`).join('');
+    const listId = `personas-list-${productoId}-${idx}`;
 
     return `
         <div class="asig-fila" data-producto="${productoId}" data-idx="${idx}">
-            <select class="select-persona" onchange="actualizarTotalAsignado(${productoId})">
-                <option value="">Seleccionar...</option>
-                ${opciones}
-            </select>
+            <input type="text" class="input-persona" list="${listId}"
+                   value="${personaSeleccionada}" placeholder="Escribir nombre..."
+                   onchange="actualizarTotalAsignado(${productoId})">
+            <datalist id="${listId}">${opciones}</datalist>
             <input type="number" class="input-asignacion" value="${cantidad}"
                    step="0.001" min="0" placeholder="Cant."
                    onchange="actualizarTotalAsignado(${productoId}, this)"
@@ -1123,16 +1122,30 @@ function actualizarTotalAsignado(productoId, inputActual) {
 }
 
 async function guardarAsignacionProducto(productoId) {
+    const productoDiv = document.querySelector(`.asig-producto[data-id="${productoId}"]`);
+    const difAbs = parseFloat(productoDiv.dataset.diferencia);
     const filasContainer = document.getElementById(`asig-filas-${productoId}`);
     const filas = filasContainer.querySelectorAll('.asig-fila');
     const asignaciones = [];
 
     for (const fila of filas) {
-        const persona = fila.querySelector('.select-persona').value;
+        const persona = fila.querySelector('.input-persona').value.trim();
         const cantidad = parseFloat(fila.querySelector('.input-asignacion').value);
         if (persona && !isNaN(cantidad) && cantidad > 0) {
+            // Validar que la persona exista en la lista
+            if (!state.personas.includes(persona)) {
+                showToast(`"${persona}" no esta en la lista de personal`, 'error');
+                return;
+            }
             asignaciones.push({ persona, cantidad });
         }
+    }
+
+    // Verificar que este completo
+    const totalAsignado = asignaciones.reduce((sum, a) => sum + a.cantidad, 0);
+    if (Math.abs(totalAsignado - difAbs) > 0.001) {
+        showToast(`Debe asignar exactamente ${difAbs.toFixed(3)}. Asignado: ${totalAsignado.toFixed(3)}`, 'error');
+        return;
     }
 
     // Verificar duplicados de persona
@@ -1196,13 +1209,14 @@ async function guardarTodasAsignaciones() {
 
     for (const div of productoDivs) {
         const productoId = parseInt(div.dataset.id);
+        const difAbs = parseFloat(div.dataset.diferencia);
         const filasContainer = document.getElementById(`asig-filas-${productoId}`);
         if (!filasContainer) continue;
 
         const filas = filasContainer.querySelectorAll('.asig-fila');
         const asignaciones = [];
         for (const fila of filas) {
-            const persona = fila.querySelector('.select-persona').value;
+            const persona = fila.querySelector('.input-persona').value.trim();
             const cantidad = parseFloat(fila.querySelector('.input-asignacion').value);
             if (persona && !isNaN(cantidad) && cantidad > 0) {
                 asignaciones.push({ persona, cantidad });
@@ -1210,6 +1224,13 @@ async function guardarTodasAsignaciones() {
         }
 
         if (asignaciones.length === 0) continue;
+
+        // Verificar que este completo
+        const totalAsignado = asignaciones.reduce((sum, a) => sum + a.cantidad, 0);
+        if (Math.abs(totalAsignado - difAbs) > 0.001) {
+            errores++;
+            continue;
+        }
 
         try {
             const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-asignaciones`, {
