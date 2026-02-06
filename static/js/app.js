@@ -286,7 +286,9 @@ let state = {
     categorias: [],
     productoSeleccionado: null,
     etapaConteo: 1,  // 1 = Primer conteo, 2 = Segundo conteo, 3 = Finalizado
-    productosFallidos: []  // Productos con diferencia después del primer conteo
+    productosFallidos: [],  // Productos con diferencia después del primer conteo
+    personas: [],           // Lista de personas asignables
+    asignaciones: {}        // Asignaciones por conteo_id
 };
 
 // Inicializacion
@@ -524,6 +526,7 @@ async function consultarInventario() {
                 state.productosFallidos = state.productos
                     .filter(p => p.cantidad_contada_2 !== null)
                     .map(p => p.codigo);
+                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(local)]);
                 renderProductosInventario();
                 showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
                 return;
@@ -543,6 +546,7 @@ async function consultarInventario() {
                 if (state.productosFallidos.length === 0) {
                     // Todo coincidió en el primer conteo, está finalizado
                     state.etapaConteo = 3;
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(local)]);
                     renderProductosInventario();
                     showToast('Conteo ya completado - todos los productos coinciden.', 'success');
                     return;
@@ -761,6 +765,25 @@ function renderProductosInventario() {
         obsContainer.innerHTML = obsHtml;
     }
 
+    // Renderizar modulo de asignacion de diferencias (solo etapa 3)
+    const asigContainer = document.getElementById('asignaciones-container');
+    if (asigContainer) {
+        if (state.etapaConteo === 3) {
+            const productosConDif = productosAMostrar.filter(prod => {
+                const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+                const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+                return cantidadFinal - prod.cantidad_sistema !== 0;
+            });
+            if (productosConDif.length > 0) {
+                renderAsignacionesDiferencias(asigContainer, productosConDif);
+            } else {
+                asigContainer.innerHTML = '';
+            }
+        } else {
+            asigContainer.innerHTML = '';
+        }
+    }
+
     totalSpan.textContent = productosAMostrar.length;
     actualizarContador();
 }
@@ -890,6 +913,305 @@ async function guardarObservacion(input) {
     }
 }
 
+// ==================== MODULO: ASIGNACION DE DIFERENCIAS ====================
+
+async function cargarPersonas(local) {
+    try {
+        const url = local ? `${CONFIG.API_URL}/api/personas?local=${local}` : `${CONFIG.API_URL}/api/personas`;
+        const response = await fetch(url);
+        if (response.ok) {
+            state.personas = await response.json();
+        }
+    } catch (error) {
+        console.error('Error cargando personas:', error);
+    }
+}
+
+async function cargarAsignaciones(fecha, local) {
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/inventario/asignaciones?fecha=${fecha}&local=${local}`);
+        if (response.ok) {
+            const data = await response.json();
+            state.asignaciones = data.asignaciones || {};
+        }
+    } catch (error) {
+        console.error('Error cargando asignaciones:', error);
+        state.asignaciones = {};
+    }
+}
+
+function renderAsignacionesDiferencias(container, productosConDif) {
+    const totalProductos = productosConDif.length;
+    let completosCount = 0;
+
+    const productosHtml = productosConDif.map(prod => {
+        const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+        const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+        const diferencia = cantidadFinal - prod.cantidad_sistema;
+        const difAbs = Math.abs(diferencia);
+        const difClass = diferencia < 0 ? 'negativa' : 'positiva';
+        const difTexto = diferencia < 0 ? 'Faltante' : 'Sobrante';
+
+        // Obtener asignaciones guardadas para este producto
+        const asignacionesGuardadas = state.asignaciones[String(prod.id)] || [];
+        const totalAsignado = asignacionesGuardadas.reduce((sum, a) => sum + a.cantidad, 0);
+        const esCompleto = Math.abs(totalAsignado - difAbs) < 0.001;
+        if (esCompleto && asignacionesGuardadas.length > 0) completosCount++;
+
+        const statusClass = asignacionesGuardadas.length === 0 ? 'pendiente' : (esCompleto ? 'completo' : 'parcial');
+        const statusTexto = asignacionesGuardadas.length === 0 ? 'Sin asignar' : (esCompleto ? 'Completo' : `${totalAsignado.toFixed(1)}/${difAbs.toFixed(1)}`);
+
+        // Generar filas de asignacion
+        let filasHtml = '';
+        if (asignacionesGuardadas.length > 0) {
+            filasHtml = asignacionesGuardadas.map((a, idx) => generarFilaAsignacion(prod.id, idx, a.persona, a.cantidad)).join('');
+        } else {
+            filasHtml = generarFilaAsignacion(prod.id, 0, '', '');
+        }
+
+        return `
+            <div class="asig-producto" data-id="${prod.id}" data-diferencia="${difAbs}">
+                <div class="asig-producto-header" onclick="toggleAsignacion(${prod.id})">
+                    <div class="asig-prod-info">
+                        <span class="asig-prod-nombre">${prod.nombre}</span>
+                        <span class="asig-prod-dif ${difClass}">${difTexto}: ${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</span>
+                    </div>
+                    <span class="asig-status ${statusClass}">${statusTexto}</span>
+                    <i class="fas fa-chevron-down asig-chevron"></i>
+                </div>
+                <div class="asig-producto-body" id="asig-body-${prod.id}" style="display:none;">
+                    <div class="asig-filas" id="asig-filas-${prod.id}">
+                        ${filasHtml}
+                    </div>
+                    <button class="btn-add-persona" onclick="agregarFilaAsignacion(${prod.id})">
+                        <i class="fas fa-plus"></i> Agregar persona
+                    </button>
+                    <div class="asig-resumen" id="asig-resumen-${prod.id}">
+                        <span>Total asignado: <strong id="asig-total-${prod.id}">${totalAsignado.toFixed(3)}</strong> / ${difAbs.toFixed(3)}</span>
+                    </div>
+                    <button class="btn-guardar-asig" onclick="guardarAsignacionProducto(${prod.id})">
+                        <i class="fas fa-save"></i> Guardar
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="asig-container">
+            <div class="asig-header">
+                <i class="fas fa-users"></i>
+                Asignacion de Diferencias (${totalProductos} productos)
+                <span class="asig-header-status">${completosCount}/${totalProductos} completos</span>
+            </div>
+            ${productosHtml}
+            <div class="asig-footer">
+                <button class="btn-guardar-todas-asig" onclick="guardarTodasAsignaciones()">
+                    <i class="fas fa-save"></i> Guardar Todas las Asignaciones
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad) {
+    const opciones = state.personas.map(p =>
+        `<option value="${p}" ${p === personaSeleccionada ? 'selected' : ''}>${p}</option>`
+    ).join('');
+
+    return `
+        <div class="asig-fila" data-producto="${productoId}" data-idx="${idx}">
+            <select class="select-persona" onchange="actualizarTotalAsignado(${productoId})">
+                <option value="">Seleccionar...</option>
+                ${opciones}
+            </select>
+            <input type="number" class="input-asignacion" value="${cantidad}"
+                   step="0.001" min="0" placeholder="Cant."
+                   onchange="actualizarTotalAsignado(${productoId})"
+                   onblur="actualizarTotalAsignado(${productoId})">
+            <button class="btn-remove-fila" onclick="removerFilaAsignacion(this, ${productoId})">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+}
+
+function toggleAsignacion(productoId) {
+    const body = document.getElementById(`asig-body-${productoId}`);
+    const header = body.previousElementSibling;
+    const chevron = header.querySelector('.asig-chevron');
+
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        chevron.classList.add('rotated');
+    } else {
+        body.style.display = 'none';
+        chevron.classList.remove('rotated');
+    }
+}
+
+function agregarFilaAsignacion(productoId) {
+    const filasContainer = document.getElementById(`asig-filas-${productoId}`);
+    const idx = filasContainer.children.length;
+    filasContainer.insertAdjacentHTML('beforeend', generarFilaAsignacion(productoId, idx, '', ''));
+}
+
+function removerFilaAsignacion(btn, productoId) {
+    const fila = btn.closest('.asig-fila');
+    fila.remove();
+    actualizarTotalAsignado(productoId);
+}
+
+function actualizarTotalAsignado(productoId) {
+    const filasContainer = document.getElementById(`asig-filas-${productoId}`);
+    const inputs = filasContainer.querySelectorAll('.input-asignacion');
+    let total = 0;
+    inputs.forEach(inp => {
+        const val = parseFloat(inp.value);
+        if (!isNaN(val)) total += val;
+    });
+
+    const totalSpan = document.getElementById(`asig-total-${productoId}`);
+    if (totalSpan) totalSpan.textContent = total.toFixed(3);
+
+    // Actualizar status en el header
+    const productoDiv = document.querySelector(`.asig-producto[data-id="${productoId}"]`);
+    const difAbs = parseFloat(productoDiv.dataset.diferencia);
+    const statusSpan = productoDiv.querySelector('.asig-status');
+    const esCompleto = Math.abs(total - difAbs) < 0.001;
+
+    if (total === 0) {
+        statusSpan.className = 'asig-status pendiente';
+        statusSpan.textContent = 'Sin asignar';
+    } else if (esCompleto) {
+        statusSpan.className = 'asig-status completo';
+        statusSpan.textContent = 'Completo';
+    } else {
+        statusSpan.className = 'asig-status parcial';
+        statusSpan.textContent = `${total.toFixed(1)}/${difAbs.toFixed(1)}`;
+    }
+}
+
+async function guardarAsignacionProducto(productoId) {
+    const filasContainer = document.getElementById(`asig-filas-${productoId}`);
+    const filas = filasContainer.querySelectorAll('.asig-fila');
+    const asignaciones = [];
+
+    for (const fila of filas) {
+        const persona = fila.querySelector('.select-persona').value;
+        const cantidad = parseFloat(fila.querySelector('.input-asignacion').value);
+        if (persona && !isNaN(cantidad) && cantidad > 0) {
+            asignaciones.push({ persona, cantidad });
+        }
+    }
+
+    // Verificar duplicados de persona
+    const personas = asignaciones.map(a => a.persona);
+    const duplicados = personas.filter((p, i) => personas.indexOf(p) !== i);
+    if (duplicados.length > 0) {
+        showToast(`Persona duplicada: ${duplicados[0]}`, 'error');
+        return;
+    }
+
+    try {
+        const btn = filasContainer.parentElement.querySelector('.btn-guardar-asig');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+        }
+
+        const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-asignaciones`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conteo_id: productoId, asignaciones })
+        });
+
+        if (response.ok) {
+            // Actualizar estado local
+            state.asignaciones[String(productoId)] = asignaciones;
+            showToast('Asignacion guardada', 'success');
+
+            if (btn) {
+                btn.innerHTML = '<i class="fas fa-check"></i> Guardado';
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save"></i> Guardar';
+                }, 1500);
+            }
+        } else {
+            showToast('Error al guardar asignacion', 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Guardar';
+            }
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error de conexion', 'error');
+    }
+}
+
+async function guardarTodasAsignaciones() {
+    const productoDivs = document.querySelectorAll('.asig-producto');
+    if (productoDivs.length === 0) return;
+
+    const btn = document.querySelector('.btn-guardar-todas-asig');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando todo...';
+    }
+
+    let guardados = 0;
+    let errores = 0;
+
+    for (const div of productoDivs) {
+        const productoId = parseInt(div.dataset.id);
+        const filasContainer = document.getElementById(`asig-filas-${productoId}`);
+        if (!filasContainer) continue;
+
+        const filas = filasContainer.querySelectorAll('.asig-fila');
+        const asignaciones = [];
+        for (const fila of filas) {
+            const persona = fila.querySelector('.select-persona').value;
+            const cantidad = parseFloat(fila.querySelector('.input-asignacion').value);
+            if (persona && !isNaN(cantidad) && cantidad > 0) {
+                asignaciones.push({ persona, cantidad });
+            }
+        }
+
+        if (asignaciones.length === 0) continue;
+
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-asignaciones`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conteo_id: productoId, asignaciones })
+            });
+            if (response.ok) {
+                state.asignaciones[String(productoId)] = asignaciones;
+                guardados++;
+            } else {
+                errores++;
+            }
+        } catch (error) {
+            errores++;
+        }
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Guardar Todas las Asignaciones';
+    }
+
+    if (errores === 0 && guardados > 0) {
+        showToast(`${guardados} asignaciones guardadas correctamente`, 'success');
+    } else if (errores > 0) {
+        showToast(`${errores} errores al guardar`, 'error');
+    } else {
+        showToast('No hay asignaciones para guardar', 'info');
+    }
+}
+
 // ==================== GUARDAR CONTEO POR ETAPA ====================
 
 // Guardar todos los inputs visibles (para celulares donde onchange no dispara bien)
@@ -989,7 +1311,10 @@ async function guardarConteoEtapa() {
 
         // Finalizar conteo
         state.etapaConteo = 3;
-        showToast('✅ Conteo finalizado. Mostrando diferencias.', 'success');
+        const fecha3 = document.getElementById('fecha-conteo').value;
+        const local3 = document.getElementById('bodega-select').value;
+        await Promise.all([cargarAsignaciones(fecha3, local3), cargarPersonas(local3)]);
+        showToast('Conteo finalizado. Mostrando diferencias.', 'success');
         renderProductosInventario();
     }
 }
@@ -1006,6 +1331,8 @@ function renderProductosVacio() {
     document.getElementById('productos-contados').textContent = '0';
     const obsContainer = document.getElementById('observaciones-container');
     if (obsContainer) obsContainer.innerHTML = '';
+    const asigContainer = document.getElementById('asignaciones-container');
+    if (asigContainer) asigContainer.innerHTML = '';
 }
 
 // ==================== PRODUCTOS ====================

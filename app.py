@@ -663,6 +663,115 @@ def reporte_tendencias_temporal():
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================================
+# MODULO: Asignacion de Diferencias
+# ============================================================
+
+AIRTABLE_TOKEN = os.environ.get('AIRTABLE_TOKEN', '')
+AIRTABLE_BASE = os.environ.get('AIRTABLE_BASE', 'appzTllAjxu4TOs1a')
+AIRTABLE_TABLE = os.environ.get('AIRTABLE_TABLE', 'tbldYTLfQ3DoEK0WA')
+
+# Mapeo de bodega a centros de costo de Airtable
+BODEGA_CENTROS = {
+    'real_audiencia': ['Chios Real Audiencia'],
+    'floreana': ['Chios Floreana'],
+    'portugal': ['Chios Portugal'],
+    'santo_cachon_real': ['Santo Cachon Real Audiencia', 'Santo Cach\u00f3n Real Audiencia'],
+    'santo_cachon_portugal': ['Santo Cachon Portugal', 'Santo Cach\u00f3n Portugal'],
+    'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
+}
+
+@app.route('/api/personas', methods=['GET'])
+def get_personas():
+    local = request.args.get('local', '')
+    try:
+        import urllib.request, json as json_lib
+        centros_buscar = BODEGA_CENTROS.get(local, [])
+        todos = []
+        offset = None
+        while True:
+            url = f'https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?pageSize=100'
+            url += '&fields%5B%5D=nombre&fields%5B%5D=estado&fields%5B%5D=centro_costo_copia'
+            if offset:
+                url += f'&offset={offset}'
+            req = urllib.request.Request(url, headers={'Authorization': f'Bearer {AIRTABLE_TOKEN}'})
+            data = json_lib.loads(urllib.request.urlopen(req).read())
+            for r in data.get('records', []):
+                f = r.get('fields', {})
+                if f.get('estado') == 'Activo':
+                    nombre = f.get('nombre', '')
+                    centro = f.get('centro_costo_copia', '')
+                    if nombre:
+                        if not centros_buscar or any(c in centro for c in centros_buscar):
+                            todos.append(nombre)
+            offset = data.get('offset')
+            if not offset:
+                break
+        return jsonify(sorted(todos))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/inventario/asignaciones', methods=['GET'])
+def get_asignaciones():
+    fecha = request.args.get('fecha')
+    local = request.args.get('local')
+    if not fecha or not local:
+        return jsonify({'error': 'fecha y local son requeridos'}), 400
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT a.id, a.conteo_id, a.persona, a.cantidad
+            FROM inventario_diario.asignacion_diferencias a
+            JOIN inventario_diario.inventario_ciego_conteos c ON a.conteo_id = c.id
+            WHERE c.fecha = %s AND c.local = %s
+            ORDER BY a.conteo_id, a.id
+        """, (fecha, local))
+        rows = cur.fetchall()
+        conn.close()
+        result = {}
+        for r in rows:
+            cid = str(r['conteo_id'])
+            if cid not in result:
+                result[cid] = []
+            result[cid].append({
+                'id': r['id'],
+                'persona': r['persona'],
+                'cantidad': float(r['cantidad'])
+            })
+        return jsonify({'asignaciones': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/inventario/guardar-asignaciones', methods=['POST'])
+def guardar_asignaciones():
+    data = request.json
+    conteo_id = data.get('conteo_id')
+    asignaciones = data.get('asignaciones', [])
+    if not conteo_id:
+        return jsonify({'error': 'conteo_id es requerido'}), 400
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM inventario_diario.asignacion_diferencias
+            WHERE conteo_id = %s
+        """, (conteo_id,))
+        for a in asignaciones:
+            if a.get('persona') and a.get('cantidad') and float(a['cantidad']) > 0:
+                cur.execute("""
+                    INSERT INTO inventario_diario.asignacion_diferencias (conteo_id, persona, cantidad)
+                    VALUES (%s, %s, %s)
+                """, (conteo_id, a['persona'].strip(), float(a['cantidad'])))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok'})
