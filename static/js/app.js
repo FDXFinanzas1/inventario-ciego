@@ -493,6 +493,20 @@ async function consultarInventario() {
         return;
     }
 
+    // Mostrar indicador de carga
+    const btn = document.getElementById('btn-consultar');
+    const btnTextoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Consultando...';
+
+    const container = document.getElementById('productos-list');
+    container.innerHTML = `
+        <div class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>Cargando inventario...</p>
+        </div>
+    `;
+
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/consultar?fecha=${fecha}&local=${local}`);
 
@@ -573,10 +587,15 @@ async function consultarInventario() {
             }
         } else {
             showToast('Error al consultar', 'error');
+            container.innerHTML = '';
         }
     } catch (error) {
         console.error('Error consultando inventario:', error);
         showToast('Error de conexion', 'error');
+        container.innerHTML = '';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = btnTextoOriginal;
     }
 }
 
