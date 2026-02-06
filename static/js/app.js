@@ -530,10 +530,11 @@ async function consultarInventario() {
             }
 
             // Verificar si ya tiene conteo 1 guardado
-            const tieneConteo1 = state.productos.some(p => p.cantidad_contada !== null);
+            const todosConConteo1 = state.productos.every(p => p.cantidad_contada !== null);
+            const algunosConConteo1 = state.productos.some(p => p.cantidad_contada !== null);
 
-            if (tieneConteo1) {
-                // Ya hizo primer conteo, no puede volver a empezar
+            if (todosConConteo1) {
+                // TODOS tienen conteo 1 = el usuario ya dio guardar conteo 1
                 state.etapaConteo = 2;
                 state.productosFallidos = state.productos
                     .filter(p => p.cantidad_contada !== null && p.cantidad_contada !== p.cantidad_sistema)
@@ -552,15 +553,19 @@ async function consultarInventario() {
                 return;
             }
 
-            // Primer conteo - empezar desde cero
+            // Primer conteo - continuar desde donde se quedó
             state.etapaConteo = 1;
             state.productosFallidos = [];
-
-            // Cargar conteos existentes
             state.conteos = {};
 
             renderProductosInventario();
-            showToast(`${data.productos.length} productos cargados - Primer Conteo`, 'success');
+
+            if (algunosConConteo1) {
+                const contados = state.productos.filter(p => p.cantidad_contada !== null).length;
+                showToast(`Continuando conteo - ${contados}/${data.productos.length} productos registrados`, 'info');
+            } else {
+                showToast(`${data.productos.length} productos cargados - Primer Conteo`, 'success');
+            }
         } else {
             showToast('Error al consultar', 'error');
         }
