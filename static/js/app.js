@@ -1048,6 +1048,10 @@ function renderAsignacionesDiferencias(container, productosConDif) {
 
 function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, unidad) {
     const unidadLabel = unidad || 'Und';
+    const productoDiv = document.querySelector(`.asig-producto[data-id="${productoId}"]`);
+    const costoUnit = productoDiv ? parseFloat(productoDiv.dataset.costo) || 0 : 0;
+    const cantNum = parseFloat(cantidad) || 0;
+    const valorFila = (cantNum * costoUnit).toFixed(2);
     return `
         <div class="asig-fila" data-producto="${productoId}" data-idx="${idx}">
             <div class="persona-dropdown">
@@ -1063,6 +1067,7 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
                        onblur="actualizarTotalAsignado(${productoId}, this)">
                 <span class="unidad-label">${unidadLabel}</span>
             </div>
+            <span class="fila-descuento">$${valorFila}</span>
             <button class="btn-remove-fila" onclick="removerFilaAsignacion(this, ${productoId})">
                 <i class="fas fa-times"></i>
             </button>
@@ -1207,11 +1212,24 @@ function actualizarTotalAsignado(productoId, inputActual) {
         statusSpan.textContent = `${total.toFixed(1)}/${difAbs.toFixed(1)}`;
     }
 
-    // Actualizar valor monetario
+    // Actualizar valor monetario y descuento por fila
     const costoUnit = parseFloat(productoDiv.dataset.costo) || 0;
     const valorSpan = document.getElementById(`asig-valor-${productoId}`);
     if (valorSpan && costoUnit > 0) {
         valorSpan.textContent = `Valor: $${(total * costoUnit).toFixed(2)}`;
+    }
+
+    // Recalcular descuento en cada fila
+    if (costoUnit > 0) {
+        const filas = filasContainer.querySelectorAll('.asig-fila');
+        filas.forEach(fila => {
+            const cantInput = fila.querySelector('.input-asignacion');
+            const descSpan = fila.querySelector('.fila-descuento');
+            if (cantInput && descSpan) {
+                const cant = parseFloat(cantInput.value) || 0;
+                descSpan.textContent = `$${(cant * costoUnit).toFixed(2)}`;
+            }
+        });
     }
 
     // Actualizar max en todos los inputs

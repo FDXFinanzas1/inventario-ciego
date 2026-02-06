@@ -1297,6 +1297,15 @@ main {
     box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.15);
 }
 
+.fila-descuento {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0369a1;
+    white-space: nowrap;
+    min-width: 55px;
+    text-align: right;
+}
+
 .btn-remove-fila {
     width: 32px;
     height: 32px;

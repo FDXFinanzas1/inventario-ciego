@@ -704,25 +704,14 @@ def get_costos():
     try:
         conn = get_db_mov()
         cur = conn.cursor()
-        # Primero buscar en costos_referencia
+        # Siempre tomar el ultimo costo unitario de movimientos (el mas reciente)
         cur.execute("""
-            SELECT codigo_prod, costo_promedio
-            FROM public.costos_referencia
-            WHERE codigo_prod = ANY(%s)
+            SELECT DISTINCT ON (codigo_prod) codigo_prod, valor_unitario
+            FROM public.movimientos
+            WHERE codigo_prod = ANY(%s) AND valor_unitario > 0
+            ORDER BY codigo_prod, fecha DESC
         """, (codigos,))
-        costos = {r['codigo_prod']: float(r['costo_promedio']) for r in cur.fetchall()}
-
-        # Para los que no tengan costo de referencia, buscar ultimo movimiento
-        faltantes = [c for c in codigos if c not in costos or costos[c] == 0]
-        if faltantes:
-            cur.execute("""
-                SELECT DISTINCT ON (codigo_prod) codigo_prod, valor_unitario
-                FROM public.movimientos
-                WHERE codigo_prod = ANY(%s) AND valor_unitario > 0
-                ORDER BY codigo_prod, fecha DESC
-            """, (faltantes,))
-            for r in cur.fetchall():
-                costos[r['codigo_prod']] = float(r['valor_unitario'])
+        costos = {r['codigo_prod']: float(r['valor_unitario']) for r in cur.fetchall()}
 
         conn.close()
         return jsonify(costos)
