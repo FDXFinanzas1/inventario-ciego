@@ -703,7 +703,7 @@ def actualizar_costos():
         cur_inv.execute("SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos")
         nombres = [r['nombre'] for r in cur_inv.fetchall()]
 
-        # 3. Buscar costos en movimientos
+        # 3. Buscar costos uno por uno (evitar timeout en query masiva)
         db_mov = {
             'host': DB_CONFIG['host'],
             'database': 'movimientos',
@@ -714,13 +714,16 @@ def actualizar_costos():
         }
         conn_mov = psycopg2.connect(**db_mov, cursor_factory=RealDictCursor)
         cur_mov = conn_mov.cursor()
-        cur_mov.execute("""
-            SELECT DISTINCT ON (nombre_prod) nombre_prod, valor_unitario
-            FROM public.movimientos
-            WHERE nombre_prod = ANY(%s) AND valor_unitario > 0
-            ORDER BY nombre_prod, fecha DESC
-        """, (nombres,))
-        costos = {r['nombre_prod']: float(r['valor_unitario']) for r in cur_mov.fetchall()}
+        costos = {}
+        for nombre in nombres:
+            cur_mov.execute("""
+                SELECT valor_unitario FROM public.movimientos
+                WHERE nombre_prod = %s AND valor_unitario > 0
+                ORDER BY fecha DESC LIMIT 1
+            """, (nombre,))
+            row = cur_mov.fetchone()
+            if row:
+                costos[nombre] = float(row['valor_unitario'])
         conn_mov.close()
 
         # 4. Actualizar
