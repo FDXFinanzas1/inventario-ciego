@@ -685,25 +685,32 @@ BODEGA_CENTROS = {
 
 @app.route('/api/admin/actualizar-costos', methods=['POST'])
 def actualizar_costos():
-    """Actualiza costo_unitario en registros existentes desde BD movimientos"""
+    """Actualiza costo_unitario para un lote de productos"""
     clave = request.args.get('key', '')
     if clave != 'ChiosCostos2026':
         return jsonify({'error': 'no autorizado'}), 403
     try:
-        # 1. Agregar columna si no existe
-        conn_inv = get_db()
-        cur_inv = conn_inv.cursor()
-        cur_inv.execute("""
-            ALTER TABLE inventario_diario.inventario_ciego_conteos
-            ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,4) DEFAULT 0
-        """)
-        conn_inv.commit()
+        data = request.get_json() or {}
+        nombres_batch = data.get('nombres', [])
 
-        # 2. Obtener nombres unicos
-        cur_inv.execute("SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos")
-        nombres = [r['nombre'] for r in cur_inv.fetchall()]
+        # Si no se pasan nombres, devolver la lista de productos sin costo
+        if not nombres_batch:
+            conn_inv = get_db()
+            cur_inv = conn_inv.cursor()
+            cur_inv.execute("""
+                ALTER TABLE inventario_diario.inventario_ciego_conteos
+                ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,4) DEFAULT 0
+            """)
+            conn_inv.commit()
+            cur_inv.execute("""
+                SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos
+                WHERE costo_unitario IS NULL OR costo_unitario = 0
+            """)
+            nombres = [r['nombre'] for r in cur_inv.fetchall()]
+            conn_inv.close()
+            return jsonify({'pendientes': nombres, 'total': len(nombres)})
 
-        # 3. Buscar costos uno por uno (evitar timeout en query masiva)
+        # Procesar lote
         db_mov = {
             'host': DB_CONFIG['host'],
             'database': 'movimientos',
@@ -715,7 +722,7 @@ def actualizar_costos():
         conn_mov = psycopg2.connect(**db_mov, cursor_factory=RealDictCursor)
         cur_mov = conn_mov.cursor()
         costos = {}
-        for nombre in nombres:
+        for nombre in nombres_batch:
             cur_mov.execute("""
                 SELECT valor_unitario FROM public.movimientos
                 WHERE nombre_prod = %s AND valor_unitario > 0
@@ -726,7 +733,9 @@ def actualizar_costos():
                 costos[nombre] = float(row['valor_unitario'])
         conn_mov.close()
 
-        # 4. Actualizar
+        # Actualizar en inventario
+        conn_inv = get_db()
+        cur_inv = conn_inv.cursor()
         total = 0
         for nombre, costo in costos.items():
             cur_inv.execute("""
@@ -738,9 +747,9 @@ def actualizar_costos():
         conn_inv.commit()
         conn_inv.close()
 
-        sin_costo = [n for n in nombres if n not in costos]
+        sin_costo = [n for n in nombres_batch if n not in costos]
         return jsonify({
-            'productos_unicos': len(nombres),
+            'procesados': len(nombres_batch),
             'costos_encontrados': len(costos),
             'registros_actualizados': total,
             'sin_costo': sin_costo
