@@ -1030,6 +1030,41 @@ main {
     color: #B45309;
 }
 
+.asig-prod-costo {
+    font-size: 11px;
+    color: #0369a1;
+    font-weight: 600;
+}
+
+.asig-prod-costo.sin-costo {
+    color: #94a3b8;
+    font-weight: 400;
+    font-style: italic;
+}
+
+.asig-valor-general {
+    padding: 10px 16px;
+    background: #eff6ff;
+    border-bottom: 1px solid #bfdbfe;
+    font-size: 14px;
+    color: #1e3a5f;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.asig-valor-general strong {
+    font-size: 16px;
+}
+
+.asig-valor-total {
+    display: block;
+    font-size: 12px;
+    color: #0369a1;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
 .asig-status {
     font-size: 11px;
     font-weight: 600;

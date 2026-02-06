@@ -27,6 +27,19 @@ DB_CONFIG = {
 def get_db():
     return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
 
+# Configuracion base de datos Movimientos (costos)
+DB_MOV_CONFIG = {
+    'host': os.environ.get('DB_HOST', 'chiosburguer.postgres.database.azure.com'),
+    'database': os.environ.get('DB_MOV_NAME', 'movimientos'),
+    'user': os.environ.get('DB_USER', 'adminChios'),
+    'password': os.environ.get('DB_PASSWORD', 'Burger2023'),
+    'port': os.environ.get('DB_PORT', '5432'),
+    'sslmode': 'require'
+}
+
+def get_db_mov():
+    return psycopg2.connect(**DB_MOV_CONFIG, cursor_factory=RealDictCursor)
+
 # Helper: mapeo de IDs de bodega a nombres legibles
 BODEGAS_NOMBRES = {
     'real_audiencia': 'Real Audiencia',
@@ -680,6 +693,42 @@ BODEGA_CENTROS = {
     'santo_cachon_portugal': ['Santo Cachon Portugal', 'Santo Cach\u00f3n Portugal'],
     'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
 }
+
+@app.route('/api/costos', methods=['POST'])
+def get_costos():
+    """Obtener costos de productos desde la base de movimientos"""
+    data = request.get_json()
+    codigos = data.get('codigos', [])
+    if not codigos:
+        return jsonify({})
+    try:
+        conn = get_db_mov()
+        cur = conn.cursor()
+        # Primero buscar en costos_referencia
+        cur.execute("""
+            SELECT codigo_prod, costo_promedio
+            FROM public.costos_referencia
+            WHERE codigo_prod = ANY(%s)
+        """, (codigos,))
+        costos = {r['codigo_prod']: float(r['costo_promedio']) for r in cur.fetchall()}
+
+        # Para los que no tengan costo de referencia, buscar ultimo movimiento
+        faltantes = [c for c in codigos if c not in costos or costos[c] == 0]
+        if faltantes:
+            cur.execute("""
+                SELECT DISTINCT ON (codigo_prod) codigo_prod, valor_unitario
+                FROM public.movimientos
+                WHERE codigo_prod = ANY(%s) AND valor_unitario > 0
+                ORDER BY codigo_prod, fecha DESC
+            """, (faltantes,))
+            for r in cur.fetchall():
+                costos[r['codigo_prod']] = float(r['valor_unitario'])
+
+        conn.close()
+        return jsonify(costos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/personas', methods=['GET'])
 def get_personas():

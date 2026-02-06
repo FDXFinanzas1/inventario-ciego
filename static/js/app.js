@@ -288,7 +288,8 @@ let state = {
     etapaConteo: 1,  // 1 = Primer conteo, 2 = Segundo conteo, 3 = Finalizado
     productosFallidos: [],  // Productos con diferencia después del primer conteo
     personas: [],           // Lista de personas asignables
-    asignaciones: {}        // Asignaciones por conteo_id
+    asignaciones: {},       // Asignaciones por conteo_id
+    costos: {}              // Costos por codigo de producto
 };
 
 // Inicializacion
@@ -526,7 +527,8 @@ async function consultarInventario() {
                 state.productosFallidos = state.productos
                     .filter(p => p.cantidad_contada_2 !== null)
                     .map(p => p.codigo);
-                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
+                const codigosTodos = state.productos.map(p => p.codigo);
+                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(codigosTodos)]);
                 renderProductosInventario();
                 showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
                 return;
@@ -546,7 +548,8 @@ async function consultarInventario() {
                 if (state.productosFallidos.length === 0) {
                     // Todo coincidió en el primer conteo, está finalizado
                     state.etapaConteo = 3;
-                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
+                    const codigosTodos2 = state.productos.map(p => p.codigo);
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(codigosTodos2)]);
                     renderProductosInventario();
                     showToast('Conteo ya completado - todos los productos coinciden.', 'success');
                     return;
@@ -926,6 +929,22 @@ async function cargarPersonas() {
     }
 }
 
+async function cargarCostos(codigos) {
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/costos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codigos })
+        });
+        if (response.ok) {
+            state.costos = await response.json();
+        }
+    } catch (error) {
+        console.error('Error cargando costos:', error);
+        state.costos = {};
+    }
+}
+
 async function cargarAsignaciones(fecha, local) {
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/asignaciones?fecha=${fecha}&local=${local}`);
@@ -943,6 +962,8 @@ function renderAsignacionesDiferencias(container, productosConDif) {
     const totalProductos = productosConDif.length;
     let completosCount = 0;
 
+    let valorTotalGeneral = 0;
+
     const productosHtml = productosConDif.map(prod => {
         const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
@@ -950,6 +971,11 @@ function renderAsignacionesDiferencias(container, productosConDif) {
         const difAbs = Math.abs(diferencia);
         const difClass = diferencia < 0 ? 'negativa' : 'positiva';
         const difTexto = diferencia < 0 ? 'Faltante' : 'Sobrante';
+
+        // Costo del producto
+        const costoUnit = state.costos[prod.codigo] || 0;
+        const valorDif = difAbs * costoUnit;
+        valorTotalGeneral += valorDif;
 
         // Obtener asignaciones guardadas para este producto
         const asignacionesGuardadas = state.asignaciones[String(prod.id)] || [];
@@ -968,12 +994,17 @@ function renderAsignacionesDiferencias(container, productosConDif) {
             filasHtml = generarFilaAsignacion(prod.id, 0, '', '', prod.unidad);
         }
 
+        const costoHtml = costoUnit > 0
+            ? `<span class="asig-prod-costo">C/U: $${costoUnit.toFixed(2)} | Total: $${valorDif.toFixed(2)}</span>`
+            : `<span class="asig-prod-costo sin-costo">Sin costo registrado</span>`;
+
         return `
-            <div class="asig-producto" data-id="${prod.id}" data-diferencia="${difAbs}" data-unidad="${prod.unidad || 'Und'}">
+            <div class="asig-producto" data-id="${prod.id}" data-diferencia="${difAbs}" data-unidad="${prod.unidad || 'Und'}" data-costo="${costoUnit}">
                 <div class="asig-producto-header" onclick="toggleAsignacion(${prod.id})">
                     <div class="asig-prod-info">
                         <span class="asig-prod-nombre">${prod.nombre}</span>
                         <span class="asig-prod-dif ${difClass}">${difTexto}: ${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</span>
+                        ${costoHtml}
                     </div>
                     <span class="asig-status ${statusClass}">${statusTexto}</span>
                     <i class="fas fa-chevron-down asig-chevron"></i>
@@ -987,6 +1018,7 @@ function renderAsignacionesDiferencias(container, productosConDif) {
                     </button>
                     <div class="asig-resumen" id="asig-resumen-${prod.id}">
                         <span>Total asignado: <strong id="asig-total-${prod.id}">${totalAsignado.toFixed(3)}</strong> / ${difAbs.toFixed(3)}</span>
+                        ${costoUnit > 0 ? `<span class="asig-valor-total" id="asig-valor-${prod.id}">Valor: $${(totalAsignado * costoUnit).toFixed(2)}</span>` : ''}
                     </div>
                     <button class="btn-guardar-asig" onclick="guardarAsignacionProducto(${prod.id})">
                         <i class="fas fa-save"></i> Guardar
@@ -1003,6 +1035,7 @@ function renderAsignacionesDiferencias(container, productosConDif) {
                 Asignacion de Diferencias (${totalProductos} productos)
                 <span class="asig-header-status">${completosCount}/${totalProductos} completos</span>
             </div>
+            ${valorTotalGeneral > 0 ? `<div class="asig-valor-general"><i class="fas fa-dollar-sign"></i> Valor total diferencias: <strong>$${valorTotalGeneral.toFixed(2)}</strong></div>` : ''}
             ${productosHtml}
             <div class="asig-footer">
                 <button class="btn-guardar-todas-asig" onclick="guardarTodasAsignaciones()">
@@ -1172,6 +1205,13 @@ function actualizarTotalAsignado(productoId, inputActual) {
     } else {
         statusSpan.className = 'asig-status parcial';
         statusSpan.textContent = `${total.toFixed(1)}/${difAbs.toFixed(1)}`;
+    }
+
+    // Actualizar valor monetario
+    const costoUnit = parseFloat(productoDiv.dataset.costo) || 0;
+    const valorSpan = document.getElementById(`asig-valor-${productoId}`);
+    if (valorSpan && costoUnit > 0) {
+        valorSpan.textContent = `Valor: $${(total * costoUnit).toFixed(2)}`;
     }
 
     // Actualizar max en todos los inputs
@@ -1430,7 +1470,8 @@ async function guardarConteoEtapa() {
         state.etapaConteo = 3;
         const fecha3 = document.getElementById('fecha-conteo').value;
         const local3 = document.getElementById('bodega-select').value;
-        await Promise.all([cargarAsignaciones(fecha3, local3), cargarPersonas(local3)]);
+        const codigosTodos3 = state.productos.map(p => p.codigo);
+        await Promise.all([cargarAsignaciones(fecha3, local3), cargarPersonas(), cargarCostos(codigosTodos3)]);
         showToast('Conteo finalizado. Mostrando diferencias.', 'success');
         renderProductosInventario();
     }
