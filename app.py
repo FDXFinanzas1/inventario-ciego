@@ -683,9 +683,51 @@ BODEGA_CENTROS = {
     'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
 }
 
+@app.route('/api/admin/borrar-datos', methods=['POST'])
+def borrar_datos():
+    """Borra datos de inventario para una bodega y fecha especifica"""
+    clave = request.args.get('key', '')
+    if clave != 'ChiosCostos2026':
+        return jsonify({'error': 'no autorizado'}), 403
+    try:
+        data = request.get_json() or {}
+        fecha = data.get('fecha')
+        local = data.get('local')
+        if not fecha or not local:
+            return jsonify({'error': 'fecha y local son requeridos'}), 400
+
+        conn = get_db()
+        cur = conn.cursor()
+        # Primero borrar asignaciones relacionadas
+        cur.execute("""
+            DELETE FROM inventario_diario.asignacion_diferencias
+            WHERE conteo_id IN (
+                SELECT id FROM inventario_diario.inventario_ciego_conteos
+                WHERE fecha = %s AND local = %s
+            )
+        """, (fecha, local))
+        asig_borradas = cur.rowcount
+
+        cur.execute("""
+            DELETE FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha = %s AND local = %s
+        """, (fecha, local))
+        conteos_borrados = cur.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'conteos_borrados': conteos_borrados,
+            'asignaciones_borradas': asig_borradas
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/admin/actualizar-costos', methods=['POST'])
 def actualizar_costos():
-    """Actualiza costo_unitario para un lote de productos"""
+    """Actualiza costo_unitario - usa una sola query optimizada"""
     clave = request.args.get('key', '')
     if clave != 'ChiosCostos2026':
         return jsonify({'error': 'no autorizado'}), 403
@@ -698,11 +740,6 @@ def actualizar_costos():
             conn_inv = get_db()
             cur_inv = conn_inv.cursor()
             cur_inv.execute("""
-                ALTER TABLE inventario_diario.inventario_ciego_conteos
-                ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,4) DEFAULT 0
-            """)
-            conn_inv.commit()
-            cur_inv.execute("""
                 SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos
                 WHERE costo_unitario IS NULL OR costo_unitario = 0
             """)
@@ -710,7 +747,7 @@ def actualizar_costos():
             conn_inv.close()
             return jsonify({'pendientes': nombres, 'total': len(nombres)})
 
-        # Procesar lote
+        # Una sola query para todos los costos (mucho mas rapido)
         db_mov = {
             'host': DB_CONFIG['host'],
             'database': 'movimientos',
@@ -719,18 +756,16 @@ def actualizar_costos():
             'port': DB_CONFIG['port'],
             'sslmode': 'require'
         }
-        conn_mov = psycopg2.connect(**db_mov, cursor_factory=RealDictCursor)
+        conn_mov = psycopg2.connect(**db_mov, cursor_factory=RealDictCursor,
+                                     connect_timeout=20)
         cur_mov = conn_mov.cursor()
-        costos = {}
-        for nombre in nombres_batch:
-            cur_mov.execute("""
-                SELECT valor_unitario FROM public.movimientos
-                WHERE nombre_prod = %s AND valor_unitario > 0
-                ORDER BY fecha DESC LIMIT 1
-            """, (nombre,))
-            row = cur_mov.fetchone()
-            if row:
-                costos[nombre] = float(row['valor_unitario'])
+        cur_mov.execute("""
+            SELECT DISTINCT ON (nombre_prod) nombre_prod, valor_unitario
+            FROM public.movimientos
+            WHERE nombre_prod = ANY(%s) AND valor_unitario > 0
+            ORDER BY nombre_prod, fecha DESC
+        """, (nombres_batch,))
+        costos = {r['nombre_prod']: float(r['valor_unitario']) for r in cur_mov.fetchall()}
         conn_mov.close()
 
         # Actualizar en inventario
