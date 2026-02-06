@@ -694,6 +694,33 @@ BODEGA_CENTROS = {
     'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
 }
 
+@app.route('/api/costos/debug', methods=['GET'])
+def debug_costos():
+    """Debug: comparar codigos entre inventario y movimientos"""
+    try:
+        conn_inv = get_db()
+        cur_inv = conn_inv.cursor()
+        cur_inv.execute("SELECT DISTINCT codigo FROM inventario_diario.inventario_ciego_conteos LIMIT 10")
+        codigos_inv = [r['codigo'] for r in cur_inv.fetchall()]
+        conn_inv.close()
+
+        conn_mov = get_db_mov()
+        cur_mov = conn_mov.cursor()
+        cur_mov.execute("SELECT DISTINCT codigo_prod FROM public.movimientos WHERE nombre_prod ILIKE '%%helado%%' LIMIT 10")
+        codigos_mov_helado = [r['codigo_prod'] for r in cur_mov.fetchall()]
+        cur_mov.execute("SELECT DISTINCT codigo_prod FROM public.movimientos LIMIT 10")
+        codigos_mov_sample = [r['codigo_prod'] for r in cur_mov.fetchall()]
+        conn_mov.close()
+
+        return jsonify({
+            'inventario_sample': codigos_inv,
+            'movimientos_helado': codigos_mov_helado,
+            'movimientos_sample': codigos_mov_sample
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/costos', methods=['POST'])
 def get_costos():
     """Obtener costos de productos desde la base de movimientos"""
