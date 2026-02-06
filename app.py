@@ -683,6 +683,69 @@ BODEGA_CENTROS = {
     'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
 }
 
+@app.route('/api/admin/actualizar-costos', methods=['POST'])
+def actualizar_costos():
+    """Actualiza costo_unitario en registros existentes desde BD movimientos"""
+    clave = request.args.get('key', '')
+    if clave != 'ChiosCostos2026':
+        return jsonify({'error': 'no autorizado'}), 403
+    try:
+        # 1. Agregar columna si no existe
+        conn_inv = get_db()
+        cur_inv = conn_inv.cursor()
+        cur_inv.execute("""
+            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,4) DEFAULT 0
+        """)
+        conn_inv.commit()
+
+        # 2. Obtener nombres unicos
+        cur_inv.execute("SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos")
+        nombres = [r['nombre'] for r in cur_inv.fetchall()]
+
+        # 3. Buscar costos en movimientos
+        db_mov = {
+            'host': DB_CONFIG['host'],
+            'database': 'movimientos',
+            'user': DB_CONFIG['user'],
+            'password': DB_CONFIG['password'],
+            'port': DB_CONFIG['port'],
+            'sslmode': 'require'
+        }
+        conn_mov = psycopg2.connect(**db_mov, cursor_factory=RealDictCursor)
+        cur_mov = conn_mov.cursor()
+        cur_mov.execute("""
+            SELECT DISTINCT ON (nombre_prod) nombre_prod, valor_unitario
+            FROM public.movimientos
+            WHERE nombre_prod = ANY(%s) AND valor_unitario > 0
+            ORDER BY nombre_prod, fecha DESC
+        """, (nombres,))
+        costos = {r['nombre_prod']: float(r['valor_unitario']) for r in cur_mov.fetchall()}
+        conn_mov.close()
+
+        # 4. Actualizar
+        total = 0
+        for nombre, costo in costos.items():
+            cur_inv.execute("""
+                UPDATE inventario_diario.inventario_ciego_conteos
+                SET costo_unitario = %s
+                WHERE nombre = %s AND (costo_unitario IS NULL OR costo_unitario = 0)
+            """, (costo, nombre))
+            total += cur_inv.rowcount
+        conn_inv.commit()
+        conn_inv.close()
+
+        sin_costo = [n for n in nombres if n not in costos]
+        return jsonify({
+            'productos_unicos': len(nombres),
+            'costos_encontrados': len(costos),
+            'registros_actualizados': total,
+            'sin_costo': sin_costo
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/personas', methods=['GET'])
 def get_personas():
     try:
