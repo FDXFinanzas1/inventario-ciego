@@ -683,15 +683,13 @@ BODEGA_CENTROS = {
 
 @app.route('/api/personas', methods=['GET'])
 def get_personas():
-    local = request.args.get('local', '')
     try:
         import urllib.request, json as json_lib
-        centros_buscar = BODEGA_CENTROS.get(local, [])
         todos = []
         offset = None
         while True:
             url = f'https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?pageSize=100'
-            url += '&fields%5B%5D=nombre&fields%5B%5D=estado&fields%5B%5D=centro_costo_copia'
+            url += '&fields%5B%5D=nombre&fields%5B%5D=estado'
             if offset:
                 url += f'&offset={offset}'
             req = urllib.request.Request(url, headers={'Authorization': f'Bearer {AIRTABLE_TOKEN}'})
@@ -700,14 +698,12 @@ def get_personas():
                 f = r.get('fields', {})
                 if f.get('estado') == 'Activo':
                     nombre = f.get('nombre', '')
-                    centro = f.get('centro_costo_copia', '')
                     if nombre:
-                        if not centros_buscar or any(c in centro for c in centros_buscar):
-                            todos.append(nombre)
+                        todos.append(nombre)
             offset = data.get('offset')
             if not offset:
                 break
-        return jsonify(sorted(todos))
+        return jsonify(sorted(set(todos)))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

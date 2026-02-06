@@ -526,7 +526,7 @@ async function consultarInventario() {
                 state.productosFallidos = state.productos
                     .filter(p => p.cantidad_contada_2 !== null)
                     .map(p => p.codigo);
-                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(local)]);
+                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
                 renderProductosInventario();
                 showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
                 return;
@@ -546,7 +546,7 @@ async function consultarInventario() {
                 if (state.productosFallidos.length === 0) {
                     // Todo coincidió en el primer conteo, está finalizado
                     state.etapaConteo = 3;
-                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(local)]);
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
                     renderProductosInventario();
                     showToast('Conteo ya completado - todos los productos coinciden.', 'success');
                     return;
@@ -915,10 +915,9 @@ async function guardarObservacion(input) {
 
 // ==================== MODULO: ASIGNACION DE DIFERENCIAS ====================
 
-async function cargarPersonas(local) {
+async function cargarPersonas() {
     try {
-        const url = local ? `${CONFIG.API_URL}/api/personas?local=${local}` : `${CONFIG.API_URL}/api/personas`;
-        const response = await fetch(url);
+        const response = await fetch(`${CONFIG.API_URL}/api/personas`);
         if (response.ok) {
             state.personas = await response.json();
         }
@@ -1015,15 +1014,14 @@ function renderAsignacionesDiferencias(container, productosConDif) {
 }
 
 function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad) {
-    const opciones = state.personas.map(p => `<option value="${p}">`).join('');
-    const listId = `personas-list-${productoId}-${idx}`;
-
     return `
         <div class="asig-fila" data-producto="${productoId}" data-idx="${idx}">
-            <input type="text" class="input-persona" list="${listId}"
-                   value="${personaSeleccionada}" placeholder="Escribir nombre..."
-                   onchange="actualizarTotalAsignado(${productoId})">
-            <datalist id="${listId}">${opciones}</datalist>
+            <div class="persona-dropdown">
+                <input type="text" class="input-persona" readonly
+                       value="${personaSeleccionada}" placeholder="Seleccionar persona..."
+                       onclick="abrirSelectorPersona(this, ${productoId})">
+                <i class="fas fa-chevron-down persona-dd-arrow"></i>
+            </div>
             <input type="number" class="input-asignacion" value="${cantidad}"
                    step="0.001" min="0" placeholder="Cant."
                    onchange="actualizarTotalAsignado(${productoId}, this)"
@@ -1033,6 +1031,68 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad) {
             </button>
         </div>
     `;
+}
+
+function abrirSelectorPersona(inputEl, productoId) {
+    // Crear modal de seleccion de persona
+    let modal = document.getElementById('modal-persona-selector');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'modal-persona-selector';
+    modal.className = 'modal-persona-overlay';
+    modal.innerHTML = `
+        <div class="modal-persona-content">
+            <div class="modal-persona-header">
+                <input type="text" id="persona-buscar" class="persona-buscar-input"
+                       placeholder="Buscar persona..." autofocus>
+                <button class="btn-close-persona" onclick="cerrarSelectorPersona()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-persona-list" id="persona-lista">
+                ${state.personas.map(p => `<div class="persona-opcion" onclick="seleccionarPersona('${p.replace(/'/g, "\\'")}')">
+                    <i class="fas fa-user"></i> ${p}
+                </div>`).join('')}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Guardar referencia al input que abrio el modal
+    modal._targetInput = inputEl;
+    modal._productoId = productoId;
+
+    // Filtrar al escribir
+    const buscarInput = document.getElementById('persona-buscar');
+    setTimeout(() => buscarInput.focus(), 100);
+
+    buscarInput.addEventListener('input', function() {
+        const filtro = this.value.toLowerCase();
+        const opciones = document.querySelectorAll('.persona-opcion');
+        opciones.forEach(op => {
+            op.style.display = op.textContent.toLowerCase().includes(filtro) ? '' : 'none';
+        });
+    });
+
+    // Cerrar al hacer clic fuera
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) cerrarSelectorPersona();
+    });
+}
+
+function seleccionarPersona(nombre) {
+    const modal = document.getElementById('modal-persona-selector');
+    if (modal && modal._targetInput) {
+        modal._targetInput.value = nombre;
+        actualizarTotalAsignado(modal._productoId);
+    }
+    cerrarSelectorPersona();
+}
+
+function cerrarSelectorPersona() {
+    const modal = document.getElementById('modal-persona-selector');
+    if (modal) modal.remove();
 }
 
 function toggleAsignacion(productoId) {

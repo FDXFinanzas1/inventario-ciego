@@ -1103,6 +1103,131 @@ main {
     color: #94a3b8;
 }
 
+.persona-dropdown {
+    flex: 2;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.persona-dropdown .input-persona {
+    flex: 1;
+    width: 100%;
+    cursor: pointer;
+    padding-right: 28px;
+}
+
+.persona-dd-arrow {
+    position: absolute;
+    right: 10px;
+    color: #64748b;
+    font-size: 10px;
+    pointer-events: none;
+}
+
+/* Modal selector de persona */
+.modal-persona-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.modal-persona-content {
+    background: white;
+    width: 100%;
+    max-width: 500px;
+    max-height: 70vh;
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.25s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.modal-persona-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.persona-buscar-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: inherit;
+    outline: none;
+}
+
+.persona-buscar-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.15);
+}
+
+.btn-close-persona {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #64748b;
+    cursor: pointer;
+    padding: 8px;
+}
+
+.modal-persona-list {
+    overflow-y: auto;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+}
+
+.persona-opcion {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    font-size: 15px;
+    color: var(--text-dark);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s;
+}
+
+.persona-opcion i {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.persona-opcion:hover,
+.persona-opcion:active {
+    background: #f1f5f9;
+}
+
+@media (min-width: 577px) {
+    .modal-persona-content {
+        border-radius: 12px;
+        max-height: 60vh;
+        margin-bottom: 0;
+    }
+    .modal-persona-overlay {
+        align-items: center;
+    }
+}
+
 .input-asignacion {
     flex: 1;
     padding: 8px 10px;
@@ -1248,8 +1373,11 @@ main {
         flex-wrap: wrap;
     }
 
-    .input-persona {
+    .persona-dropdown {
         flex: 1 1 100%;
+    }
+
+    .persona-dropdown .input-persona {
         font-size: 16px;
         padding: 10px;
     }
