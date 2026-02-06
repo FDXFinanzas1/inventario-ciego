@@ -694,54 +694,54 @@ BODEGA_CENTROS = {
     'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
 }
 
-@app.route('/api/costos/debug', methods=['GET'])
-def debug_costos():
-    """Debug: comparar codigos entre inventario y movimientos"""
-    try:
-        conn_inv = get_db()
-        cur_inv = conn_inv.cursor()
-        cur_inv.execute("SELECT DISTINCT codigo FROM inventario_diario.inventario_ciego_conteos LIMIT 10")
-        codigos_inv = [r['codigo'] for r in cur_inv.fetchall()]
-        conn_inv.close()
-
-        conn_mov = get_db_mov()
-        cur_mov = conn_mov.cursor()
-        cur_mov.execute("SELECT DISTINCT codigo_prod FROM public.movimientos WHERE nombre_prod ILIKE '%%helado%%' LIMIT 10")
-        codigos_mov_helado = [r['codigo_prod'] for r in cur_mov.fetchall()]
-        cur_mov.execute("SELECT DISTINCT codigo_prod FROM public.movimientos LIMIT 10")
-        codigos_mov_sample = [r['codigo_prod'] for r in cur_mov.fetchall()]
-        conn_mov.close()
-
-        return jsonify({
-            'inventario_sample': codigos_inv,
-            'movimientos_helado': codigos_mov_helado,
-            'movimientos_sample': codigos_mov_sample
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/costos', methods=['POST'])
 def get_costos():
     """Obtener costos de productos desde la base de movimientos"""
     data = request.get_json()
-    codigos = data.get('codigos', [])
-    if not codigos:
+    productos = data.get('productos', [])  # [{codigo, nombre}, ...]
+    if not productos:
         return jsonify({})
     try:
         conn = get_db_mov()
         cur = conn.cursor()
-        # Siempre tomar el ultimo costo unitario de movimientos (el mas reciente)
+
+        codigos = [p['codigo'] for p in productos]
+        nombres = [p['nombre'] for p in productos]
+
+        # Primero intentar por codigo
         cur.execute("""
             SELECT DISTINCT ON (codigo_prod) codigo_prod, valor_unitario
             FROM public.movimientos
             WHERE codigo_prod = ANY(%s) AND valor_unitario > 0
             ORDER BY codigo_prod, fecha DESC
         """, (codigos,))
-        costos = {r['codigo_prod']: float(r['valor_unitario']) for r in cur.fetchall()}
+        costos_por_codigo = {r['codigo_prod']: float(r['valor_unitario']) for r in cur.fetchall()}
+
+        # Para los que no se encontraron por codigo, buscar por nombre exacto
+        faltantes_nombres = [p['nombre'] for p in productos if p['codigo'] not in costos_por_codigo]
+        costos_por_nombre = {}
+        if faltantes_nombres:
+            cur.execute("""
+                SELECT DISTINCT ON (nombre_prod) nombre_prod, valor_unitario
+                FROM public.movimientos
+                WHERE nombre_prod = ANY(%s) AND valor_unitario > 0
+                ORDER BY nombre_prod, fecha DESC
+            """, (faltantes_nombres,))
+            costos_por_nombre = {r['nombre_prod']: float(r['valor_unitario']) for r in cur.fetchall()}
 
         conn.close()
-        return jsonify(costos)
+
+        # Armar resultado indexado por codigo del inventario
+        resultado = {}
+        for p in productos:
+            cod = p['codigo']
+            nom = p['nombre']
+            if cod in costos_por_codigo:
+                resultado[cod] = costos_por_codigo[cod]
+            elif nom in costos_por_nombre:
+                resultado[cod] = costos_por_nombre[nom]
+
+        return jsonify(resultado)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

@@ -527,8 +527,8 @@ async function consultarInventario() {
                 state.productosFallidos = state.productos
                     .filter(p => p.cantidad_contada_2 !== null)
                     .map(p => p.codigo);
-                const codigosTodos = state.productos.map(p => p.codigo);
-                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(codigosTodos)]);
+                const prodParaCostos = state.productos.map(p => ({codigo: p.codigo, nombre: p.nombre}));
+                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(prodParaCostos)]);
                 renderProductosInventario();
                 showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
                 return;
@@ -548,8 +548,8 @@ async function consultarInventario() {
                 if (state.productosFallidos.length === 0) {
                     // Todo coincidió en el primer conteo, está finalizado
                     state.etapaConteo = 3;
-                    const codigosTodos2 = state.productos.map(p => p.codigo);
-                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(codigosTodos2)]);
+                    const prodParaCostos2 = state.productos.map(p => ({codigo: p.codigo, nombre: p.nombre}));
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(prodParaCostos2)]);
                     renderProductosInventario();
                     showToast('Conteo ya completado - todos los productos coinciden.', 'success');
                     return;
@@ -929,12 +929,12 @@ async function cargarPersonas() {
     }
 }
 
-async function cargarCostos(codigos) {
+async function cargarCostos(productos) {
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/costos`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ codigos })
+            body: JSON.stringify({ productos })
         });
         if (response.ok) {
             state.costos = await response.json();
@@ -1488,8 +1488,8 @@ async function guardarConteoEtapa() {
         state.etapaConteo = 3;
         const fecha3 = document.getElementById('fecha-conteo').value;
         const local3 = document.getElementById('bodega-select').value;
-        const codigosTodos3 = state.productos.map(p => p.codigo);
-        await Promise.all([cargarAsignaciones(fecha3, local3), cargarPersonas(), cargarCostos(codigosTodos3)]);
+        const prodParaCostos3 = state.productos.map(p => ({codigo: p.codigo, nombre: p.nombre}));
+        await Promise.all([cargarAsignaciones(fecha3, local3), cargarPersonas(), cargarCostos(prodParaCostos3)]);
         showToast('Conteo finalizado. Mostrando diferencias.', 'success');
         renderProductosInventario();
     }
