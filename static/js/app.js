@@ -1027,8 +1027,8 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad) {
             </select>
             <input type="number" class="input-asignacion" value="${cantidad}"
                    step="0.001" min="0" placeholder="Cant."
-                   onchange="actualizarTotalAsignado(${productoId})"
-                   onblur="actualizarTotalAsignado(${productoId})">
+                   onchange="actualizarTotalAsignado(${productoId}, this)"
+                   onblur="actualizarTotalAsignado(${productoId}, this)">
             <button class="btn-remove-fila" onclick="removerFilaAsignacion(this, ${productoId})">
                 <i class="fas fa-times"></i>
             </button>
@@ -1062,9 +1062,29 @@ function removerFilaAsignacion(btn, productoId) {
     actualizarTotalAsignado(productoId);
 }
 
-function actualizarTotalAsignado(productoId) {
+function actualizarTotalAsignado(productoId, inputActual) {
+    const productoDiv = document.querySelector(`.asig-producto[data-id="${productoId}"]`);
+    const difAbs = parseFloat(productoDiv.dataset.diferencia);
     const filasContainer = document.getElementById(`asig-filas-${productoId}`);
     const inputs = filasContainer.querySelectorAll('.input-asignacion');
+
+    // Si se modifico un input, limitar su valor al maximo permitido
+    if (inputActual) {
+        let sumaOtros = 0;
+        inputs.forEach(inp => {
+            if (inp !== inputActual) {
+                const val = parseFloat(inp.value);
+                if (!isNaN(val) && val > 0) sumaOtros += val;
+            }
+        });
+        const maxPermitido = Math.max(0, difAbs - sumaOtros);
+        const valActual = parseFloat(inputActual.value);
+        if (!isNaN(valActual) && valActual > maxPermitido) {
+            inputActual.value = parseFloat(maxPermitido.toFixed(3));
+            showToast(`Maximo permitido: ${maxPermitido.toFixed(3)}`, 'warning');
+        }
+    }
+
     let total = 0;
     inputs.forEach(inp => {
         const val = parseFloat(inp.value);
@@ -1075,8 +1095,6 @@ function actualizarTotalAsignado(productoId) {
     if (totalSpan) totalSpan.textContent = total.toFixed(3);
 
     // Actualizar status en el header
-    const productoDiv = document.querySelector(`.asig-producto[data-id="${productoId}"]`);
-    const difAbs = parseFloat(productoDiv.dataset.diferencia);
     const statusSpan = productoDiv.querySelector('.asig-status');
     const esCompleto = Math.abs(total - difAbs) < 0.001;
 
@@ -1090,6 +1108,18 @@ function actualizarTotalAsignado(productoId) {
         statusSpan.className = 'asig-status parcial';
         statusSpan.textContent = `${total.toFixed(1)}/${difAbs.toFixed(1)}`;
     }
+
+    // Actualizar max en todos los inputs
+    inputs.forEach(inp => {
+        let sumaOtros = 0;
+        inputs.forEach(other => {
+            if (other !== inp) {
+                const v = parseFloat(other.value);
+                if (!isNaN(v) && v > 0) sumaOtros += v;
+            }
+        });
+        inp.max = Math.max(0, difAbs - sumaOtros).toFixed(3);
+    });
 }
 
 async function guardarAsignacionProducto(productoId) {
