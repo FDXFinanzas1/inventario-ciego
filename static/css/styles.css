@@ -1228,6 +1228,14 @@ main {
     }
 }
 
+.input-asignacion-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 130px;
+}
+
 .input-asignacion {
     flex: 1;
     padding: 8px 10px;
@@ -1238,7 +1246,14 @@ main {
     text-align: center;
     background: white;
     transition: border-color 0.2s;
-    max-width: 100px;
+    min-width: 0;
+}
+
+.unidad-label {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
 }
 
 .input-asignacion:focus {
@@ -1382,11 +1397,18 @@ main {
         padding: 10px;
     }
 
-    .input-asignacion {
+    .input-asignacion-wrap {
         flex: 1;
         max-width: none;
+    }
+
+    .input-asignacion {
         font-size: 16px;
         padding: 10px;
+    }
+
+    .unidad-label {
+        font-size: 13px;
     }
 
     .btn-remove-fila {

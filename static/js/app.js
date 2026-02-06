@@ -963,13 +963,13 @@ function renderAsignacionesDiferencias(container, productosConDif) {
         // Generar filas de asignacion
         let filasHtml = '';
         if (asignacionesGuardadas.length > 0) {
-            filasHtml = asignacionesGuardadas.map((a, idx) => generarFilaAsignacion(prod.id, idx, a.persona, a.cantidad)).join('');
+            filasHtml = asignacionesGuardadas.map((a, idx) => generarFilaAsignacion(prod.id, idx, a.persona, a.cantidad, prod.unidad)).join('');
         } else {
-            filasHtml = generarFilaAsignacion(prod.id, 0, '', '');
+            filasHtml = generarFilaAsignacion(prod.id, 0, '', '', prod.unidad);
         }
 
         return `
-            <div class="asig-producto" data-id="${prod.id}" data-diferencia="${difAbs}">
+            <div class="asig-producto" data-id="${prod.id}" data-diferencia="${difAbs}" data-unidad="${prod.unidad || 'Und'}">
                 <div class="asig-producto-header" onclick="toggleAsignacion(${prod.id})">
                     <div class="asig-prod-info">
                         <span class="asig-prod-nombre">${prod.nombre}</span>
@@ -1013,7 +1013,8 @@ function renderAsignacionesDiferencias(container, productosConDif) {
     `;
 }
 
-function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad) {
+function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, unidad) {
+    const unidadLabel = unidad || 'Und';
     return `
         <div class="asig-fila" data-producto="${productoId}" data-idx="${idx}">
             <div class="persona-dropdown">
@@ -1022,10 +1023,13 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad) {
                        onclick="abrirSelectorPersona(this, ${productoId})">
                 <i class="fas fa-chevron-down persona-dd-arrow"></i>
             </div>
-            <input type="number" class="input-asignacion" value="${cantidad}"
-                   step="0.001" min="0" placeholder="Cant."
-                   onchange="actualizarTotalAsignado(${productoId}, this)"
-                   onblur="actualizarTotalAsignado(${productoId}, this)">
+            <div class="input-asignacion-wrap">
+                <input type="number" class="input-asignacion" value="${cantidad}"
+                       step="0.001" min="0" placeholder="Cant."
+                       onchange="actualizarTotalAsignado(${productoId}, this)"
+                       onblur="actualizarTotalAsignado(${productoId}, this)">
+                <span class="unidad-label">${unidadLabel}</span>
+            </div>
             <button class="btn-remove-fila" onclick="removerFilaAsignacion(this, ${productoId})">
                 <i class="fas fa-times"></i>
             </button>
@@ -1111,8 +1115,10 @@ function toggleAsignacion(productoId) {
 
 function agregarFilaAsignacion(productoId) {
     const filasContainer = document.getElementById(`asig-filas-${productoId}`);
+    const productoDiv = document.querySelector(`.asig-producto[data-id="${productoId}"]`);
+    const unidad = productoDiv ? productoDiv.dataset.unidad : 'Und';
     const idx = filasContainer.children.length;
-    filasContainer.insertAdjacentHTML('beforeend', generarFilaAsignacion(productoId, idx, '', ''));
+    filasContainer.insertAdjacentHTML('beforeend', generarFilaAsignacion(productoId, idx, '', '', unidad));
 }
 
 function removerFilaAsignacion(btn, productoId) {
