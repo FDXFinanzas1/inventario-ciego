@@ -727,68 +727,43 @@ def borrar_datos():
 
 @app.route('/api/admin/actualizar-costos', methods=['POST'])
 def actualizar_costos():
-    """Actualiza costo_unitario - usa una sola query optimizada"""
+    """Actualiza costo_unitario - acepta costos pre-calculados o lista de pendientes"""
     clave = request.args.get('key', '')
     if clave != 'ChiosCostos2026':
         return jsonify({'error': 'no autorizado'}), 403
     try:
         data = request.get_json() or {}
-        nombres_batch = data.get('nombres', [])
 
-        # Si no se pasan nombres, devolver la lista de productos sin costo
-        if not nombres_batch:
+        # Modo 1: costos pre-calculados {nombre: costo}
+        costos_directos = data.get('costos', {})
+        if costos_directos:
             conn_inv = get_db()
             cur_inv = conn_inv.cursor()
-            cur_inv.execute("""
-                SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos
-                WHERE costo_unitario IS NULL OR costo_unitario = 0
-            """)
-            nombres = [r['nombre'] for r in cur_inv.fetchall()]
+            total = 0
+            for nombre, costo in costos_directos.items():
+                cur_inv.execute("""
+                    UPDATE inventario_diario.inventario_ciego_conteos
+                    SET costo_unitario = %s
+                    WHERE nombre = %s AND (costo_unitario IS NULL OR costo_unitario = 0)
+                """, (float(costo), nombre))
+                total += cur_inv.rowcount
+            conn_inv.commit()
             conn_inv.close()
-            return jsonify({'pendientes': nombres, 'total': len(nombres)})
+            return jsonify({
+                'productos_recibidos': len(costos_directos),
+                'registros_actualizados': total
+            })
 
-        # Una sola query para todos los costos (mucho mas rapido)
-        db_mov = {
-            'host': DB_CONFIG['host'],
-            'database': 'movimientos',
-            'user': DB_CONFIG['user'],
-            'password': DB_CONFIG['password'],
-            'port': DB_CONFIG['port'],
-            'sslmode': 'require'
-        }
-        conn_mov = psycopg2.connect(**db_mov, cursor_factory=RealDictCursor,
-                                     connect_timeout=20)
-        cur_mov = conn_mov.cursor()
-        cur_mov.execute("""
-            SELECT DISTINCT ON (nombre_prod) nombre_prod, valor_unitario
-            FROM public.movimientos
-            WHERE nombre_prod = ANY(%s) AND valor_unitario > 0
-            ORDER BY nombre_prod, fecha DESC
-        """, (nombres_batch,))
-        costos = {r['nombre_prod']: float(r['valor_unitario']) for r in cur_mov.fetchall()}
-        conn_mov.close()
-
-        # Actualizar en inventario
+        # Modo 2: devolver lista de productos sin costo
         conn_inv = get_db()
         cur_inv = conn_inv.cursor()
-        total = 0
-        for nombre, costo in costos.items():
-            cur_inv.execute("""
-                UPDATE inventario_diario.inventario_ciego_conteos
-                SET costo_unitario = %s
-                WHERE nombre = %s AND (costo_unitario IS NULL OR costo_unitario = 0)
-            """, (costo, nombre))
-            total += cur_inv.rowcount
-        conn_inv.commit()
+        cur_inv.execute("""
+            SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos
+            WHERE costo_unitario IS NULL OR costo_unitario = 0
+        """)
+        nombres = [r['nombre'] for r in cur_inv.fetchall()]
         conn_inv.close()
-
-        sin_costo = [n for n in nombres_batch if n not in costos]
-        return jsonify({
-            'procesados': len(nombres_batch),
-            'costos_encontrados': len(costos),
-            'registros_actualizados': total,
-            'sin_costo': sin_costo
-        })
+        return jsonify({'pendientes': nombres, 'total': len(nombres)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
