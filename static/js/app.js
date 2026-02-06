@@ -288,8 +288,7 @@ let state = {
     etapaConteo: 1,  // 1 = Primer conteo, 2 = Segundo conteo, 3 = Finalizado
     productosFallidos: [],  // Productos con diferencia después del primer conteo
     personas: [],           // Lista de personas asignables
-    asignaciones: {},       // Asignaciones por conteo_id
-    costos: {}              // Costos por codigo de producto
+    asignaciones: {}        // Asignaciones por conteo_id
 };
 
 // Inicializacion
@@ -515,7 +514,8 @@ async function consultarInventario() {
                 cantidad_sistema: parseFloat(p.cantidad),
                 cantidad_contada: p.cantidad_contada,
                 cantidad_contada_2: p.cantidad_contada_2,
-                observaciones: p.observaciones || ''
+                observaciones: p.observaciones || '',
+                costo_unitario: parseFloat(p.costo_unitario) || 0
             }));
 
             // Verificar si ya se finalizó el conteo (tiene conteo_2)
@@ -527,8 +527,7 @@ async function consultarInventario() {
                 state.productosFallidos = state.productos
                     .filter(p => p.cantidad_contada_2 !== null)
                     .map(p => p.codigo);
-                const prodParaCostos = state.productos.map(p => ({codigo: p.codigo, nombre: p.nombre}));
-                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(prodParaCostos)]);
+                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
                 renderProductosInventario();
                 showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
                 return;
@@ -548,8 +547,7 @@ async function consultarInventario() {
                 if (state.productosFallidos.length === 0) {
                     // Todo coincidió en el primer conteo, está finalizado
                     state.etapaConteo = 3;
-                    const prodParaCostos2 = state.productos.map(p => ({codigo: p.codigo, nombre: p.nombre}));
-                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarCostos(prodParaCostos2)]);
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
                     renderProductosInventario();
                     showToast('Conteo ya completado - todos los productos coinciden.', 'success');
                     return;
@@ -929,22 +927,6 @@ async function cargarPersonas() {
     }
 }
 
-async function cargarCostos(productos) {
-    try {
-        const response = await fetch(`${CONFIG.API_URL}/api/costos`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productos })
-        });
-        if (response.ok) {
-            state.costos = await response.json();
-        }
-    } catch (error) {
-        console.error('Error cargando costos:', error);
-        state.costos = {};
-    }
-}
-
 async function cargarAsignaciones(fecha, local) {
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/asignaciones?fecha=${fecha}&local=${local}`);
@@ -972,8 +954,8 @@ function renderAsignacionesDiferencias(container, productosConDif) {
         const difClass = diferencia < 0 ? 'negativa' : 'positiva';
         const difTexto = diferencia < 0 ? 'Faltante' : 'Sobrante';
 
-        // Costo del producto
-        const costoUnit = state.costos[prod.codigo] || 0;
+        // Costo del producto (viene de la BD directamente)
+        const costoUnit = prod.costo_unitario || 0;
         const valorDif = difAbs * costoUnit;
         valorTotalGeneral += valorDif;
 
@@ -1488,8 +1470,7 @@ async function guardarConteoEtapa() {
         state.etapaConteo = 3;
         const fecha3 = document.getElementById('fecha-conteo').value;
         const local3 = document.getElementById('bodega-select').value;
-        const prodParaCostos3 = state.productos.map(p => ({codigo: p.codigo, nombre: p.nombre}));
-        await Promise.all([cargarAsignaciones(fecha3, local3), cargarPersonas(), cargarCostos(prodParaCostos3)]);
+        await Promise.all([cargarAsignaciones(fecha3, local3), cargarPersonas()]);
         showToast('Conteo finalizado. Mostrando diferencias.', 'success');
         renderProductosInventario();
     }

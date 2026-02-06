@@ -27,18 +27,6 @@ DB_CONFIG = {
 def get_db():
     return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
 
-# Configuracion base de datos Movimientos (costos)
-DB_MOV_CONFIG = {
-    'host': os.environ.get('DB_HOST', 'chiosburguer.postgres.database.azure.com'),
-    'database': os.environ.get('DB_MOV_NAME', 'movimientos'),
-    'user': os.environ.get('DB_USER', 'adminChios'),
-    'password': os.environ.get('DB_PASSWORD', 'Burger2023'),
-    'port': os.environ.get('DB_PORT', '5432'),
-    'sslmode': 'require'
-}
-
-def get_db_mov():
-    return psycopg2.connect(**DB_MOV_CONFIG, cursor_factory=RealDictCursor)
 
 # Helper: mapeo de IDs de bodega a nombres legibles
 BODEGAS_NOMBRES = {
@@ -151,7 +139,8 @@ def consultar_inventario():
         conn.commit()
 
         cur.execute("""
-            SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2, observaciones
+            SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2, observaciones,
+                   COALESCE(costo_unitario, 0) as costo_unitario
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
             ORDER BY codigo
@@ -693,58 +682,6 @@ BODEGA_CENTROS = {
     'santo_cachon_portugal': ['Santo Cachon Portugal', 'Santo Cach\u00f3n Portugal'],
     'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
 }
-
-@app.route('/api/costos', methods=['POST'])
-def get_costos():
-    """Obtener costos de productos desde la base de movimientos"""
-    data = request.get_json()
-    productos = data.get('productos', [])  # [{codigo, nombre}, ...]
-    if not productos:
-        return jsonify({})
-    try:
-        conn = get_db_mov()
-        cur = conn.cursor()
-
-        codigos = [p['codigo'] for p in productos]
-        nombres = [p['nombre'] for p in productos]
-
-        # Primero intentar por codigo
-        cur.execute("""
-            SELECT DISTINCT ON (codigo_prod) codigo_prod, valor_unitario
-            FROM public.movimientos
-            WHERE codigo_prod = ANY(%s) AND valor_unitario > 0
-            ORDER BY codigo_prod, fecha DESC
-        """, (codigos,))
-        costos_por_codigo = {r['codigo_prod']: float(r['valor_unitario']) for r in cur.fetchall()}
-
-        # Para los que no se encontraron por codigo, buscar por nombre exacto
-        faltantes_nombres = [p['nombre'] for p in productos if p['codigo'] not in costos_por_codigo]
-        costos_por_nombre = {}
-        if faltantes_nombres:
-            cur.execute("""
-                SELECT DISTINCT ON (nombre_prod) nombre_prod, valor_unitario
-                FROM public.movimientos
-                WHERE nombre_prod = ANY(%s) AND valor_unitario > 0
-                ORDER BY nombre_prod, fecha DESC
-            """, (faltantes_nombres,))
-            costos_por_nombre = {r['nombre_prod']: float(r['valor_unitario']) for r in cur.fetchall()}
-
-        conn.close()
-
-        # Armar resultado indexado por codigo del inventario
-        resultado = {}
-        for p in productos:
-            cod = p['codigo']
-            nom = p['nombre']
-            if cod in costos_por_codigo:
-                resultado[cod] = costos_por_codigo[cod]
-            elif nom in costos_por_nombre:
-                resultado[cod] = costos_por_nombre[nom]
-
-        return jsonify(resultado)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/personas', methods=['GET'])
 def get_personas():
