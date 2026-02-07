@@ -940,9 +940,20 @@ async function cargarPersonas() {
         const response = await fetch(`${CONFIG.API_URL}/api/personas`);
         if (response.ok) {
             state.personas = await response.json();
+            // Guardar en cache local
+            if (state.personas.length > 0) {
+                localStorage.setItem('personas_cache', JSON.stringify(state.personas));
+            }
         }
     } catch (error) {
         console.error('Error cargando personas:', error);
+    }
+    // Si fallo, intentar cargar desde cache
+    if (!state.personas || state.personas.length === 0) {
+        const cache = localStorage.getItem('personas_cache');
+        if (cache) {
+            try { state.personas = JSON.parse(cache); } catch(e) {}
+        }
     }
 }
 
@@ -1076,18 +1087,6 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
 }
 
 async function abrirSelectorPersona(inputEl, productoId) {
-    // Si no hay personas cargadas, cargarlas ahora
-    if (!state.personas || state.personas.length === 0) {
-        try {
-            const response = await fetch(`${CONFIG.API_URL}/api/personas`);
-            if (response.ok) {
-                state.personas = await response.json();
-            }
-        } catch (error) {
-            console.error('Error cargando personas:', error);
-        }
-    }
-
     // Crear modal de seleccion de persona
     let modal = document.getElementById('modal-persona-selector');
     if (modal) modal.remove();
@@ -1095,56 +1094,96 @@ async function abrirSelectorPersona(inputEl, productoId) {
     modal = document.createElement('div');
     modal.id = 'modal-persona-selector';
     modal.className = 'modal-persona-overlay';
-
-    const listaHtml = state.personas.length > 0
-        ? state.personas.map(p => `<div class="persona-opcion" data-nombre="${p.replace(/"/g, '&quot;')}">
-            <i class="fas fa-user"></i> ${p}
-        </div>`).join('')
-        : '<div style="padding:20px;text-align:center;color:#64748b;">No se pudieron cargar las personas</div>';
+    modal._targetInput = inputEl;
+    modal._productoId = productoId;
 
     modal.innerHTML = `
         <div class="modal-persona-content">
             <div class="modal-persona-header">
                 <input type="text" id="persona-buscar" class="persona-buscar-input"
-                       placeholder="Buscar persona..." autofocus>
+                       placeholder="Buscar persona...">
                 <button class="btn-close-persona" onclick="cerrarSelectorPersona()">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-persona-list" id="persona-lista">
-                ${listaHtml}
+                <div style="padding:30px;text-align:center;color:#64748b;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
+                    Cargando personas...
+                </div>
             </div>
         </div>
     `;
-
-    // Usar event delegation para mejor soporte movil
-    const lista = modal.querySelector('#persona-lista');
-    lista.addEventListener('click', function(e) {
-        const opcion = e.target.closest('.persona-opcion');
-        if (opcion) seleccionarPersona(opcion.dataset.nombre);
-    });
     document.body.appendChild(modal);
-
-    // Guardar referencia al input que abrio el modal
-    modal._targetInput = inputEl;
-    modal._productoId = productoId;
-
-    // Filtrar al escribir
-    const buscarInput = document.getElementById('persona-buscar');
-    setTimeout(() => buscarInput.focus(), 300);
-
-    buscarInput.addEventListener('input', function() {
-        const filtro = this.value.toLowerCase();
-        const opciones = document.querySelectorAll('.persona-opcion');
-        opciones.forEach(op => {
-            op.style.display = op.textContent.toLowerCase().includes(filtro) ? '' : 'none';
-        });
-    });
 
     // Cerrar al hacer clic fuera
     modal.addEventListener('click', function(e) {
         if (e.target === modal) cerrarSelectorPersona();
     });
+
+    // Cargar personas si no estan cargadas
+    if (!state.personas || state.personas.length === 0) {
+        await cargarPersonas();
+    }
+
+    // Renderizar lista de personas en el modal
+    renderListaPersonas();
+
+    // Configurar busqueda
+    const buscarInput = document.getElementById('persona-buscar');
+    if (buscarInput) {
+        setTimeout(() => buscarInput.focus(), 300);
+        buscarInput.addEventListener('input', function() {
+            const filtro = this.value.toLowerCase();
+            const opciones = document.querySelectorAll('.persona-opcion');
+            opciones.forEach(op => {
+                op.style.display = op.textContent.toLowerCase().includes(filtro) ? '' : 'none';
+            });
+        });
+    }
+}
+
+function renderListaPersonas() {
+    const lista = document.getElementById('persona-lista');
+    if (!lista) return;
+
+    if (state.personas && state.personas.length > 0) {
+        lista.innerHTML = state.personas.map(p => `<div class="persona-opcion" data-nombre="${p.replace(/"/g, '&quot;')}">
+            <i class="fas fa-user"></i> ${p}
+        </div>`).join('');
+
+        // Event delegation para seleccion
+        lista.addEventListener('click', function(e) {
+            const opcion = e.target.closest('.persona-opcion');
+            if (opcion) seleccionarPersona(opcion.dataset.nombre);
+        });
+    } else {
+        lista.innerHTML = `
+            <div style="padding:30px;text-align:center;color:#64748b;">
+                <i class="fas fa-exclamation-circle" style="font-size:24px;margin-bottom:10px;display:block;color:#D97706;"></i>
+                No se pudieron cargar las personas
+                <button onclick="reintentarCargarPersonas()" style="display:block;margin:12px auto 0;padding:10px 24px;background:#1E3A5F;color:white;border:none;border-radius:8px;font-size:14px;font-family:inherit;cursor:pointer;">
+                    <i class="fas fa-sync-alt"></i> Reintentar
+                </button>
+            </div>
+        `;
+    }
+}
+
+async function reintentarCargarPersonas() {
+    const lista = document.getElementById('persona-lista');
+    if (lista) {
+        lista.innerHTML = `
+            <div style="padding:30px;text-align:center;color:#64748b;">
+                <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
+                Cargando personas...
+            </div>
+        `;
+    }
+    // Forzar recarga ignorando cache
+    state.personas = [];
+    await cargarPersonas();
+    renderListaPersonas();
 }
 
 function seleccionarPersona(nombre) {
