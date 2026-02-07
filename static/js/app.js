@@ -1075,7 +1075,19 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
     `;
 }
 
-function abrirSelectorPersona(inputEl, productoId) {
+async function abrirSelectorPersona(inputEl, productoId) {
+    // Si no hay personas cargadas, cargarlas ahora
+    if (!state.personas || state.personas.length === 0) {
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/personas`);
+            if (response.ok) {
+                state.personas = await response.json();
+            }
+        } catch (error) {
+            console.error('Error cargando personas:', error);
+        }
+    }
+
     // Crear modal de seleccion de persona
     let modal = document.getElementById('modal-persona-selector');
     if (modal) modal.remove();
@@ -1083,6 +1095,13 @@ function abrirSelectorPersona(inputEl, productoId) {
     modal = document.createElement('div');
     modal.id = 'modal-persona-selector';
     modal.className = 'modal-persona-overlay';
+
+    const listaHtml = state.personas.length > 0
+        ? state.personas.map(p => `<div class="persona-opcion" data-nombre="${p.replace(/"/g, '&quot;')}">
+            <i class="fas fa-user"></i> ${p}
+        </div>`).join('')
+        : '<div style="padding:20px;text-align:center;color:#64748b;">No se pudieron cargar las personas</div>';
+
     modal.innerHTML = `
         <div class="modal-persona-content">
             <div class="modal-persona-header">
@@ -1093,9 +1112,7 @@ function abrirSelectorPersona(inputEl, productoId) {
                 </button>
             </div>
             <div class="modal-persona-list" id="persona-lista">
-                ${state.personas.map(p => `<div class="persona-opcion" data-nombre="${p.replace(/"/g, '&quot;')}">
-                    <i class="fas fa-user"></i> ${p}
-                </div>`).join('')}
+                ${listaHtml}
             </div>
         </div>
     `;
@@ -1106,13 +1123,6 @@ function abrirSelectorPersona(inputEl, productoId) {
         const opcion = e.target.closest('.persona-opcion');
         if (opcion) seleccionarPersona(opcion.dataset.nombre);
     });
-    lista.addEventListener('touchend', function(e) {
-        const opcion = e.target.closest('.persona-opcion');
-        if (opcion) {
-            e.preventDefault();
-            seleccionarPersona(opcion.dataset.nombre);
-        }
-    });
     document.body.appendChild(modal);
 
     // Guardar referencia al input que abrio el modal
@@ -1121,7 +1131,7 @@ function abrirSelectorPersona(inputEl, productoId) {
 
     // Filtrar al escribir
     const buscarInput = document.getElementById('persona-buscar');
-    setTimeout(() => buscarInput.focus(), 100);
+    setTimeout(() => buscarInput.focus(), 300);
 
     buscarInput.addEventListener('input', function() {
         const filtro = this.value.toLowerCase();

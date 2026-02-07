@@ -1184,6 +1184,7 @@ main {
     background: white;
     width: 100%;
     max-width: 500px;
+    height: 60vh;
     max-height: 70vh;
     border-radius: 16px 16px 0 0;
     display: flex;
@@ -1233,6 +1234,7 @@ main {
 .modal-persona-list {
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
     -webkit-overflow-scrolling: touch;
 }
 
