@@ -1055,10 +1055,9 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
     const valorFila = (cantNum * costoUnit).toFixed(2);
     return `
         <div class="asig-fila" data-producto="${productoId}" data-idx="${idx}">
-            <div class="persona-dropdown">
+            <div class="persona-dropdown" onclick="abrirSelectorPersona(this.querySelector('.input-persona'), ${productoId})" ontouchend="event.preventDefault(); abrirSelectorPersona(this.querySelector('.input-persona'), ${productoId})">
                 <input type="text" class="input-persona" readonly
-                       value="${personaSeleccionada}" placeholder="Seleccionar persona..."
-                       onclick="abrirSelectorPersona(this, ${productoId})">
+                       value="${personaSeleccionada}" placeholder="Seleccionar persona...">
                 <i class="fas fa-chevron-down persona-dd-arrow"></i>
             </div>
             <div class="input-asignacion-wrap">
@@ -1094,12 +1093,26 @@ function abrirSelectorPersona(inputEl, productoId) {
                 </button>
             </div>
             <div class="modal-persona-list" id="persona-lista">
-                ${state.personas.map(p => `<div class="persona-opcion" onclick="seleccionarPersona('${p.replace(/'/g, "\\'")}')">
+                ${state.personas.map(p => `<div class="persona-opcion" data-nombre="${p.replace(/"/g, '&quot;')}">
                     <i class="fas fa-user"></i> ${p}
                 </div>`).join('')}
             </div>
         </div>
     `;
+
+    // Usar event delegation para mejor soporte movil
+    const lista = modal.querySelector('#persona-lista');
+    lista.addEventListener('click', function(e) {
+        const opcion = e.target.closest('.persona-opcion');
+        if (opcion) seleccionarPersona(opcion.dataset.nombre);
+    });
+    lista.addEventListener('touchend', function(e) {
+        const opcion = e.target.closest('.persona-opcion');
+        if (opcion) {
+            e.preventDefault();
+            seleccionarPersona(opcion.dataset.nombre);
+        }
+    });
     document.body.appendChild(modal);
 
     // Guardar referencia al input que abrio el modal

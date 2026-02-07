@@ -1146,6 +1146,8 @@ main {
     position: relative;
     display: flex;
     align-items: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(30, 58, 95, 0.1);
 }
 
 .persona-dropdown .input-persona {
