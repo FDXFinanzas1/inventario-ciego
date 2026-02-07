@@ -14,6 +14,14 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 app = Flask(__name__, static_folder='static')
 CORS(app, origins=['*'])
 
+@app.after_request
+def add_no_cache_headers(response):
+    if request.path.endswith(('.js', '.css', '.html')) or request.path == '/':
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
 # Configuracion de la base de datos Azure PostgreSQL
 DB_CONFIG = {
     'host': os.environ.get('DB_HOST', 'chiosburguer.postgres.database.azure.com'),
