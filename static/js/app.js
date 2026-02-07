@@ -1055,7 +1055,7 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
     const valorFila = (cantNum * costoUnit).toFixed(2);
     return `
         <div class="asig-fila" data-producto="${productoId}" data-idx="${idx}">
-            <div class="persona-dropdown" onclick="abrirSelectorPersona(this.querySelector('.input-persona'), ${productoId})" ontouchend="event.preventDefault(); abrirSelectorPersona(this.querySelector('.input-persona'), ${productoId})">
+            <div class="persona-dropdown" onclick="abrirSelectorPersona(this.querySelector('.input-persona'), ${productoId})">
                 <input type="text" class="input-persona" readonly
                        value="${personaSeleccionada}" placeholder="Seleccionar persona...">
                 <i class="fas fa-chevron-down persona-dd-arrow"></i>

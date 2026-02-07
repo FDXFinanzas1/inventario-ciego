@@ -1155,6 +1155,7 @@ main {
     width: 100%;
     cursor: pointer;
     padding-right: 28px;
+    pointer-events: none;
 }
 
 .persona-dd-arrow {
