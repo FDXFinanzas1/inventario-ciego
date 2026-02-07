@@ -149,7 +149,10 @@ def consultar_inventario():
         productos = cur.fetchall()
         conn.close()
 
-        return jsonify({'productos': productos})
+        # Incluir personas en la respuesta para evitar llamada extra
+        personas = _obtener_personas()
+
+        return jsonify({'productos': productos, 'personas': personas})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -673,6 +676,11 @@ AIRTABLE_TOKEN = os.environ.get('AIRTABLE_TOKEN', '')
 AIRTABLE_BASE = os.environ.get('AIRTABLE_BASE', 'appzTllAjxu4TOs1a')
 AIRTABLE_TABLE = os.environ.get('AIRTABLE_TABLE', 'tbldYTLfQ3DoEK0WA')
 
+# Cache de personas en memoria del servidor
+import time as _time
+_personas_cache = {'datos': [], 'timestamp': 0}
+PERSONAS_CACHE_TTL = 3600  # 1 hora
+
 # Mapeo de bodega a centros de costo de Airtable
 BODEGA_CENTROS = {
     'real_audiencia': ['Chios Real Audiencia'],
@@ -768,29 +776,51 @@ def actualizar_costos():
         return jsonify({'error': str(e)}), 500
 
 
+def _cargar_personas_airtable():
+    """Carga personas desde Airtable y actualiza cache del servidor"""
+    import urllib.request, json as json_lib
+    todos = []
+    offset = None
+    while True:
+        url = f'https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?pageSize=100'
+        url += '&fields%5B%5D=nombre&fields%5B%5D=estado'
+        if offset:
+            url += f'&offset={offset}'
+        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {AIRTABLE_TOKEN}'})
+        data = json_lib.loads(urllib.request.urlopen(req).read())
+        for r in data.get('records', []):
+            f = r.get('fields', {})
+            if f.get('estado') == 'Activo':
+                nombre = f.get('nombre', '')
+                if nombre:
+                    todos.append(nombre)
+        offset = data.get('offset')
+        if not offset:
+            break
+    resultado = sorted(set(todos))
+    _personas_cache['datos'] = resultado
+    _personas_cache['timestamp'] = _time.time()
+    return resultado
+
+
+def _obtener_personas():
+    """Obtiene personas desde cache o Airtable si cache expirado"""
+    ahora = _time.time()
+    if _personas_cache['datos'] and (ahora - _personas_cache['timestamp']) < PERSONAS_CACHE_TTL:
+        return _personas_cache['datos']
+    try:
+        return _cargar_personas_airtable()
+    except Exception as e:
+        print(f'Error cargando personas de Airtable: {e}')
+        # Devolver cache viejo si existe
+        return _personas_cache['datos'] if _personas_cache['datos'] else []
+
+
 @app.route('/api/personas', methods=['GET'])
 def get_personas():
     try:
-        import urllib.request, json as json_lib
-        todos = []
-        offset = None
-        while True:
-            url = f'https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?pageSize=100'
-            url += '&fields%5B%5D=nombre&fields%5B%5D=estado'
-            if offset:
-                url += f'&offset={offset}'
-            req = urllib.request.Request(url, headers={'Authorization': f'Bearer {AIRTABLE_TOKEN}'})
-            data = json_lib.loads(urllib.request.urlopen(req).read())
-            for r in data.get('records', []):
-                f = r.get('fields', {})
-                if f.get('estado') == 'Activo':
-                    nombre = f.get('nombre', '')
-                    if nombre:
-                        todos.append(nombre)
-            offset = data.get('offset')
-            if not offset:
-                break
-        return jsonify(sorted(set(todos)))
+        personas = _obtener_personas()
+        return jsonify(personas)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

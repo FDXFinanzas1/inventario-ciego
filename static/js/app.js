@@ -513,6 +513,12 @@ async function consultarInventario() {
         if (response.ok) {
             const data = await response.json();
 
+            // Guardar personas si vienen en la respuesta
+            if (data.personas && data.personas.length > 0) {
+                state.personas = data.personas;
+                localStorage.setItem('personas_cache', JSON.stringify(data.personas));
+            }
+
             if (data.productos.length === 0) {
                 showToast('No hay datos para esta fecha y bodega', 'warning');
                 renderProductosVacio();
@@ -1086,7 +1092,15 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
     `;
 }
 
-async function abrirSelectorPersona(inputEl, productoId) {
+function abrirSelectorPersona(inputEl, productoId) {
+    // Intentar cargar desde cache si no hay personas
+    if (!state.personas || state.personas.length === 0) {
+        const cache = localStorage.getItem('personas_cache');
+        if (cache) {
+            try { state.personas = JSON.parse(cache); } catch(e) {}
+        }
+    }
+
     // Crear modal de seleccion de persona
     let modal = document.getElementById('modal-persona-selector');
     if (modal) modal.remove();
@@ -1106,28 +1120,18 @@ async function abrirSelectorPersona(inputEl, productoId) {
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="modal-persona-list" id="persona-lista">
-                <div style="padding:30px;text-align:center;color:#64748b;">
-                    <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
-                    Cargando personas...
-                </div>
-            </div>
+            <div class="modal-persona-list" id="persona-lista"></div>
         </div>
     `;
     document.body.appendChild(modal);
+
+    // Renderizar lista de personas
+    renderListaPersonas();
 
     // Cerrar al hacer clic fuera
     modal.addEventListener('click', function(e) {
         if (e.target === modal) cerrarSelectorPersona();
     });
-
-    // Cargar personas si no estan cargadas
-    if (!state.personas || state.personas.length === 0) {
-        await cargarPersonas();
-    }
-
-    // Renderizar lista de personas en el modal
-    renderListaPersonas();
 
     // Configurar busqueda
     const buscarInput = document.getElementById('persona-buscar');
