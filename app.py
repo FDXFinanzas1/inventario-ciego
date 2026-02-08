@@ -63,7 +63,20 @@ USUARIO_BODEGA = {
 
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    import json as json_lib
+    # Inyectar personas directamente en el HTML para que esten disponibles sin fetch
+    personas = _personas_cache['datos'] if _personas_cache['datos'] else []
+    if not personas:
+        try:
+            personas = _cargar_personas_airtable()
+        except Exception:
+            pass
+    html_path = os.path.join(app.static_folder, 'index.html')
+    with open(html_path, 'r', encoding='utf-8') as f:
+        html = f.read()
+    script_tag = f'<script>window._PERSONAS_PRECARGADAS={json_lib.dumps(personas, ensure_ascii=False)};</script>'
+    html = html.replace('</head>', script_tag + '\n</head>')
+    return html
 
 @app.route('/<path:path>')
 def static_files(path):

@@ -297,6 +297,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initApp() {
+    // Cargar personas precargadas del servidor (inyectadas en el HTML)
+    if (window._PERSONAS_PRECARGADAS && window._PERSONAS_PRECARGADAS.length > 0) {
+        state.personas = window._PERSONAS_PRECARGADAS;
+        try { localStorage.setItem('personas_cache', JSON.stringify(state.personas)); } catch(e) {}
+    }
+
     // Verificar sesion guardada
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
