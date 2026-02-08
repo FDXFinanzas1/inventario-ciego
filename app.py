@@ -157,10 +157,7 @@ def consultar_inventario():
         productos = cur.fetchall()
         conn.close()
 
-        # Incluir personas en la respuesta para evitar llamada extra
-        personas = _obtener_personas()
-
-        return jsonify({'productos': productos, 'personas': personas})
+        return jsonify({'productos': productos})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -795,7 +792,7 @@ def _cargar_personas_airtable():
         if offset:
             url += f'&offset={offset}'
         req = urllib.request.Request(url, headers={'Authorization': f'Bearer {AIRTABLE_TOKEN}'})
-        data = json_lib.loads(urllib.request.urlopen(req).read())
+        data = json_lib.loads(urllib.request.urlopen(req, timeout=10).read())
         for r in data.get('records', []):
             f = r.get('fields', {})
             if f.get('estado') == 'Activo':

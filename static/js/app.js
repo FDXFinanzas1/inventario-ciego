@@ -513,12 +513,6 @@ async function consultarInventario() {
         if (response.ok) {
             const data = await response.json();
 
-            // Guardar personas si vienen en la respuesta
-            if (data.personas && data.personas.length > 0) {
-                state.personas = data.personas;
-                localStorage.setItem('personas_cache', JSON.stringify(data.personas));
-            }
-
             if (data.productos.length === 0) {
                 showToast('No hay datos para esta fecha y bodega', 'warning');
                 renderProductosVacio();
