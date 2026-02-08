@@ -1086,7 +1086,7 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
     `;
 }
 
-function abrirSelectorPersona(inputEl, productoId) {
+async function abrirSelectorPersona(inputEl, productoId) {
     // Intentar cargar desde cache si no hay personas
     if (!state.personas || state.personas.length === 0) {
         const cache = localStorage.getItem('personas_cache');
@@ -1119,18 +1119,31 @@ function abrirSelectorPersona(inputEl, productoId) {
     `;
     document.body.appendChild(modal);
 
-    // Renderizar lista de personas
-    renderListaPersonas();
-
     // Cerrar al hacer clic fuera
     modal.addEventListener('click', function(e) {
         if (e.target === modal) cerrarSelectorPersona();
     });
 
+    // Si no hay personas, cargar on-demand con loading
+    if (!state.personas || state.personas.length === 0) {
+        const lista = document.getElementById('persona-lista');
+        if (lista) {
+            lista.innerHTML = `
+                <div style="padding:30px;text-align:center;color:#64748b;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
+                    Cargando personas...
+                </div>
+            `;
+        }
+        await cargarPersonas();
+    }
+
+    // Renderizar lista de personas
+    renderListaPersonas();
+
     // Configurar busqueda
     const buscarInput = document.getElementById('persona-buscar');
     if (buscarInput) {
-        setTimeout(() => buscarInput.focus(), 300);
         buscarInput.addEventListener('input', function() {
             const filtro = this.value.toLowerCase();
             const opciones = document.querySelectorAll('.persona-opcion');
@@ -1146,15 +1159,12 @@ function renderListaPersonas() {
     if (!lista) return;
 
     if (state.personas && state.personas.length > 0) {
-        lista.innerHTML = state.personas.map(p => `<div class="persona-opcion" data-nombre="${p.replace(/"/g, '&quot;')}">
-            <i class="fas fa-user"></i> ${p}
-        </div>`).join('');
-
-        // Event delegation para seleccion
-        lista.addEventListener('click', function(e) {
-            const opcion = e.target.closest('.persona-opcion');
-            if (opcion) seleccionarPersona(opcion.dataset.nombre);
-        });
+        // Onclick directo en cada opcion (mas confiable en movil que event delegation)
+        lista.innerHTML = state.personas.map((p, i) => {
+            return `<div class="persona-opcion" onclick="seleccionarPersona(state.personas[${i}])">
+                <i class="fas fa-user"></i> ${p}
+            </div>`;
+        }).join('');
     } else {
         lista.innerHTML = `
             <div style="padding:30px;text-align:center;color:#64748b;">
@@ -1178,7 +1188,6 @@ async function reintentarCargarPersonas() {
             </div>
         `;
     }
-    // Forzar recarga ignorando cache
     state.personas = [];
     await cargarPersonas();
     renderListaPersonas();
