@@ -63,8 +63,8 @@ USUARIO_BODEGA = {
 
 @app.route('/')
 def index():
-    import json as json_lib
-    # Inyectar personas directamente en el HTML para que esten disponibles sin fetch
+    import json as json_lib, base64
+    # Inyectar personas directamente en el HTML como JSON en data attribute (evita problemas de encoding en script)
     personas = _personas_cache['datos'] if _personas_cache['datos'] else []
     if not personas:
         try:
@@ -74,8 +74,12 @@ def index():
     html_path = os.path.join(app.static_folder, 'index.html')
     with open(html_path, 'r', encoding='utf-8') as f:
         html = f.read()
-    script_tag = f'<script>window._PERSONAS_PRECARGADAS={json_lib.dumps(personas, ensure_ascii=False)};</script>'
-    html = html.replace('</head>', script_tag + '\n</head>')
+    # Usar base64 para evitar cualquier problema de encoding/caracteres especiales
+    personas_json = json_lib.dumps(personas, ensure_ascii=True)
+    personas_b64 = base64.b64encode(personas_json.encode('utf-8')).decode('ascii')
+    inject = f'<script id="personas-data" type="application/json">{personas_json}</script>\n'
+    inject += f'<meta name="personas-b64" content="{personas_b64}">\n'
+    html = html.replace('</head>', inject + '</head>')
     return html
 
 @app.route('/<path:path>')

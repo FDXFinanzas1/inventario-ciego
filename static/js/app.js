@@ -296,10 +296,35 @@ document.addEventListener('DOMContentLoaded', () => {
     initApp();
 });
 
+function _cargarPersonasDelHTML() {
+    // Metodo 1: Variable global inyectada por script
+    if (window._PERSONAS_PRECARGADAS && Array.isArray(window._PERSONAS_PRECARGADAS) && window._PERSONAS_PRECARGADAS.length > 0) {
+        return window._PERSONAS_PRECARGADAS;
+    }
+    // Metodo 2: JSON island (script type=application/json)
+    try {
+        const jsonEl = document.getElementById('personas-data');
+        if (jsonEl && jsonEl.textContent) {
+            const parsed = JSON.parse(jsonEl.textContent);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch(e) {}
+    // Metodo 3: Base64 en meta tag
+    try {
+        const metaEl = document.querySelector('meta[name="personas-b64"]');
+        if (metaEl && metaEl.content) {
+            const decoded = JSON.parse(atob(metaEl.content));
+            if (Array.isArray(decoded) && decoded.length > 0) return decoded;
+        }
+    } catch(e) {}
+    return [];
+}
+
 function initApp() {
     // Cargar personas precargadas del servidor (inyectadas en el HTML)
-    if (window._PERSONAS_PRECARGADAS && window._PERSONAS_PRECARGADAS.length > 0) {
-        state.personas = window._PERSONAS_PRECARGADAS;
+    var personasHTML = _cargarPersonasDelHTML();
+    if (personasHTML.length > 0) {
+        state.personas = personasHTML;
         try { localStorage.setItem('personas_cache', JSON.stringify(state.personas)); } catch(e) {}
     }
 
@@ -1109,7 +1134,12 @@ async function abrirSelectorPersona(inputEl, productoId) {
 
     try {
         // Fuente 1: state.personas (ya cargadas de consultar o cargarPersonas)
-        // Fuente 2: localStorage
+        // Fuente 2: HTML inyectado (JSON island o base64)
+        if (!state.personas || state.personas.length === 0) {
+            var fromHTML = _cargarPersonasDelHTML();
+            if (fromHTML.length > 0) state.personas = fromHTML;
+        }
+        // Fuente 3: localStorage
         if (!state.personas || state.personas.length === 0) {
             try {
                 const cache = localStorage.getItem('personas_cache');
