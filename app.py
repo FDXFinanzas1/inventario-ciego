@@ -157,7 +157,10 @@ def consultar_inventario():
         productos = cur.fetchall()
         conn.close()
 
-        return jsonify({'productos': productos})
+        # Incluir personas del cache (nunca bloquea, solo datos en memoria)
+        personas = _personas_cache['datos']
+
+        return jsonify({'productos': productos, 'personas': personas})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -893,6 +896,15 @@ def guardar_asignaciones():
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok'})
+
+import threading
+def _precargar_personas():
+    try:
+        _cargar_personas_airtable()
+        print(f'Pre-carga personas OK: {len(_personas_cache["datos"])} personas')
+    except Exception as e:
+        print(f'Error pre-cargando personas: {e}')
+threading.Thread(target=_precargar_personas, daemon=True).start()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
