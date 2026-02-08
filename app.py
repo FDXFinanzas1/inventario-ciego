@@ -697,7 +697,8 @@ def reporte_tendencias_temporal():
 # MODULO: Asignacion de Diferencias
 # ============================================================
 
-AIRTABLE_TOKEN = os.environ.get('AIRTABLE_TOKEN', '')
+def _get_airtable_token():
+    return os.environ.get('AIRTABLE_TOKEN', '')
 AIRTABLE_BASE = os.environ.get('AIRTABLE_BASE', 'appzTllAjxu4TOs1a')
 AIRTABLE_TABLE = os.environ.get('AIRTABLE_TABLE', 'tbldYTLfQ3DoEK0WA')
 
@@ -811,7 +812,7 @@ def _cargar_personas_airtable():
         url += '&fields%5B%5D=nombre&fields%5B%5D=estado'
         if offset:
             url += f'&offset={offset}'
-        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {AIRTABLE_TOKEN}'})
+        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {_get_airtable_token()}'})
         data = json_lib.loads(urllib.request.urlopen(req, timeout=10).read())
         for r in data.get('records', []):
             f = r.get('fields', {})
@@ -920,22 +921,34 @@ def debug_personas():
     """Endpoint de diagnostico para el cache de personas"""
     ahora = _time.time()
     cache_age = ahora - _personas_cache['timestamp'] if _personas_cache['timestamp'] > 0 else -1
+    token = _get_airtable_token()
     return jsonify({
         'cache_count': len(_personas_cache['datos']),
         'cache_age_seconds': round(cache_age, 1),
         'cache_ttl': PERSONAS_CACHE_TTL,
         'cache_expired': cache_age > PERSONAS_CACHE_TTL if cache_age >= 0 else True,
-        'airtable_token_configured': bool(AIRTABLE_TOKEN),
+        'airtable_token_configured': bool(token),
+        'token_length': len(token) if token else 0,
+        'env_keys_with_air': [k for k in os.environ.keys() if 'AIR' in k.upper()],
         'primeras_3': _personas_cache['datos'][:3] if _personas_cache['datos'] else []
     })
 
 import threading
 def _precargar_personas():
-    try:
-        _cargar_personas_airtable()
-        print(f'Pre-carga personas OK: {len(_personas_cache["datos"])} personas')
-    except Exception as e:
-        print(f'Error pre-cargando personas: {e}')
+    for intento in range(6):
+        token = _get_airtable_token()
+        if not token:
+            print(f'Pre-carga intento {intento+1}: AIRTABLE_TOKEN vacio, reintentando en 5s...')
+            _time.sleep(5)
+            continue
+        try:
+            _cargar_personas_airtable()
+            print(f'Pre-carga personas OK (intento {intento+1}): {len(_personas_cache["datos"])} personas')
+            return
+        except Exception as e:
+            print(f'Pre-carga intento {intento+1} error: {e}')
+            _time.sleep(5)
+    print('Pre-carga personas FALLO despues de 6 intentos')
 threading.Thread(target=_precargar_personas, daemon=True).start()
 
 if __name__ == '__main__':
