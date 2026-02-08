@@ -897,6 +897,21 @@ def guardar_asignaciones():
 def health():
     return jsonify({'status': 'ok'})
 
+
+@app.route('/api/debug-personas', methods=['GET'])
+def debug_personas():
+    """Endpoint de diagnostico para el cache de personas"""
+    ahora = _time.time()
+    cache_age = ahora - _personas_cache['timestamp'] if _personas_cache['timestamp'] > 0 else -1
+    return jsonify({
+        'cache_count': len(_personas_cache['datos']),
+        'cache_age_seconds': round(cache_age, 1),
+        'cache_ttl': PERSONAS_CACHE_TTL,
+        'cache_expired': cache_age > PERSONAS_CACHE_TTL if cache_age >= 0 else True,
+        'airtable_token_configured': bool(AIRTABLE_TOKEN),
+        'primeras_3': _personas_cache['datos'][:3] if _personas_cache['datos'] else []
+    })
+
 import threading
 def _precargar_personas():
     try:

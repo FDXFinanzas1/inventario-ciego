@@ -516,7 +516,7 @@ async function consultarInventario() {
             // Guardar personas si vienen en la respuesta (del cache del servidor)
             if (data.personas && data.personas.length > 0) {
                 state.personas = data.personas;
-                localStorage.setItem('personas_cache', JSON.stringify(data.personas));
+                try { localStorage.setItem('personas_cache', JSON.stringify(data.personas)); } catch(e) {}
             }
 
             if (data.productos.length === 0) {
@@ -943,23 +943,26 @@ async function guardarObservacion(input) {
 
 async function cargarPersonas() {
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/personas`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(`${CONFIG.API_URL}/api/personas`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (response.ok) {
-            state.personas = await response.json();
-            // Guardar en cache local
-            if (state.personas.length > 0) {
-                localStorage.setItem('personas_cache', JSON.stringify(state.personas));
+            const datos = await response.json();
+            if (Array.isArray(datos) && datos.length > 0) {
+                state.personas = datos;
+                try { localStorage.setItem('personas_cache', JSON.stringify(datos)); } catch(e) {}
             }
         }
     } catch (error) {
         console.error('Error cargando personas:', error);
     }
-    // Si fallo, intentar cargar desde cache
+    // Si fallo, intentar cargar desde cache local
     if (!state.personas || state.personas.length === 0) {
-        const cache = localStorage.getItem('personas_cache');
-        if (cache) {
-            try { state.personas = JSON.parse(cache); } catch(e) {}
-        }
+        try {
+            const cache = localStorage.getItem('personas_cache');
+            if (cache) { state.personas = JSON.parse(cache); }
+        } catch(e) {}
     }
 }
 
@@ -1092,71 +1095,105 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
     `;
 }
 
+let _selectorAbierto = false;
 async function abrirSelectorPersona(inputEl, productoId) {
-    // Intentar cargar desde cache si no hay personas
-    if (!state.personas || state.personas.length === 0) {
-        const cache = localStorage.getItem('personas_cache');
-        if (cache) {
-            try { state.personas = JSON.parse(cache); } catch(e) {}
+    // Evitar doble invocacion (double-tap en movil)
+    if (_selectorAbierto) return;
+    _selectorAbierto = true;
+
+    try {
+        // Fuente 1: state.personas (ya cargadas de consultar o cargarPersonas)
+        // Fuente 2: localStorage
+        if (!state.personas || state.personas.length === 0) {
+            try {
+                const cache = localStorage.getItem('personas_cache');
+                if (cache) {
+                    const parsed = JSON.parse(cache);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        state.personas = parsed;
+                    }
+                }
+            } catch(e) {}
         }
-    }
 
-    // Crear modal de seleccion de persona
-    let modal = document.getElementById('modal-persona-selector');
-    if (modal) modal.remove();
+        // Crear modal de seleccion de persona
+        let modal = document.getElementById('modal-persona-selector');
+        if (modal) modal.remove();
 
-    modal = document.createElement('div');
-    modal.id = 'modal-persona-selector';
-    modal.className = 'modal-persona-overlay';
-    modal._targetInput = inputEl;
-    modal._productoId = productoId;
+        modal = document.createElement('div');
+        modal.id = 'modal-persona-selector';
+        modal.className = 'modal-persona-overlay';
+        modal._targetInput = inputEl;
+        modal._productoId = productoId;
 
-    modal.innerHTML = `
-        <div class="modal-persona-content">
-            <div class="modal-persona-header">
-                <input type="text" id="persona-buscar" class="persona-buscar-input"
-                       placeholder="Buscar persona...">
-                <button class="btn-close-persona" onclick="cerrarSelectorPersona()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-persona-list" id="persona-lista"></div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    // Cerrar al hacer clic fuera
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) cerrarSelectorPersona();
-    });
-
-    // Si no hay personas, cargar on-demand con loading
-    if (!state.personas || state.personas.length === 0) {
-        const lista = document.getElementById('persona-lista');
-        if (lista) {
-            lista.innerHTML = `
-                <div style="padding:30px;text-align:center;color:#64748b;">
-                    <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
-                    Cargando personas...
+        modal.innerHTML = `
+            <div class="modal-persona-content">
+                <div class="modal-persona-header">
+                    <input type="text" id="persona-buscar" class="persona-buscar-input"
+                           placeholder="Buscar persona...">
+                    <button class="btn-close-persona" onclick="cerrarSelectorPersona()">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
-            `;
-        }
-        await cargarPersonas();
-    }
+                <div class="modal-persona-list" id="persona-lista"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
 
-    // Renderizar lista de personas
-    renderListaPersonas();
-
-    // Configurar busqueda
-    const buscarInput = document.getElementById('persona-buscar');
-    if (buscarInput) {
-        buscarInput.addEventListener('input', function() {
-            const filtro = this.value.toLowerCase();
-            const opciones = document.querySelectorAll('.persona-opcion');
-            opciones.forEach(op => {
-                op.style.display = op.textContent.toLowerCase().includes(filtro) ? '' : 'none';
-            });
+        // Cerrar al hacer clic fuera
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) cerrarSelectorPersona();
         });
+
+        // Fuente 3: Si aun no hay personas, fetch directo con spinner
+        if (!state.personas || state.personas.length === 0) {
+            const lista = document.getElementById('persona-lista');
+            if (lista) {
+                lista.innerHTML = `
+                    <div style="padding:30px;text-align:center;color:#64748b;">
+                        <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:10px;display:block;"></i>
+                        Cargando personas...
+                    </div>
+                `;
+            }
+            await cargarPersonas();
+        }
+
+        // Fuente 4: Si TODAVIA no hay personas, intentar XMLHttpRequest sincrono como ultimo recurso
+        if (!state.personas || state.personas.length === 0) {
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', `${CONFIG.API_URL}/api/personas`, false); // sincrono
+                xhr.timeout = 10000;
+                xhr.send();
+                if (xhr.status === 200) {
+                    const datos = JSON.parse(xhr.responseText);
+                    if (Array.isArray(datos) && datos.length > 0) {
+                        state.personas = datos;
+                        try { localStorage.setItem('personas_cache', JSON.stringify(datos)); } catch(e) {}
+                    }
+                }
+            } catch(e) {
+                console.error('XHR fallback tambien fallo:', e);
+            }
+        }
+
+        // Renderizar lista de personas
+        renderListaPersonas();
+
+        // Configurar busqueda
+        const buscarInput = document.getElementById('persona-buscar');
+        if (buscarInput) {
+            buscarInput.addEventListener('input', function() {
+                const filtro = this.value.toLowerCase();
+                const opciones = document.querySelectorAll('.persona-opcion');
+                opciones.forEach(op => {
+                    op.style.display = op.textContent.toLowerCase().includes(filtro) ? '' : 'none';
+                });
+            });
+        }
+    } finally {
+        _selectorAbierto = false;
     }
 }
 
@@ -1172,12 +1209,25 @@ function renderListaPersonas() {
             </div>`;
         }).join('');
     } else {
+        // Diagnostico: mostrar info util para debug
+        let lsCount = 0;
+        try {
+            const c = localStorage.getItem('personas_cache');
+            if (c) lsCount = JSON.parse(c).length;
+        } catch(e) {}
+
         lista.innerHTML = `
             <div style="padding:30px;text-align:center;color:#64748b;">
                 <i class="fas fa-exclamation-circle" style="font-size:24px;margin-bottom:10px;display:block;color:#D97706;"></i>
                 No se pudieron cargar las personas
+                <div style="font-size:11px;color:#94a3b8;margin-top:8px;">
+                    state: ${state.personas ? state.personas.length : 'null'} | cache: ${lsCount}
+                </div>
                 <button onclick="reintentarCargarPersonas()" style="display:block;margin:12px auto 0;padding:10px 24px;background:#1E3A5F;color:white;border:none;border-radius:8px;font-size:14px;font-family:inherit;cursor:pointer;">
                     <i class="fas fa-sync-alt"></i> Reintentar
+                </button>
+                <button onclick="cargarPersonasDiagnostico()" style="display:block;margin:8px auto 0;padding:8px 20px;background:#059669;color:white;border:none;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer;">
+                    <i class="fas fa-stethoscope"></i> Diagnostico
                 </button>
             </div>
         `;
@@ -1195,8 +1245,82 @@ async function reintentarCargarPersonas() {
         `;
     }
     state.personas = [];
+    // Intentar fetch async primero
     await cargarPersonas();
+    // Si fallo, intentar XHR sincrono
+    if (!state.personas || state.personas.length === 0) {
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', `${CONFIG.API_URL}/api/personas`, false);
+            xhr.timeout = 10000;
+            xhr.send();
+            if (xhr.status === 200) {
+                const datos = JSON.parse(xhr.responseText);
+                if (Array.isArray(datos) && datos.length > 0) {
+                    state.personas = datos;
+                    try { localStorage.setItem('personas_cache', JSON.stringify(datos)); } catch(e) {}
+                }
+            }
+        } catch(e) {}
+    }
     renderListaPersonas();
+}
+
+async function cargarPersonasDiagnostico() {
+    const lista = document.getElementById('persona-lista');
+    if (!lista) return;
+    lista.innerHTML = '<div style="padding:20px;font-size:12px;font-family:monospace;text-align:left;"></div>';
+    const log = lista.firstChild;
+    const addLog = (msg) => { log.innerHTML += msg + '<br>'; };
+
+    addLog('== DIAGNOSTICO PERSONAS ==');
+    addLog(`state.personas: ${state.personas ? state.personas.length : 'null'}`);
+
+    // Test localStorage
+    try {
+        const c = localStorage.getItem('personas_cache');
+        addLog(`localStorage: ${c ? JSON.parse(c).length + ' personas' : 'vacio'}`);
+    } catch(e) {
+        addLog(`localStorage ERROR: ${e.message}`);
+    }
+
+    // Test fetch /api/personas
+    addLog('Probando fetch /api/personas...');
+    try {
+        const t1 = Date.now();
+        const resp = await fetch(`${CONFIG.API_URL}/api/personas`);
+        const t2 = Date.now();
+        addLog(`Status: ${resp.status} (${t2-t1}ms)`);
+        if (resp.ok) {
+            const data = await resp.json();
+            addLog(`Datos: ${Array.isArray(data) ? data.length + ' personas' : typeof data}`);
+            if (Array.isArray(data) && data.length > 0) {
+                state.personas = data;
+                try { localStorage.setItem('personas_cache', JSON.stringify(data)); } catch(e) {}
+                addLog('GUARDADO en state y localStorage');
+                addLog('<br><b style="color:#059669">Datos cargados OK. Toca Reintentar.</b>');
+            }
+        } else {
+            const txt = await resp.text();
+            addLog(`Error body: ${txt.substring(0, 200)}`);
+        }
+    } catch(e) {
+        addLog(`Fetch ERROR: ${e.name}: ${e.message}`);
+    }
+
+    // Test debug endpoint
+    addLog('<br>Probando /api/debug-personas...');
+    try {
+        const resp2 = await fetch(`${CONFIG.API_URL}/api/debug-personas`);
+        if (resp2.ok) {
+            const dbg = await resp2.json();
+            addLog(`Cache servidor: ${dbg.cache_count} personas`);
+            addLog(`Cache edad: ${dbg.cache_age_seconds}s`);
+            addLog(`Token configurado: ${dbg.airtable_token_configured}`);
+        }
+    } catch(e) {
+        addLog(`Debug ERROR: ${e.message}`);
+    }
 }
 
 function seleccionarPersona(nombre) {
