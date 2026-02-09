@@ -34,6 +34,16 @@ function configureChartDefaults() {
     Chart.defaults.elements.bar.borderRadius = 4;
 }
 
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function destroyChart(id) {
     if (chartInstances[id]) {
         chartInstances[id].destroy();
@@ -735,8 +745,8 @@ function renderProductosInventario() {
 
                     return `
                         <tr data-id="${prod.id}">
-                            <td class="col-codigo">${prod.codigo}</td>
-                            <td class="col-nombre">${prod.nombre}</td>
+                            <td class="col-codigo">${escapeHtml(prod.codigo)}</td>
+                            <td class="col-nombre">${escapeHtml(prod.nombre)}</td>
                             <td class="col-unidad">${prod.unidad || 'Unidad'}</td>
                             ${state.etapaConteo === 3 ? `<td class="col-sistema">${prod.cantidad_sistema}</td>` : ''}
                             <td class="col-contado">
@@ -1081,7 +1091,7 @@ function renderAsignacionesDiferencias(container, productosConDif) {
             <div class="asig-producto" data-id="${prod.id}" data-diferencia="${difAbs}" data-unidad="${prod.unidad || 'Und'}" data-costo="${costoUnit}">
                 <div class="asig-producto-header" onclick="toggleAsignacion(${prod.id})">
                     <div class="asig-prod-info">
-                        <span class="asig-prod-nombre">${prod.nombre}</span>
+                        <span class="asig-prod-nombre">${escapeHtml(prod.nombre)}</span>
                         <span class="asig-prod-dif ${difClass}">${difTexto}: ${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</span>
                         ${costoHtml}
                     </div>
@@ -1222,22 +1232,22 @@ async function abrirSelectorPersona(inputEl, productoId) {
             await cargarPersonas();
         }
 
-        // Fuente 4: Si TODAVIA no hay personas, intentar XMLHttpRequest sincrono como ultimo recurso
+        // Fuente 4: Si TODAVIA no hay personas, intentar fetch como ultimo recurso
         if (!state.personas || state.personas.length === 0) {
             try {
-                const xhr = new XMLHttpRequest();
-                xhr.open('GET', `${CONFIG.API_URL}/api/personas`, false); // sincrono
-                xhr.timeout = 10000;
-                xhr.send();
-                if (xhr.status === 200) {
-                    const datos = JSON.parse(xhr.responseText);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const resp = await fetch(`${CONFIG.API_URL}/api/personas`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (resp.ok) {
+                    const datos = await resp.json();
                     if (Array.isArray(datos) && datos.length > 0) {
                         state.personas = datos;
                         try { localStorage.setItem('personas_cache', JSON.stringify(datos)); } catch(e) {}
                     }
                 }
             } catch(e) {
-                console.error('XHR fallback tambien fallo:', e);
+                console.error('Fetch fallback tambien fallo:', e);
             }
         }
 
@@ -1268,7 +1278,7 @@ function renderListaPersonas() {
         // Onclick directo en cada opcion (mas confiable en movil que event delegation)
         lista.innerHTML = state.personas.map((p, i) => {
             return `<div class="persona-opcion" onclick="seleccionarPersona(state.personas[${i}])">
-                <i class="fas fa-user"></i> ${p}
+                <i class="fas fa-user"></i> ${escapeHtml(p)}
             </div>`;
         }).join('');
     } else {
@@ -1310,15 +1320,15 @@ async function reintentarCargarPersonas() {
     state.personas = [];
     // Intentar fetch async primero
     await cargarPersonas();
-    // Si fallo, intentar XHR sincrono
+    // Si fallo, intentar fetch como ultimo recurso
     if (!state.personas || state.personas.length === 0) {
         try {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', `${CONFIG.API_URL}/api/personas`, false);
-            xhr.timeout = 10000;
-            xhr.send();
-            if (xhr.status === 200) {
-                const datos = JSON.parse(xhr.responseText);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const resp = await fetch(`${CONFIG.API_URL}/api/personas`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            if (resp.ok) {
+                const datos = await resp.json();
                 if (Array.isArray(datos) && datos.length > 0) {
                     state.personas = datos;
                     try { localStorage.setItem('personas_cache', JSON.stringify(datos)); } catch(e) {}
@@ -1687,7 +1697,10 @@ async function guardarTodosLosConteos() {
     }
 
     if (promesas.length > 0) {
-        await Promise.all(promesas);
+        await Promise.all(promesas).catch(err => {
+            console.error('Error guardando conteos:', err);
+            showToast('Error al guardar algunos conteos', 'error');
+        });
     }
 }
 
@@ -1817,9 +1830,9 @@ function renderProductos() {
 
         return `
             <div class="producto-card ${contado ? 'contado' : ''}"
-                 onclick="abrirModalCantidad('${prod.codigo}', '${prod.nombre.replace(/'/g, "\\'")}')">
-                <div class="producto-nombre">${prod.nombre}</div>
-                <div class="producto-codigo">${prod.codigo}</div>
+                 onclick="abrirModalCantidad('${escapeHtml(prod.codigo)}', '${escapeHtml(prod.nombre)}')">
+                <div class="producto-nombre">${escapeHtml(prod.nombre)}</div>
+                <div class="producto-codigo">${escapeHtml(prod.codigo)}</div>
                 <div class="producto-cantidad">
                     <div>
                         <div class="cantidad-valor">${contado ? conteo : '-'}</div>
@@ -2446,8 +2459,8 @@ function renderCruceDetalle(datos) {
                             d.origen === 'solo_contifico' ? 'cruce-solo-cont' : '';
 
         html += `<tr class="${origenClass}">
-            <td>${d.codigo}</td>
-            <td>${d.nombre || ''}</td>
+            <td>${escapeHtml(d.codigo)}</td>
+            <td>${escapeHtml(d.nombre || '')}</td>
             <td>${d.categoria || ''}</td>
             <td>${d.tipo_abc || ''}</td>
             <td>${d.cantidad_toma != null ? d.cantidad_toma.toFixed(2) : '-'}</td>

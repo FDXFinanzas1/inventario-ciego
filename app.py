@@ -5,6 +5,7 @@ Conecta a Azure PostgreSQL
 from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import psycopg2
+from psycopg2.pool import SimpleConnectionPool
 from psycopg2.extras import RealDictCursor
 import os
 from io import BytesIO
@@ -12,7 +13,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 app = Flask(__name__, static_folder='static')
-CORS(app, origins=['*'])
+CORS(app, origins=['https://inventario-ciego-5bdr.onrender.com'])
 
 @app.after_request
 def add_no_cache_headers(response):
@@ -31,8 +32,25 @@ DB_CONFIG = {
     'sslmode': 'require'
 }
 
+_connection_pool = None
+
+def _get_pool():
+    global _connection_pool
+    if _connection_pool is None:
+        _connection_pool = SimpleConnectionPool(
+            minconn=1, maxconn=5,
+            **DB_CONFIG, cursor_factory=RealDictCursor
+        )
+    return _connection_pool
+
 def get_db():
-    return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    return _get_pool().getconn()
+
+def release_db(conn):
+    try:
+        _get_pool().putconn(conn)
+    except Exception:
+        pass
 
 
 # Helper: mapeo de IDs de bodega a nombres legibles
@@ -87,12 +105,32 @@ def static_files(path):
 
 # ==================== API ====================
 
+_login_attempts = {}
+
+def _check_rate_limit(ip, max_attempts=5, window=60):
+    now = _time.time()
+    attempts = _login_attempts.get(ip, [])
+    attempts = [t for t in attempts if now - t < window]
+    _login_attempts[ip] = attempts
+    return len(attempts) < max_attempts
+
+def _record_login_attempt(ip):
+    now = _time.time()
+    if ip not in _login_attempts:
+        _login_attempts[ip] = []
+    _login_attempts[ip].append(now)
+
 @app.route('/api/login', methods=['POST'])
 def login():
+    ip = request.remote_addr
+    if not _check_rate_limit(ip):
+        return jsonify({'success': False, 'error': 'Demasiados intentos. Espera 60 segundos.'}), 429
+
     data = request.json
     username = data.get('username')
     password = data.get('password')
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -101,7 +139,6 @@ def login():
             WHERE username = %s AND password = %s AND activo = TRUE
         """, (username, password))
         user = cur.fetchone()
-        conn.close()
 
         if user:
             bodega_asignada = USUARIO_BODEGA.get(user['username'])
@@ -115,9 +152,14 @@ def login():
                 }
             })
 
+        _record_login_attempt(ip)
         return jsonify({'success': False, 'error': 'Credenciales invalidas'}), 401
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"Error en /api/login: {e}")
+        return jsonify({'success': False, 'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 @app.route('/api/categorias', methods=['GET'])
 def get_categorias():
@@ -151,6 +193,7 @@ def consultar_inventario():
     if not fecha or not local:
         return jsonify({'error': 'Fecha y local son requeridos'}), 400
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -171,14 +214,17 @@ def consultar_inventario():
         """, (fecha, local))
 
         productos = cur.fetchall()
-        conn.close()
 
         # Incluir personas del cache (nunca bloquea, solo datos en memoria)
         personas = _personas_cache['datos']
 
         return jsonify({'productos': productos, 'personas': personas})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/inventario/consultar: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 @app.route('/api/inventario/guardar-conteo', methods=['POST'])
 def guardar_conteo():
@@ -187,6 +233,7 @@ def guardar_conteo():
     cantidad = data.get('cantidad_contada')
     conteo = data.get('conteo', 1)
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -205,11 +252,14 @@ def guardar_conteo():
             """, (cantidad, id_producto))
 
         conn.commit()
-        conn.close()
 
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/inventario/guardar-conteo: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 @app.route('/api/inventario/guardar-observacion', methods=['POST'])
 def guardar_observacion():
@@ -217,6 +267,7 @@ def guardar_observacion():
     id_producto = data.get('id')
     observaciones = data.get('observaciones', '')
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -226,11 +277,14 @@ def guardar_observacion():
             WHERE id = %s
         """, (observaciones, id_producto))
         conn.commit()
-        conn.close()
 
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/inventario/guardar-observacion: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 @app.route('/api/inventario/cargar', methods=['POST'])
 def cargar_inventario():
@@ -243,6 +297,7 @@ def cargar_inventario():
     if not fecha or not local or not productos:
         return jsonify({'error': 'Datos incompletos'}), 400
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -259,11 +314,14 @@ def cargar_inventario():
             registros += 1
 
         conn.commit()
-        conn.close()
 
         return jsonify({'success': True, 'registros': registros})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/inventario/cargar: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 @app.route('/api/historico', methods=['GET'])
 def historico():
@@ -274,6 +332,7 @@ def historico():
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -302,7 +361,6 @@ def historico():
 
         cur.execute(query, params)
         resultados = cur.fetchall()
-        conn.close()
 
         # Calcular estado para cada registro
         datos = []
@@ -332,7 +390,11 @@ def historico():
 
         return jsonify(datos)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/historico: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/reportes/diferencias', methods=['GET'])
@@ -343,6 +405,7 @@ def reporte_diferencias():
     if not fecha:
         return jsonify({'error': 'fecha es requerida'}), 400
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -369,7 +432,6 @@ def reporte_diferencias():
 
         cur.execute(query, params)
         productos = cur.fetchall()
-        conn.close()
 
         # Convertir Decimal a float
         datos = []
@@ -391,7 +453,11 @@ def reporte_diferencias():
 
         return jsonify(datos)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/reportes/diferencias: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/reportes/exportar-excel', methods=['GET'])
@@ -403,6 +469,7 @@ def exportar_excel():
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -427,7 +494,6 @@ def exportar_excel():
 
         cur.execute(query, params)
         registros = cur.fetchall()
-        conn.close()
 
         # Crear workbook
         wb = Workbook()
@@ -520,7 +586,11 @@ def exportar_excel():
             download_name=filename
         )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/reportes/exportar-excel: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/reportes/tendencias', methods=['GET'])
@@ -528,6 +598,7 @@ def reporte_tendencias():
     bodega = request.args.get('bodega')
     limite = request.args.get('limite', 20, type=int)
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -558,7 +629,6 @@ def reporte_tendencias():
 
         cur.execute(query, params)
         productos = cur.fetchall()
-        conn.close()
 
         datos = []
         for i, p in enumerate(productos, 1):
@@ -573,7 +643,11 @@ def reporte_tendencias():
 
         return jsonify(datos)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/reportes/tendencias: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/reportes/dashboard', methods=['GET'])
@@ -584,6 +658,7 @@ def reporte_dashboard():
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -614,7 +689,6 @@ def reporte_dashboard():
         """, (fecha_desde, fecha_hasta))
 
         resultados = cur.fetchall()
-        conn.close()
 
         datos = []
         for r in resultados:
@@ -631,7 +705,11 @@ def reporte_dashboard():
 
         return jsonify(datos)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/reportes/dashboard: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/reportes/tendencias-temporal', methods=['GET'])
@@ -639,6 +717,7 @@ def reporte_tendencias_temporal():
     bodega = request.args.get('bodega')
     dias = request.args.get('dias', 30, type=int)
 
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -663,7 +742,6 @@ def reporte_tendencias_temporal():
 
         cur.execute(query, params)
         resultados = cur.fetchall()
-        conn.close()
 
         # Agrupar por fecha y series por bodega
         fechas_set = set()
@@ -689,7 +767,11 @@ def reporte_tendencias_temporal():
             'series': series
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/reportes/tendencias-temporal: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 # ============================================================
@@ -734,6 +816,7 @@ def cruce_ejecuciones():
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
     bodega = request.args.get('bodega')
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -751,7 +834,6 @@ def cruce_ejecuciones():
         sql += " ORDER BY fecha_toma DESC, bodega"
         cur.execute(sql, params)
         rows = cur.fetchall()
-        conn.close()
         result = []
         for r in rows:
             result.append({
@@ -770,7 +852,11 @@ def cruce_ejecuciones():
             })
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/cruce/ejecuciones: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/cruce/detalle', methods=['GET'])
@@ -780,6 +866,7 @@ def cruce_detalle():
     solo_dif = request.args.get('solo_diferencias', 'false').lower() == 'true'
     if not ejec_id:
         return jsonify({'error': 'ejecucion_id requerido'}), 400
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -790,7 +877,6 @@ def cruce_detalle():
         sql += " ORDER BY ABS(valor_diferencia) DESC"
         cur.execute(sql, (ejec_id,))
         rows = cur.fetchall()
-        conn.close()
         result = []
         for r in rows:
             result.append({
@@ -809,47 +895,58 @@ def cruce_detalle():
             })
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/cruce/detalle: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/cruce/resumen', methods=['GET'])
 def cruce_resumen():
     """KPIs: ultima ejecucion por bodega, totales, valor diferencias"""
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            SELECT DISTINCT ON (bodega) *
-            FROM inventario_diario.cruce_operativo_ejecuciones
-            WHERE estado = 'completado'
-            ORDER BY bodega, fecha_toma DESC
+            WITH ultimas AS (
+                SELECT DISTINCT ON (bodega) id, bodega, fecha_toma,
+                       total_productos_toma, total_con_diferencia
+                FROM inventario_diario.cruce_operativo_ejecuciones
+                WHERE estado = 'completado'
+                ORDER BY bodega, fecha_toma DESC
+            )
+            SELECT u.id, u.bodega, u.fecha_toma, u.total_productos_toma, u.total_con_diferencia,
+                   COALESCE(SUM(d.valor_diferencia) FILTER (WHERE d.diferencia != 0), 0) as valor_total,
+                   COUNT(*) FILTER (WHERE d.diferencia < 0) as faltantes,
+                   COUNT(*) FILTER (WHERE d.diferencia > 0) as sobrantes
+            FROM ultimas u
+            LEFT JOIN inventario_diario.cruce_operativo_detalle d ON d.ejecucion_id = u.id
+            GROUP BY u.id, u.bodega, u.fecha_toma, u.total_productos_toma, u.total_con_diferencia
+            ORDER BY u.bodega
         """)
-        ejecuciones = cur.fetchall()
+        rows = cur.fetchall()
 
         resumen = []
-        for e in ejecuciones:
-            cur.execute("""
-                SELECT COALESCE(SUM(valor_diferencia), 0) as valor_total,
-                       COUNT(*) FILTER (WHERE diferencia < 0) as faltantes,
-                       COUNT(*) FILTER (WHERE diferencia > 0) as sobrantes
-                FROM inventario_diario.cruce_operativo_detalle
-                WHERE ejecucion_id = %s AND diferencia != 0
-            """, (e['id'],))
-            stats = cur.fetchone()
+        for r in rows:
             resumen.append({
-                'bodega': e['bodega'],
-                'bodega_nombre': BODEGAS_OPERATIVAS.get(e['bodega'], e['bodega']),
-                'fecha_toma': e['fecha_toma'].isoformat() if e['fecha_toma'] else None,
-                'total_productos_toma': e['total_productos_toma'],
-                'total_con_diferencia': e['total_con_diferencia'],
-                'valor_total_diferencias': float(stats['valor_total']),
-                'faltantes': stats['faltantes'],
-                'sobrantes': stats['sobrantes'],
+                'bodega': r['bodega'],
+                'bodega_nombre': BODEGAS_OPERATIVAS.get(r['bodega'], r['bodega']),
+                'fecha_toma': r['fecha_toma'].isoformat() if r['fecha_toma'] else None,
+                'total_productos_toma': r['total_productos_toma'],
+                'total_con_diferencia': r['total_con_diferencia'],
+                'valor_total_diferencias': float(r['valor_total']),
+                'faltantes': r['faltantes'],
+                'sobrantes': r['sobrantes'],
             })
-        conn.close()
         return jsonify(resumen)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/cruce/resumen: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/cruce/exportar-excel', methods=['GET'])
@@ -858,6 +955,7 @@ def cruce_exportar_excel():
     ejec_id = request.args.get('ejecucion_id')
     if not ejec_id:
         return jsonify({'error': 'ejecucion_id requerido'}), 400
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -865,14 +963,12 @@ def cruce_exportar_excel():
         cur.execute("SELECT * FROM inventario_diario.cruce_operativo_ejecuciones WHERE id = %s", (ejec_id,))
         ejec = cur.fetchone()
         if not ejec:
-            conn.close()
             return jsonify({'error': 'Ejecucion no encontrada'}), 404
 
         # Detalle
         cur.execute("""SELECT * FROM inventario_diario.cruce_operativo_detalle
                        WHERE ejecucion_id = %s ORDER BY ABS(valor_diferencia) DESC""", (ejec_id,))
         rows = cur.fetchall()
-        conn.close()
 
         wb = Workbook()
         ws = wb.active
@@ -939,12 +1035,17 @@ def cruce_exportar_excel():
         return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                          as_attachment=True, download_name=filename)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/cruce/exportar-excel: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/cruce/tendencias', methods=['GET'])
 def cruce_tendencias():
     """Top productos con diferencias recurrentes"""
+    conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -962,7 +1063,6 @@ def cruce_tendencias():
             LIMIT 30
         """)
         rows = cur.fetchall()
-        conn.close()
         result = []
         for r in rows:
             result.append({
@@ -975,7 +1075,11 @@ def cruce_tendencias():
             })
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/cruce/tendencias: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/admin/borrar-datos', methods=['POST'])
@@ -984,6 +1088,7 @@ def borrar_datos():
     clave = request.args.get('key', '')
     if clave != 'ChiosCostos2026':
         return jsonify({'error': 'no autorizado'}), 403
+    conn = None
     try:
         data = request.get_json() or {}
         fecha = data.get('fecha')
@@ -1009,7 +1114,6 @@ def borrar_datos():
         """, (fecha, local))
         conteos_borrados = cur.rowcount
         conn.commit()
-        conn.close()
 
         return jsonify({
             'success': True,
@@ -1017,7 +1121,11 @@ def borrar_datos():
             'asignaciones_borradas': asig_borradas
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error en /api/admin/borrar-datos: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
 
 
 @app.route('/api/admin/actualizar-costos', methods=['POST'])
