@@ -2856,3 +2856,194 @@ main {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* ==================== CRUCE OPERATIVO ==================== */
+
+.filtros-cruce {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.cruce-ejecuciones-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.cruce-ejec-card {
+    background: var(--bg-white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 4px solid var(--primary);
+}
+.cruce-ejec-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.cruce-ejec-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.cruce-ejec-bodega {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 15px;
+}
+.cruce-ejec-fecha {
+    color: var(--text-gray);
+    font-size: 13px;
+}
+.cruce-ejec-estado {
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+}
+.cruce-estado-ok { background: #ECFDF5; color: #059669; }
+.cruce-estado-error { background: #FEF2F2; color: #B91C1C; }
+.cruce-estado-pending { background: #FFFBEB; color: #D97706; }
+
+.cruce-ejec-stats {
+    display: flex;
+    gap: 24px;
+}
+.cruce-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.cruce-stat-val {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-dark);
+}
+.cruce-stat-dif .cruce-stat-val {
+    color: var(--accent);
+}
+.cruce-stat-lbl {
+    font-size: 11px;
+    color: var(--text-gray);
+    text-transform: uppercase;
+}
+
+.cruce-ejec-error {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--accent);
+    background: #FEF2F2;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+}
+
+/* Detalle panel */
+.cruce-detalle-panel {
+    background: var(--bg-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    margin-top: 16px;
+    overflow: hidden;
+}
+.cruce-detalle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    background: var(--primary);
+    color: white;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.cruce-detalle-header h3 { margin: 0; font-size: 15px; }
+.cruce-detalle-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.cruce-detalle-actions .btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+}
+.cruce-detalle-actions .btn-sm.active {
+    background: var(--accent);
+    color: white;
+}
+.cruce-detalle-actions .btn-close {
+    color: white;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+}
+.cruce-detalle-contenido {
+    padding: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Tabla cruce */
+.tabla-cruce-wrapper {
+    overflow-x: auto;
+}
+.tabla-cruce {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.tabla-cruce th {
+    background: var(--bg-light);
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-gray);
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.tabla-cruce td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+}
+.tabla-cruce tr:hover { background: #F8FAFC; }
+
+.cruce-neg { color: var(--accent); font-weight: 600; }
+.cruce-pos { color: var(--success); font-weight: 600; }
+
+tr.cruce-solo-toma { background: #FFFBEB; }
+tr.cruce-solo-cont { background: #F1F5F9; }
+
+.cruce-origen-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.cruce-origen-badge.cruce-solo-toma { background: #FEF3C7; color: #92400E; }
+.cruce-origen-badge.cruce-solo-cont { background: #E2E8F0; color: #475569; }
+
+@media (max-width: 768px) {
+    .filtros-cruce { flex-direction: column; }
+    .cruce-ejec-stats { gap: 12px; }
+    .cruce-ejec-info { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .tabla-cruce { font-size: 11px; }
+    .tabla-cruce th, .tabla-cruce td { padding: 6px 4px; }
+}

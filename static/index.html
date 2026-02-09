@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventario Ciego - FOODIX</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260208d">
+    <link rel="stylesheet" href="css/styles.css?v=20260208e">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -67,6 +67,10 @@
                 <button class="nav-btn" data-view="dashboard">
                     <i class="fas fa-chart-pie"></i>
                     <span>Dashboard</span>
+                </button>
+                <button class="nav-btn nav-admin-only" data-view="cruce" style="display:none;">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Cruce Op.</span>
                 </button>
             </nav>
 
@@ -284,6 +288,63 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Vista Cruce Operativo (solo admin) -->
+                <div id="view-cruce" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-exchange-alt"></i> Cruce Operativo</h2>
+                    </div>
+
+                    <div class="filtros-cruce">
+                        <div class="form-group">
+                            <label><i class="fas fa-calendar"></i> Desde</label>
+                            <input type="date" id="cruce-fecha-desde">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-calendar"></i> Hasta</label>
+                            <input type="date" id="cruce-fecha-hasta">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-warehouse"></i> Bodega</label>
+                            <select id="cruce-bodega">
+                                <option value="">Todas</option>
+                                <option value="bodega_principal">Bodega Principal</option>
+                                <option value="materia_prima">Materia Prima</option>
+                                <option value="planta">Planta de Produccion</option>
+                            </select>
+                        </div>
+                        <button id="btn-buscar-cruce" class="btn-secondary">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+
+                    <div id="cruce-resumen" class="dashboard-stats-grid"></div>
+
+                    <div id="cruce-ejecuciones" class="cruce-ejecuciones-list">
+                        <div class="empty-state">
+                            <i class="fas fa-exchange-alt"></i>
+                            <p>Selecciona un rango de fechas para ver los cruces operativos</p>
+                        </div>
+                    </div>
+
+                    <div id="cruce-detalle-panel" class="cruce-detalle-panel hidden">
+                        <div class="cruce-detalle-header">
+                            <h3 id="cruce-detalle-titulo">Detalle</h3>
+                            <div class="cruce-detalle-actions">
+                                <button id="btn-cruce-solo-dif" class="btn-secondary btn-sm" onclick="cruceFiltrarSoloDiferencias()">
+                                    <i class="fas fa-filter"></i> Solo Diferencias
+                                </button>
+                                <button class="btn-secondary btn-sm" onclick="cruceExportarExcel()">
+                                    <i class="fas fa-file-excel"></i> Excel
+                                </button>
+                                <button class="btn-close" onclick="cerrarCruceDetalle()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="cruce-detalle-contenido" class="cruce-detalle-contenido"></div>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -321,7 +382,7 @@
     <!-- Toast notifications -->
     <div id="toast-container"></div>
 
-    <script src="js/config.js?v=20260208d"></script>
-    <script src="js/app.js?v=20260208d"></script>
+    <script src="js/config.js?v=20260208e"></script>
+    <script src="js/app.js?v=20260208e"></script>
 </body>
 </html>

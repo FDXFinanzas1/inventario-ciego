@@ -718,6 +718,266 @@ BODEGA_CENTROS = {
     'simon_bolon': ['Simon Bolon Real Audiencia', 'Sim\u00f3n Bol\u00f3n Real Audiencia'],
 }
 
+# ============================================================
+# MODULO: Cruce Operativo (bodegas operativas)
+# ============================================================
+
+BODEGAS_OPERATIVAS = {
+    'bodega_principal': 'Bodega Principal',
+    'materia_prima': 'Materia Prima',
+    'planta': 'Planta de Produccion'
+}
+
+@app.route('/api/cruce/ejecuciones', methods=['GET'])
+def cruce_ejecuciones():
+    """Lista ejecuciones del cruce operativo con filtros"""
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    bodega = request.args.get('bodega')
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        sql = """SELECT * FROM inventario_diario.cruce_operativo_ejecuciones WHERE 1=1"""
+        params = []
+        if fecha_desde:
+            sql += " AND fecha_toma >= %s"
+            params.append(fecha_desde)
+        if fecha_hasta:
+            sql += " AND fecha_toma <= %s"
+            params.append(fecha_hasta)
+        if bodega:
+            sql += " AND bodega = %s"
+            params.append(bodega)
+        sql += " ORDER BY fecha_toma DESC, bodega"
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'id': r['id'],
+                'fecha_toma': r['fecha_toma'].isoformat() if r['fecha_toma'] else None,
+                'bodega': r['bodega'],
+                'bodega_nombre': BODEGAS_OPERATIVAS.get(r['bodega'], r['bodega']),
+                'estado': r['estado'],
+                'total_productos_toma': r['total_productos_toma'],
+                'total_productos_contifico': r['total_productos_contifico'],
+                'total_cruzados': r['total_cruzados'],
+                'total_con_diferencia': r['total_con_diferencia'],
+                'timestamp_deteccion': r['timestamp_deteccion'].isoformat() if r['timestamp_deteccion'] else None,
+                'timestamp_cruce': r['timestamp_cruce'].isoformat() if r['timestamp_cruce'] else None,
+                'error_msg': r['error_msg'],
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cruce/detalle', methods=['GET'])
+def cruce_detalle():
+    """Detalle producto por producto de un cruce"""
+    ejec_id = request.args.get('ejecucion_id')
+    solo_dif = request.args.get('solo_diferencias', 'false').lower() == 'true'
+    if not ejec_id:
+        return jsonify({'error': 'ejecucion_id requerido'}), 400
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        sql = """SELECT * FROM inventario_diario.cruce_operativo_detalle
+                 WHERE ejecucion_id = %s"""
+        if solo_dif:
+            sql += " AND diferencia != 0"
+        sql += " ORDER BY ABS(valor_diferencia) DESC"
+        cur.execute(sql, (ejec_id,))
+        rows = cur.fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'id': r['id'],
+                'codigo': r['codigo'],
+                'nombre': r['nombre'],
+                'categoria': r['categoria'],
+                'unidad': r['unidad'],
+                'cantidad_toma': float(r['cantidad_toma']) if r['cantidad_toma'] is not None else None,
+                'cantidad_sistema': float(r['cantidad_sistema']) if r['cantidad_sistema'] is not None else None,
+                'diferencia': float(r['diferencia']) if r['diferencia'] is not None else None,
+                'costo_unitario': float(r['costo_unitario']) if r['costo_unitario'] is not None else 0,
+                'valor_diferencia': float(r['valor_diferencia']) if r['valor_diferencia'] is not None else 0,
+                'tipo_abc': r['tipo_abc'],
+                'origen': r['origen'],
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cruce/resumen', methods=['GET'])
+def cruce_resumen():
+    """KPIs: ultima ejecucion por bodega, totales, valor diferencias"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT ON (bodega) *
+            FROM inventario_diario.cruce_operativo_ejecuciones
+            WHERE estado = 'completado'
+            ORDER BY bodega, fecha_toma DESC
+        """)
+        ejecuciones = cur.fetchall()
+
+        resumen = []
+        for e in ejecuciones:
+            cur.execute("""
+                SELECT COALESCE(SUM(valor_diferencia), 0) as valor_total,
+                       COUNT(*) FILTER (WHERE diferencia < 0) as faltantes,
+                       COUNT(*) FILTER (WHERE diferencia > 0) as sobrantes
+                FROM inventario_diario.cruce_operativo_detalle
+                WHERE ejecucion_id = %s AND diferencia != 0
+            """, (e['id'],))
+            stats = cur.fetchone()
+            resumen.append({
+                'bodega': e['bodega'],
+                'bodega_nombre': BODEGAS_OPERATIVAS.get(e['bodega'], e['bodega']),
+                'fecha_toma': e['fecha_toma'].isoformat() if e['fecha_toma'] else None,
+                'total_productos_toma': e['total_productos_toma'],
+                'total_con_diferencia': e['total_con_diferencia'],
+                'valor_total_diferencias': float(stats['valor_total']),
+                'faltantes': stats['faltantes'],
+                'sobrantes': stats['sobrantes'],
+            })
+        conn.close()
+        return jsonify(resumen)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cruce/exportar-excel', methods=['GET'])
+def cruce_exportar_excel():
+    """Exporta detalle de un cruce a Excel"""
+    ejec_id = request.args.get('ejecucion_id')
+    if not ejec_id:
+        return jsonify({'error': 'ejecucion_id requerido'}), 400
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Info ejecucion
+        cur.execute("SELECT * FROM inventario_diario.cruce_operativo_ejecuciones WHERE id = %s", (ejec_id,))
+        ejec = cur.fetchone()
+        if not ejec:
+            conn.close()
+            return jsonify({'error': 'Ejecucion no encontrada'}), 404
+
+        # Detalle
+        cur.execute("""SELECT * FROM inventario_diario.cruce_operativo_detalle
+                       WHERE ejecucion_id = %s ORDER BY ABS(valor_diferencia) DESC""", (ejec_id,))
+        rows = cur.fetchall()
+        conn.close()
+
+        wb = Workbook()
+        ws = wb.active
+        bodega_nombre = BODEGAS_OPERATIVAS.get(ejec['bodega'], ejec['bodega'])
+        ws.title = f"{bodega_nombre}"[:31]
+
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1E3A5F', end_color='1E3A5F', fill_type='solid')
+        red_font = Font(color='B91C1C', bold=True)
+        green_font = Font(color='059669', bold=True)
+        red_fill = PatternFill(start_color='FEF2F2', end_color='FEF2F2', fill_type='solid')
+        green_fill = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
+        yellow_fill = PatternFill(start_color='FFFBEB', end_color='FFFBEB', fill_type='solid')
+        gray_fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'))
+
+        headers = ['Codigo', 'Producto', 'Categoria', 'Tipo', 'Unidad',
+                   'Fisico', 'Sistema', 'Diferencia', 'Costo Unit.', 'Valor Dif.', 'Origen']
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+
+        for i, r in enumerate(rows, 2):
+            vals = [r['codigo'], r['nombre'], r['categoria'], r['tipo_abc'], r['unidad'],
+                    float(r['cantidad_toma']) if r['cantidad_toma'] is not None else 0,
+                    float(r['cantidad_sistema']) if r['cantidad_sistema'] is not None else 0,
+                    float(r['diferencia']) if r['diferencia'] is not None else 0,
+                    float(r['costo_unitario']) if r['costo_unitario'] is not None else 0,
+                    float(r['valor_diferencia']) if r['valor_diferencia'] is not None else 0,
+                    r['origen']]
+            for col, v in enumerate(vals, 1):
+                cell = ws.cell(row=i, column=col, value=v)
+                cell.border = thin_border
+            dif = vals[7]
+            origen = vals[10]
+            if dif < 0:
+                for col in range(1, len(vals) + 1):
+                    ws.cell(row=i, column=col).fill = red_fill
+                ws.cell(row=i, column=8).font = red_font
+            elif dif > 0:
+                for col in range(1, len(vals) + 1):
+                    ws.cell(row=i, column=col).fill = green_fill
+                ws.cell(row=i, column=8).font = green_font
+            if origen == 'solo_toma':
+                for col in range(1, len(vals) + 1):
+                    ws.cell(row=i, column=col).fill = yellow_fill
+            elif origen == 'solo_contifico':
+                for col in range(1, len(vals) + 1):
+                    ws.cell(row=i, column=col).fill = gray_fill
+
+        for col in range(1, len(headers) + 1):
+            ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = 15
+
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        fecha_str = ejec['fecha_toma'].strftime('%Y-%m-%d') if ejec['fecha_toma'] else 'sin-fecha'
+        filename = f"cruce_{ejec['bodega']}_{fecha_str}.xlsx"
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=filename)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cruce/tendencias', methods=['GET'])
+def cruce_tendencias():
+    """Top productos con diferencias recurrentes"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT d.codigo, d.nombre, d.categoria,
+                   COUNT(*) as veces_con_diferencia,
+                   ROUND(AVG(ABS(d.diferencia))::numeric, 2) as promedio_dif_abs,
+                   ROUND(SUM(d.valor_diferencia)::numeric, 2) as valor_total
+            FROM inventario_diario.cruce_operativo_detalle d
+            JOIN inventario_diario.cruce_operativo_ejecuciones e ON d.ejecucion_id = e.id
+            WHERE d.diferencia != 0 AND e.estado = 'completado'
+            GROUP BY d.codigo, d.nombre, d.categoria
+            HAVING COUNT(*) >= 2
+            ORDER BY valor_total DESC
+            LIMIT 30
+        """)
+        rows = cur.fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'codigo': r['codigo'],
+                'nombre': r['nombre'],
+                'categoria': r['categoria'],
+                'veces_con_diferencia': r['veces_con_diferencia'],
+                'promedio_dif_abs': float(r['promedio_dif_abs']),
+                'valor_total': float(r['valor_total']),
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/admin/borrar-datos', methods=['POST'])
 def borrar_datos():
     """Borra datos de inventario para una bodega y fecha especifica"""

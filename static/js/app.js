@@ -288,7 +288,10 @@ let state = {
     etapaConteo: 1,  // 1 = Primer conteo, 2 = Segundo conteo, 3 = Finalizado
     productosFallidos: [],  // Productos con diferencia después del primer conteo
     personas: [],           // Lista de personas asignables
-    asignaciones: {}        // Asignaciones por conteo_id
+    asignaciones: {},       // Asignaciones por conteo_id
+    cruceEjecuciones: [],   // Ejecuciones de cruce operativo
+    cruceDetalleId: null,   // ID de ejecucion activa en detalle
+    cruceSoloDif: false     // Filtro solo diferencias
 };
 
 // Inicializacion
@@ -374,6 +377,10 @@ function setupEventListeners() {
 
     // Dashboard
     document.getElementById('btn-cargar-dashboard').addEventListener('click', cargarDashboard);
+
+    // Cruce Operativo
+    const btnCruce = document.getElementById('btn-buscar-cruce');
+    if (btnCruce) btnCruce.addEventListener('click', cargarCruceOperativo);
 }
 
 // ==================== AUTENTICACION ====================
@@ -438,6 +445,12 @@ function showMainScreen() {
     document.getElementById('main-screen').classList.add('active');
     document.getElementById('user-name').textContent = state.user.nombre;
 
+    // Mostrar/ocultar nav Cruce Op. segun admin
+    const isAdmin = state.user && state.user.username === 'admin';
+    document.querySelectorAll('.nav-admin-only').forEach(el => {
+        el.style.display = isAdmin ? '' : 'none';
+    });
+
     // Recargar bodegas filtradas segun usuario
     cargarBodegas();
 }
@@ -455,6 +468,20 @@ function cambiarVista(viewName) {
         view.classList.remove('active');
     });
     document.getElementById(`view-${viewName}`).classList.add('active');
+
+    // Auto-cargar cruce al entrar
+    if (viewName === 'cruce') {
+        const cDesde = document.getElementById('cruce-fecha-desde');
+        const cHasta = document.getElementById('cruce-fecha-hasta');
+        if (!cDesde.value || !cHasta.value) {
+            const hoy = new Date();
+            const hace30 = new Date();
+            hace30.setDate(hoy.getDate() - 30);
+            cDesde.value = hace30.toISOString().split('T')[0];
+            cHasta.value = hoy.toISOString().split('T')[0];
+        }
+        cargarCruceOperativo();
+    }
 
     // Auto-cargar dashboard al entrar
     if (viewName === 'dashboard') {
@@ -2245,4 +2272,216 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.remove();
     }, 4000);
+}
+
+// ==================== CRUCE OPERATIVO ====================
+
+async function cargarCruceOperativo() {
+    const fechaDesde = document.getElementById('cruce-fecha-desde').value;
+    const fechaHasta = document.getElementById('cruce-fecha-hasta').value;
+    const bodega = document.getElementById('cruce-bodega').value;
+
+    if (!fechaDesde || !fechaHasta) {
+        showToast('Selecciona las fechas desde y hasta', 'error');
+        return;
+    }
+
+    try {
+        let url = `${CONFIG.API_URL}/api/cruce/ejecuciones?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`;
+        if (bodega) url += `&bodega=${bodega}`;
+
+        const [resEjec, resResumen] = await Promise.all([
+            fetch(url),
+            fetch(`${CONFIG.API_URL}/api/cruce/resumen`)
+        ]);
+
+        if (resEjec.ok) {
+            state.cruceEjecuciones = await resEjec.json();
+            renderCruceEjecuciones();
+        } else {
+            showToast('Error al cargar ejecuciones', 'error');
+        }
+
+        if (resResumen.ok) {
+            const resumen = await resResumen.json();
+            renderCruceResumen(resumen);
+        }
+    } catch (error) {
+        console.error('Error cargando cruce:', error);
+        showToast('Error de conexion', 'error');
+    }
+}
+
+function renderCruceResumen(resumen) {
+    const container = document.getElementById('cruce-resumen');
+    if (!resumen || resumen.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const totalDif = resumen.reduce((s, r) => s + (r.total_con_diferencia || 0), 0);
+    const totalValor = resumen.reduce((s, r) => s + (r.valor_total_diferencias || 0), 0);
+    const totalFalt = resumen.reduce((s, r) => s + (r.faltantes || 0), 0);
+    const totalSobr = resumen.reduce((s, r) => s + (r.sobrantes || 0), 0);
+
+    container.innerHTML = `
+        <div class="dashboard-stat-card">
+            <div class="stat-icon" style="background:rgba(185,28,28,0.1);color:#B91C1C;"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">${totalDif}</div>
+                <div class="stat-label">Con Diferencia</div>
+            </div>
+        </div>
+        <div class="dashboard-stat-card">
+            <div class="stat-icon" style="background:rgba(217,119,6,0.1);color:#D97706;"><i class="fas fa-dollar-sign"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">$${totalValor.toLocaleString('es-EC', {minimumFractionDigits: 2})}</div>
+                <div class="stat-label">Valor Diferencias</div>
+            </div>
+        </div>
+        <div class="dashboard-stat-card">
+            <div class="stat-icon" style="background:rgba(185,28,28,0.1);color:#B91C1C;"><i class="fas fa-arrow-down"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">${totalFalt}</div>
+                <div class="stat-label">Faltantes</div>
+            </div>
+        </div>
+        <div class="dashboard-stat-card">
+            <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:#059669;"><i class="fas fa-arrow-up"></i></div>
+            <div class="stat-info">
+                <div class="stat-valor">${totalSobr}</div>
+                <div class="stat-label">Sobrantes</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderCruceEjecuciones() {
+    const container = document.getElementById('cruce-ejecuciones');
+    const ejecs = state.cruceEjecuciones;
+
+    if (!ejecs || ejecs.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-exchange-alt"></i><p>No hay cruces en el rango seleccionado</p></div>';
+        return;
+    }
+
+    container.innerHTML = ejecs.map(e => {
+        const estadoClass = e.estado === 'completado' ? 'cruce-estado-ok' :
+                            e.estado === 'error' ? 'cruce-estado-error' : 'cruce-estado-pending';
+        const estadoIcon = e.estado === 'completado' ? 'fa-check-circle' :
+                           e.estado === 'error' ? 'fa-times-circle' : 'fa-clock';
+        return `
+            <div class="cruce-ejec-card" onclick="verCruceDetalle(${e.id})">
+                <div class="cruce-ejec-info">
+                    <div class="cruce-ejec-bodega">${e.bodega_nombre}</div>
+                    <div class="cruce-ejec-fecha">${e.fecha_toma}</div>
+                    <div class="cruce-ejec-estado ${estadoClass}">
+                        <i class="fas ${estadoIcon}"></i> ${e.estado}
+                    </div>
+                </div>
+                <div class="cruce-ejec-stats">
+                    <div class="cruce-stat"><span class="cruce-stat-val">${e.total_productos_toma || 0}</span><span class="cruce-stat-lbl">Toma</span></div>
+                    <div class="cruce-stat"><span class="cruce-stat-val">${e.total_cruzados || 0}</span><span class="cruce-stat-lbl">Cruzados</span></div>
+                    <div class="cruce-stat cruce-stat-dif"><span class="cruce-stat-val">${e.total_con_diferencia || 0}</span><span class="cruce-stat-lbl">Diferencias</span></div>
+                </div>
+                ${e.error_msg ? `<div class="cruce-ejec-error">${e.error_msg}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+async function verCruceDetalle(ejecId) {
+    state.cruceDetalleId = ejecId;
+    state.cruceSoloDif = false;
+
+    const ejec = state.cruceEjecuciones.find(e => e.id === ejecId);
+    const titulo = ejec ? `${ejec.bodega_nombre} - ${ejec.fecha_toma}` : 'Detalle';
+    document.getElementById('cruce-detalle-titulo').textContent = titulo;
+
+    const btn = document.getElementById('btn-cruce-solo-dif');
+    if (btn) btn.classList.remove('active');
+
+    await cargarCruceDetalleData(ejecId, false);
+
+    document.getElementById('cruce-detalle-panel').classList.remove('hidden');
+}
+
+async function cargarCruceDetalleData(ejecId, soloDif) {
+    const container = document.getElementById('cruce-detalle-contenido');
+    container.innerHTML = '<div style="padding:20px;text-align:center;"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
+
+    try {
+        let url = `${CONFIG.API_URL}/api/cruce/detalle?ejecucion_id=${ejecId}`;
+        if (soloDif) url += '&solo_diferencias=true';
+
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Error cargando detalle');
+
+        const datos = await resp.json();
+        renderCruceDetalle(datos);
+    } catch (error) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${error.message}</p></div>`;
+    }
+}
+
+function renderCruceDetalle(datos) {
+    const container = document.getElementById('cruce-detalle-contenido');
+
+    if (!datos || datos.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>Sin diferencias</p></div>';
+        return;
+    }
+
+    let html = `<div class="tabla-cruce-wrapper"><table class="tabla-cruce">
+        <thead><tr>
+            <th>Codigo</th><th>Producto</th><th>Cat.</th><th>Tipo</th>
+            <th>Fisico</th><th>Sistema</th><th>Dif.</th><th>%</th><th>Valor $</th><th>Origen</th>
+        </tr></thead><tbody>`;
+
+    datos.forEach(d => {
+        const dif = d.diferencia || 0;
+        const pct = d.cantidad_sistema ? ((dif / d.cantidad_sistema) * 100).toFixed(1) : '-';
+        const difClass = dif < 0 ? 'cruce-neg' : dif > 0 ? 'cruce-pos' : '';
+        const origenClass = d.origen === 'solo_toma' ? 'cruce-solo-toma' :
+                            d.origen === 'solo_contifico' ? 'cruce-solo-cont' : '';
+
+        html += `<tr class="${origenClass}">
+            <td>${d.codigo}</td>
+            <td>${d.nombre || ''}</td>
+            <td>${d.categoria || ''}</td>
+            <td>${d.tipo_abc || ''}</td>
+            <td>${d.cantidad_toma != null ? d.cantidad_toma.toFixed(2) : '-'}</td>
+            <td>${d.cantidad_sistema != null ? d.cantidad_sistema.toFixed(2) : '-'}</td>
+            <td class="${difClass}">${dif.toFixed(2)}</td>
+            <td class="${difClass}">${pct}%</td>
+            <td>$${(d.valor_diferencia || 0).toFixed(2)}</td>
+            <td><span class="cruce-origen-badge ${origenClass}">${d.origen}</span></td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+async function cruceFiltrarSoloDiferencias() {
+    state.cruceSoloDif = !state.cruceSoloDif;
+    const btn = document.getElementById('btn-cruce-solo-dif');
+    if (btn) btn.classList.toggle('active', state.cruceSoloDif);
+
+    if (state.cruceDetalleId) {
+        await cargarCruceDetalleData(state.cruceDetalleId, state.cruceSoloDif);
+    }
+}
+
+function cruceExportarExcel() {
+    if (!state.cruceDetalleId) {
+        showToast('Selecciona un cruce primero', 'error');
+        return;
+    }
+    window.open(`${CONFIG.API_URL}/api/cruce/exportar-excel?ejecucion_id=${state.cruceDetalleId}`, '_blank');
+}
+
+function cerrarCruceDetalle() {
+    document.getElementById('cruce-detalle-panel').classList.add('hidden');
+    state.cruceDetalleId = null;
 }
