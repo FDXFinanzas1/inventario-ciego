@@ -8,11 +8,22 @@ import psycopg2
 from psycopg2.pool import SimpleConnectionPool
 from psycopg2.extras import RealDictCursor
 import os
+from decimal import Decimal
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+from flask.json.provider import DefaultJSONProvider
+
+class CustomJSONProvider(DefaultJSONProvider):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
 app = Flask(__name__, static_folder='static')
+app.json_provider_class = CustomJSONProvider
+app.json = CustomJSONProvider(app)
 CORS(app, origins=['https://inventario-ciego-5bdr.onrender.com'])
 
 @app.after_request
@@ -226,7 +237,7 @@ def consultar_inventario():
                 conn.rollback()
             except Exception:
                 pass
-        return jsonify({'error': f'Error: {str(e)}'}), 500
+        return jsonify({'error': 'Error interno del servidor'}), 500
     finally:
         if conn:
             release_db(conn)
