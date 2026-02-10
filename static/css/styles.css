@@ -1116,6 +1116,14 @@ main {
     align-items: center;
 }
 
+.asig-fila-bottom {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
 .input-persona {
     flex: 2;
     padding: 6px 8px;
@@ -1436,17 +1444,79 @@ main {
 
 /* Mobile responsivo para asignaciones */
 @media (max-width: 576px) {
+    .asig-container {
+        border-radius: var(--radius);
+    }
+
+    .asig-header {
+        padding: 8px 12px;
+        font-size: 12px;
+        gap: 6px;
+    }
+
+    .asig-header-status {
+        font-size: 10px;
+        padding: 2px 8px;
+    }
+
+    .asig-producto-header {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .asig-prod-nombre {
+        font-size: 12px;
+        white-space: normal;
+        word-break: break-word;
+        line-height: 1.3;
+    }
+
+    .asig-prod-dif {
+        font-size: 10px;
+    }
+
+    .asig-prod-costo {
+        font-size: 10px;
+    }
+
+    .asig-valor-total {
+        font-size: 11px;
+    }
+
+    .asig-status {
+        font-size: 10px;
+        padding: 2px 8px;
+        flex-shrink: 0;
+    }
+
+    .asig-producto-body {
+        padding: 10px 12px;
+    }
+
     .asig-fila {
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
     }
 
     .persona-dropdown {
-        flex: 1 1 100%;
+        flex: none;
+        width: 100%;
     }
 
     .persona-dropdown .input-persona {
         font-size: 16px;
-        padding: 10px;
+        padding: 10px 32px 10px 10px;
+    }
+
+    .asig-fila-bottom {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        width: 100%;
     }
 
     .input-asignacion-wrap {
@@ -1457,23 +1527,57 @@ main {
     .input-asignacion {
         font-size: 16px;
         padding: 10px;
+        width: 100%;
     }
 
     .unidad-label {
         font-size: 13px;
     }
 
+    .fila-descuento {
+        font-size: 12px;
+        min-width: 50px;
+    }
+
     .btn-remove-fila {
         width: 44px;
         height: 44px;
+        flex-shrink: 0;
     }
 
-    .asig-prod-nombre {
-        font-size: 12px;
+    .btn-add-persona {
+        padding: 10px 12px;
+        font-size: 13px;
     }
 
-    .asig-prod-dif {
-        font-size: 10px;
+    .btn-guardar-asig {
+        padding: 12px 20px;
+        font-size: 14px;
+    }
+
+    .asig-footer {
+        padding: 10px 12px;
+    }
+
+    .btn-guardar-todas-asig {
+        width: 100%;
+        justify-content: center;
+        padding: 14px 24px;
+    }
+
+    .asig-valor-general {
+        padding: 8px 12px;
+        font-size: 13px;
+        flex-wrap: wrap;
+    }
+
+    .asig-valor-general strong {
+        font-size: 14px;
+    }
+
+    .asig-resumen {
+        font-size: 11px;
+        padding: 6px 10px;
     }
 }
 

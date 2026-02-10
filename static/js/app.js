@@ -1148,17 +1148,19 @@ function generarFilaAsignacion(productoId, idx, personaSeleccionada, cantidad, u
                        value="${personaSeleccionada}" placeholder="Seleccionar persona...">
                 <i class="fas fa-chevron-down persona-dd-arrow"></i>
             </div>
-            <div class="input-asignacion-wrap">
-                <input type="number" class="input-asignacion" value="${cantidad}"
-                       step="0.001" min="0" placeholder="Cant."
-                       onchange="actualizarTotalAsignado(${productoId}, this)"
-                       onblur="actualizarTotalAsignado(${productoId}, this)">
-                <span class="unidad-label">${unidadLabel}</span>
+            <div class="asig-fila-bottom">
+                <div class="input-asignacion-wrap">
+                    <input type="number" class="input-asignacion" value="${cantidad}"
+                           step="0.001" min="0" placeholder="Cant."
+                           onchange="actualizarTotalAsignado(${productoId}, this)"
+                           onblur="actualizarTotalAsignado(${productoId}, this)">
+                    <span class="unidad-label">${unidadLabel}</span>
+                </div>
+                <span class="fila-descuento">$${valorFila}</span>
+                <button class="btn-remove-fila" onclick="removerFilaAsignacion(this, ${productoId})">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <span class="fila-descuento">$${valorFila}</span>
-            <button class="btn-remove-fila" onclick="removerFilaAsignacion(this, ${productoId})">
-                <i class="fas fa-times"></i>
-            </button>
         </div>
     `;
 }
