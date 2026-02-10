@@ -304,6 +304,20 @@ let state = {
     cruceSoloDif: false     // Filtro solo diferencias
 };
 
+// Detectar unidades que solo permiten enteros (sin decimales)
+function esUnidadEntera(unidad) {
+    if (!unidad) return false;
+    const u = unidad.toLowerCase().trim();
+    return u === 'gramos' || u === 'gramo' || u === 'gr' || u === 'g';
+}
+
+// Bloquear punto y coma en inputs de unidades enteras
+function bloquearDecimales(event) {
+    if (event.key === '.' || event.key === ',') {
+        event.preventDefault();
+    }
+}
+
 // Inicializacion
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
@@ -753,15 +767,17 @@ function renderProductosInventario() {
                                 ${state.etapaConteo === 1 ? `
                                     <input type="number"
                                            class="input-contado"
-                                           step="0.001"
+                                           step="${esUnidadEntera(prod.unidad) ? '1' : '0.001'}"
+                                           ${esUnidadEntera(prod.unidad) ? 'pattern="[0-9]*" inputmode="numeric"' : 'inputmode="decimal"'}
                                            value="${conteo1 ? prod.cantidad_contada : ''}"
                                            placeholder="-"
                                            data-id="${prod.id}"
                                            data-codigo="${prod.codigo}"
                                            data-conteo="1"
+                                           data-unidad="${prod.unidad || ''}"
                                            onchange="guardarConteoDirecto(this)"
                                            onblur="guardarConteoDirecto(this)"
-                                           onkeypress="if(event.key==='Enter') this.blur()">
+                                           onkeypress="${esUnidadEntera(prod.unidad) ? 'bloquearDecimales(event);' : ''} if(event.key==='Enter') this.blur()">
                                 ` : `
                                     <span class="valor-contado">${conteo1 ? prod.cantidad_contada : '-'}</span>
                                 `}
@@ -771,15 +787,17 @@ function renderProductosInventario() {
                                     ${state.etapaConteo === 2 ? `
                                         <input type="number"
                                                class="input-contado input-conteo2"
-                                               step="0.001"
+                                               step="${esUnidadEntera(prod.unidad) ? '1' : '0.001'}"
+                                               ${esUnidadEntera(prod.unidad) ? 'pattern="[0-9]*" inputmode="numeric"' : 'inputmode="decimal"'}
                                                value="${conteo2 ? prod.cantidad_contada_2 : ''}"
                                                placeholder="-"
                                                data-id="${prod.id}"
                                                data-codigo="${prod.codigo}"
                                                data-conteo="2"
+                                               data-unidad="${prod.unidad || ''}"
                                                onchange="guardarConteoDirecto(this)"
                                                onblur="guardarConteoDirecto(this)"
-                                               onkeypress="if(event.key==='Enter') this.blur()">
+                                               onkeypress="${esUnidadEntera(prod.unidad) ? 'bloquearDecimales(event);' : ''} if(event.key==='Enter') this.blur()">
                                     ` : `
                                         <span class="valor-contado">${conteo2 ? prod.cantidad_contada_2 : '-'}</span>
                                     `}
@@ -886,7 +904,13 @@ async function guardarConteoDirecto(input) {
     const id = parseInt(input.dataset.id);
     const codigo = input.dataset.codigo;
     const conteoNum = parseInt(input.dataset.conteo) || 1;
-    const cantidad = input.value !== '' ? parseFloat(input.value) : null;
+    let cantidad = input.value !== '' ? parseFloat(input.value) : null;
+
+    // Si la unidad es gramos, forzar entero (sin decimales)
+    if (cantidad !== null && esUnidadEntera(input.dataset.unidad)) {
+        cantidad = Math.round(cantidad);
+        input.value = cantidad;
+    }
 
     // Evitar guardado duplicado si el valor no cambio
     const prod = state.productos.find(p => p.id === id);
