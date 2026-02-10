@@ -507,6 +507,11 @@ function cambiarVista(viewName) {
         cargarCruceOperativo();
     }
 
+    // Auto-renderizar observaciones al entrar
+    if (viewName === 'observaciones') {
+        renderObservaciones();
+    }
+
     // Auto-cargar dashboard al entrar
     if (viewName === 'dashboard') {
         const dashDesde = document.getElementById('dash-fecha-desde');
@@ -811,71 +816,10 @@ function renderProductosInventario() {
         </table>
     `;
 
-    // Tabla de observaciones separada (solo en etapa 3, productos con diferencia)
-    let obsHtml = '';
-    if (state.etapaConteo === 3) {
-        const productosConDif = productosAMostrar.filter(prod => {
-            const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
-            const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
-            return cantidadFinal - prod.cantidad_sistema !== 0;
-        });
-
-        if (productosConDif.length > 0) {
-            obsHtml = `
-                <div class="tabla-obs-container">
-                    <div class="obs-header">
-                        <i class="fas fa-clipboard-list"></i>
-                        Observaciones (${productosConDif.length} con diferencia)
-                    </div>
-                    <table class="tabla-observaciones">
-                        <thead>
-                            <tr>
-                                <th class="obs-col-producto">Producto</th>
-                                <th class="obs-col-dif">Dif</th>
-                                <th class="obs-col-obs">Observación</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${productosConDif.map(prod => {
-                                const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
-                                const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
-                                const diferencia = cantidadFinal - prod.cantidad_sistema;
-                                const difClass = diferencia < 0 ? 'negativa' : 'positiva';
-                                return `
-                                    <tr>
-                                        <td class="obs-nombre">${prod.nombre}</td>
-                                        <td class="obs-dif ${difClass}">${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</td>
-                                        <td class="obs-input-cell">
-                                            <input type="text"
-                                                   class="input-observacion"
-                                                   value="${(prod.observaciones || '').replace(/"/g, '&quot;')}"
-                                                   placeholder="Escribir motivo..."
-                                                   data-id="${prod.id}"
-                                                   onchange="guardarObservacion(this)"
-                                                   onkeypress="if(event.key==='Enter') this.blur()">
-                                        </td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                    <div class="obs-footer">
-                        <button class="btn-guardar-obs" onclick="guardarTodasObservaciones()">
-                            <i class="fas fa-save"></i> Guardar Observaciones
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
     container.innerHTML = tablaHtml;
 
-    // Renderizar observaciones en contenedor separado (fuera del scroll)
-    const obsContainer = document.getElementById('observaciones-container');
-    if (obsContainer) {
-        obsContainer.innerHTML = obsHtml;
-    }
+    // Actualizar observaciones en la pestaña separada
+    renderObservaciones();
 
     // Renderizar modulo de asignacion de diferencias (solo etapa 3)
     const asigContainer = document.getElementById('asignaciones-container');
@@ -1029,6 +973,83 @@ async function guardarObservacion(input) {
         console.error('Error:', error);
         showToast('Error de conexion', 'error');
     }
+}
+
+// ==================== MODULO: OBSERVACIONES (pestaña separada) ====================
+
+function renderObservaciones() {
+    const obsContainer = document.getElementById('observaciones-container');
+    if (!obsContainer) return;
+
+    if (state.etapaConteo !== 3 || !state.productos || state.productos.length === 0) {
+        obsContainer.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-comment-alt"></i>
+                <p>Completa un conteo para ver las observaciones de productos con diferencia</p>
+            </div>`;
+        return;
+    }
+
+    const productosConDif = state.productos.filter(prod => {
+        const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+        const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+        return cantidadFinal - prod.cantidad_sistema !== 0;
+    });
+
+    if (productosConDif.length === 0) {
+        obsContainer.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-check-circle"></i>
+                <p>No hay productos con diferencia</p>
+            </div>`;
+        return;
+    }
+
+    obsContainer.innerHTML = `
+        <div class="tabla-obs-container">
+            <div class="obs-header">
+                <i class="fas fa-clipboard-list"></i>
+                Observaciones (${productosConDif.length} con diferencia)
+            </div>
+            <table class="tabla-observaciones">
+                <thead>
+                    <tr>
+                        <th class="obs-col-producto">Producto</th>
+                        <th class="obs-col-dif">Dif</th>
+                        <th class="obs-col-obs">Observación</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${productosConDif.map(prod => {
+                        const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+                        const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+                        const diferencia = cantidadFinal - prod.cantidad_sistema;
+                        const difClass = diferencia < 0 ? 'negativa' : 'positiva';
+                        return `
+                            <tr>
+                                <td class="obs-nombre">${prod.nombre}</td>
+                                <td class="obs-dif ${difClass}">${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</td>
+                                <td class="obs-input-cell">
+                                    <input type="text"
+                                           class="input-observacion"
+                                           value="${(prod.observaciones || '').replace(/"/g, '&quot;')}"
+                                           placeholder="Escribir motivo..."
+                                           data-id="${prod.id}"
+                                           onchange="guardarObservacion(this)"
+                                           onkeypress="if(event.key==='Enter') this.blur()">
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            <div class="obs-footer">
+                <button class="btn-guardar-obs" onclick="guardarTodasObservaciones()">
+                    <i class="fas fa-save"></i> Guardar Observaciones
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 // ==================== MODULO: ASIGNACION DE DIFERENCIAS ====================
