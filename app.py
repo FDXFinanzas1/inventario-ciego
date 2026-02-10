@@ -221,7 +221,12 @@ def consultar_inventario():
         return jsonify({'productos': productos, 'personas': personas})
     except Exception as e:
         print(f"Error en /api/inventario/consultar: {e}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({'error': f'Error: {str(e)}'}), 500
     finally:
         if conn:
             release_db(conn)
