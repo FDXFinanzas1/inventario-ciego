@@ -267,6 +267,40 @@ def consultar_inventario():
         if conn:
             release_db(conn)
 
+@app.route('/api/inventario/autofill-conteo2', methods=['POST'])
+def autofill_conteo2():
+    """Auto-llena conteo 2 con conteo 1 para productos donde conteo1 == sistema"""
+    data = request.json
+    fecha = data.get('fecha')
+    local = data.get('local')
+
+    if not fecha or not local:
+        return jsonify({'error': 'fecha y local son requeridos'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE inventario_diario.inventario_ciego_conteos
+            SET cantidad_contada_2 = cantidad_contada
+            WHERE fecha = %s AND local = %s
+              AND cantidad_contada IS NOT NULL
+              AND cantidad_contada_2 IS NULL
+              AND cantidad_contada = cantidad
+        """, (fecha, local))
+        actualizados = cur.rowcount
+        conn.commit()
+
+        return jsonify({'success': True, 'actualizados': actualizados})
+    except Exception as e:
+        print(f"Error en /api/inventario/autofill-conteo2: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
 @app.route('/api/inventario/guardar-conteo', methods=['POST'])
 def guardar_conteo():
     data = request.json

@@ -625,28 +625,12 @@ async function consultarInventario() {
                 costo_unitario: parseFloat(p.costo_unitario) || 0
             }));
 
-            // Verificar si ya se finalizó el conteo (tiene conteo_2)
-            const yaFinalizado = state.productos.some(p => p.cantidad_contada_2 !== null);
-
-            if (yaFinalizado) {
-                // Ya se hizo el conteo, mostrar solo resultados en modo lectura
-                state.etapaConteo = 3;
-                state.productosFallidos = state.productos
-                    .filter(p => p.cantidad_contada_2 !== null)
-                    .map(p => p.codigo);
-                await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
-                renderProductosInventario();
-                showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
-                return;
-            }
-
             // Verificar si ya tiene conteo 1 guardado
             const todosConConteo1 = state.productos.every(p => p.cantidad_contada !== null);
             const algunosConConteo1 = state.productos.some(p => p.cantidad_contada !== null);
 
             if (todosConConteo1) {
-                // TODOS tienen conteo 1 = el usuario ya dio guardar conteo 1
-                state.etapaConteo = 2;
+                // Calcular productos con diferencias
                 state.productosFallidos = state.productos
                     .filter(p => p.cantidad_contada !== null && p.cantidad_contada !== p.cantidad_sistema)
                     .map(p => p.codigo);
@@ -660,6 +644,52 @@ async function consultarInventario() {
                     return;
                 }
 
+                // Verificar si TODOS los productos ya tienen conteo 2 (finalizado)
+                const todosConConteo2 = state.productos.every(p => p.cantidad_contada_2 !== null);
+                if (todosConConteo2) {
+                    state.etapaConteo = 3;
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
+                    renderProductosInventario();
+                    showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
+                    return;
+                }
+
+                // Auto-llenar conteo 2 para productos sin diferencia
+                try {
+                    const resp = await fetch(`${CONFIG.API_URL}/api/inventario/autofill-conteo2`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fecha, local })
+                    });
+                    const result = await resp.json();
+                    if (result.success && result.actualizados > 0) {
+                        state.productos.forEach(p => {
+                            if (p.cantidad_contada !== null && p.cantidad_contada === p.cantidad_sistema && p.cantidad_contada_2 === null) {
+                                p.cantidad_contada_2 = p.cantidad_contada;
+                            }
+                        });
+                        console.log(`Auto-fill conteo 2: ${result.actualizados} productos`);
+                    }
+                } catch (e) {
+                    console.error('Error en autofill conteo2:', e);
+                }
+
+                // Verificar de nuevo si ahora todos tienen conteo 2
+                const fallidosSinConteo2 = state.productos.filter(p =>
+                    state.productosFallidos.includes(p.codigo) &&
+                    (p.cantidad_contada_2 === null || p.cantidad_contada_2 === undefined)
+                );
+
+                if (fallidosSinConteo2.length === 0) {
+                    // Todos los que tenían diferencia ya tienen conteo 2
+                    state.etapaConteo = 3;
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
+                    renderProductosInventario();
+                    showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
+                    return;
+                }
+
+                state.etapaConteo = 2;
                 renderProductosInventario();
                 showToast(`Conteo 1 ya realizado. Completa el segundo conteo (${state.productosFallidos.length} con diferencias).`, 'warning');
                 return;
@@ -1789,6 +1819,28 @@ async function guardarConteoEtapa() {
             showToast('¡Excelente! Todos los productos coinciden con el sistema', 'success');
         } else {
             // Hay diferencias, pasar a etapa 2
+            // Auto-llenar conteo 2 para productos que coinciden con el sistema
+            const fecha = document.getElementById('fecha-conteo').value;
+            const local = document.getElementById('bodega-select').value;
+            try {
+                const resp = await fetch(`${CONFIG.API_URL}/api/inventario/autofill-conteo2`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fecha, local })
+                });
+                const result = await resp.json();
+                if (result.success && result.actualizados > 0) {
+                    // Actualizar estado local: copiar conteo1 a conteo2 donde coinciden
+                    state.productos.forEach(p => {
+                        if (p.cantidad_contada !== null && p.cantidad_contada === p.cantidad_sistema && p.cantidad_contada_2 === null) {
+                            p.cantidad_contada_2 = p.cantidad_contada;
+                        }
+                    });
+                    console.log(`Auto-fill conteo 2: ${result.actualizados} productos`);
+                }
+            } catch (e) {
+                console.error('Error en autofill conteo2:', e);
+            }
             state.etapaConteo = 2;
             showToast(`⚠️ ${state.productosFallidos.length} productos tienen diferencias. Realiza el segundo conteo.`, 'warning');
         }
