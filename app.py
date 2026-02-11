@@ -40,7 +40,12 @@ DB_CONFIG = {
     'user': os.environ.get('DB_USER', 'adminChios'),
     'password': os.environ.get('DB_PASSWORD', 'Burger2023'),
     'port': os.environ.get('DB_PORT', '5432'),
-    'sslmode': 'require'
+    'sslmode': 'require',
+    'keepalives': 1,
+    'keepalives_idle': 30,
+    'keepalives_interval': 10,
+    'keepalives_count': 5,
+    'connect_timeout': 10
 }
 
 _connection_pool = None
@@ -55,13 +60,33 @@ def _get_pool():
     return _connection_pool
 
 def get_db():
-    return _get_pool().getconn()
+    """Obtiene conexion del pool, validando que este viva"""
+    conn = _get_pool().getconn()
+    try:
+        conn.cursor().execute("SELECT 1")
+        conn.rollback()
+    except Exception:
+        # Conexion stale - cerrar y crear nueva
+        try:
+            _get_pool().putconn(conn, close=True)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    return conn
 
 def release_db(conn):
     try:
+        if conn.closed:
+            return
         _get_pool().putconn(conn)
     except Exception:
-        pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 # Helper: mapeo de IDs de bodega a nombres legibles
@@ -1167,7 +1192,7 @@ def actualizar_costos():
                 """, (float(costo), nombre))
                 total += cur_inv.rowcount
             conn_inv.commit()
-            conn_inv.close()
+            release_db(conn_inv)
             return jsonify({
                 'productos_recibidos': len(costos_directos),
                 'registros_actualizados': total
@@ -1181,7 +1206,7 @@ def actualizar_costos():
             WHERE costo_unitario IS NULL OR costo_unitario = 0
         """)
         nombres = [r['nombre'] for r in cur_inv.fetchall()]
-        conn_inv.close()
+        release_db(conn_inv)
         return jsonify({'pendientes': nombres, 'total': len(nombres)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1253,7 +1278,7 @@ def get_asignaciones():
             ORDER BY a.conteo_id, a.id
         """, (fecha, local))
         rows = cur.fetchall()
-        conn.close()
+        release_db(conn)
         result = {}
         for r in rows:
             cid = str(r['conteo_id'])
@@ -1290,7 +1315,7 @@ def guardar_asignaciones():
                     VALUES (%s, %s, %s)
                 """, (conteo_id, a['persona'].strip(), float(a['cantidad'])))
         conn.commit()
-        conn.close()
+        release_db(conn)
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1299,6 +1324,42 @@ def guardar_asignaciones():
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok'})
+
+
+@app.route('/api/debug-db', methods=['GET'])
+def debug_db():
+    """Diagnostico de conexion a BD"""
+    import traceback
+    result = {'pool_status': 'unknown', 'direct_conn': 'unknown'}
+    # Test 1: pool connection
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT 1 as test, current_timestamp as ts, version() as ver")
+        row = cur.fetchone()
+        result['pool_status'] = 'ok'
+        result['pool_data'] = {'test': row['test'], 'ts': str(row['ts']), 'ver': row['ver'][:60]}
+        release_db(conn)
+    except Exception as e:
+        result['pool_status'] = 'error'
+        result['pool_error'] = str(e)
+        result['pool_traceback'] = traceback.format_exc()
+    # Test 2: direct connection (bypass pool)
+    try:
+        conn2 = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+        cur2 = conn2.cursor()
+        cur2.execute("SELECT COUNT(*) as cnt FROM inventario_diario.usuarios")
+        row2 = cur2.fetchone()
+        result['direct_conn'] = 'ok'
+        result['direct_data'] = {'usuarios_count': row2['cnt']}
+        conn2.close()
+    except Exception as e:
+        result['direct_conn'] = 'error'
+        result['direct_error'] = str(e)
+        result['direct_traceback'] = traceback.format_exc()
+    result['db_config_host'] = DB_CONFIG['host']
+    result['db_config_db'] = DB_CONFIG['database']
+    return jsonify(result)
 
 
 @app.route('/api/debug-personas', methods=['GET'])
