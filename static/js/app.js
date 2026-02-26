@@ -2859,6 +2859,7 @@ function renderTablaBajas(grupos) {
             <div style="padding:9px 14px;background:var(--bg-secondary);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                 <div>
                     <strong>${g.fecha}</strong> &nbsp;·&nbsp; ${BODEGAS[g.local]||g.local}
+                    ${g.codigo_baja ? `&nbsp;·&nbsp; <span style="background:#F0FDF4;color:#166534;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;">${escapeHtml(g.codigo_baja)}</span>` : ''}
                     ${g.documento ? `&nbsp;·&nbsp; <span style="background:#EFF6FF;color:#1E40AF;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;"><i class="fas fa-file-alt" style="margin-right:3px;"></i>${escapeHtml(g.documento)}</span>` : ''}
                     ${g.motivo ? `&nbsp;·&nbsp; <em style="color:#64748b;">${escapeHtml(g.motivo)}</em>` : ''}
                 </div>
@@ -2957,6 +2958,7 @@ function registrarBaja() {
     const local = document.getElementById('baja-bodega').value;
     const motivo = document.getElementById('baja-motivo').value.trim();
     const documento = document.getElementById('baja-documento').value.trim();
+    const codigo_baja = document.getElementById('baja-codigo-ref').value.trim();
 
     if (!fecha || !local) { showToast('Selecciona fecha y bodega', 'error'); return; }
     if (_bajaItems.length === 0) { showToast('Agrega al menos un producto', 'error'); return; }
@@ -2967,7 +2969,7 @@ function registrarBaja() {
     fetch(`${CONFIG.API_URL}/api/bajas/registrar`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({fecha, local, motivo, documento, items: _bajaItems, asignaciones: _bajaAsignaciones})
+        body: JSON.stringify({fecha, local, motivo, documento, codigo_baja, items: _bajaItems, asignaciones: _bajaAsignaciones})
     })
     .then(r => r.json())
     .then(data => {
@@ -2994,6 +2996,7 @@ function eliminarBajaGrupo(baja_grupo) {
 function limpiarFormularioBaja() {
     document.getElementById('baja-motivo').value = '';
     document.getElementById('baja-documento').value = '';
+    document.getElementById('baja-codigo-ref').value = '';
     _bajaItems = [];
     _bajaAsignaciones = [];
     _renderBajaItems();
