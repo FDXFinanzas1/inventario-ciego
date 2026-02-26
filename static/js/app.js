@@ -2196,6 +2196,7 @@ function _renderHistPivot(data) {
     const conDif = prods.filter(p => Object.values(p.porFecha).some(v => v.diferencia !== null && v.diferencia !== 0)).length;
 
     container.innerHTML = `
+    <div style="grid-column:1/-1;">
     <div class="baja-pivot-toolbar">
         <span class="baja-pivot-info">${prods.length} productos · ${fechas.length} fecha(s) · <span style="color:#D97706;font-weight:600;">${conDif} con diferencia</span></span>
         <div class="baja-pivot-toggle">
@@ -2227,10 +2228,11 @@ function _renderHistPivot(data) {
         </tbody>
     </table>
     </div>
-    <div style="margin-top:10px;font-size:11px;display:flex;gap:16px;color:#64748b;">
+    <div style="margin-top:10px;font-size:11px;display:flex;gap:16px;color:#64748b;flex-wrap:wrap;">
         <span><span style="background:#FEE2E2;padding:1px 8px;border-radius:3px;">rojo</span> = falta producto (negativo)</span>
         <span><span style="background:#FEF3C7;padding:1px 8px;border-radius:3px;">naranja</span> = sobra producto (positivo)</span>
         <span><span style="color:#059669;">✓</span> = sin diferencia</span>
+    </div>
     </div>`;
 }
 
