@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventario Ciego - FOODIX</title>
-    <link rel="stylesheet" href="css/styles.css?v=20260226d">
+    <link rel="stylesheet" href="css/styles.css?v=20260226e">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -317,7 +317,6 @@
 
                     <!-- Formulario de registro -->
                     <div class="merma-form-card">
-                        <h3><i class="fas fa-plus-circle"></i> Registrar Nueva Baja</h3>
                         <div class="merma-form-grid">
                             <div class="form-group">
                                 <label>Fecha *</label>
@@ -336,49 +335,37 @@
                                 </select>
                             </div>
                             <div class="form-group" style="grid-column:1/-1;">
-                                <label>Producto *</label>
-                                <div class="persona-dropdown" onclick="abrirSelectorProductoBaja()">
-                                    <input type="text" id="baja-nombre" class="input-merma" readonly
-                                           placeholder="Toca para seleccionar producto...">
-                                    <i class="fas fa-chevron-down persona-dd-arrow"></i>
+                                <label>Persona Responsable *</label>
+                                <select id="baja-persona" class="input-merma">
+                                    <option value="">Seleccionar persona...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="grid-column:1/-1;">
+                                <label>Motivo / Observación</label>
+                                <textarea id="baja-motivo" class="input-merma" rows="2"
+                                          placeholder="Ej: Grabación marketing, evento, degustación..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Lista dinámica de productos -->
+                        <div class="baja-productos-section">
+                            <div class="baja-productos-header">
+                                <span><i class="fas fa-box-open"></i> Productos</span>
+                                <button class="btn-secondary btn-sm" onclick="abrirSelectorProductoBaja()">
+                                    <i class="fas fa-plus"></i> Agregar Producto
+                                </button>
+                            </div>
+                            <div id="baja-items-container">
+                                <div class="baja-items-empty" id="baja-items-empty">
+                                    <i class="fas fa-box-open"></i>
+                                    <p>Agrega productos a la baja</p>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label>Código</label>
-                                <input type="text" id="baja-codigo" class="input-merma" readonly placeholder="(autocompletado)">
-                            </div>
-                            <div class="form-group">
-                                <label>Unidad</label>
-                                <input type="text" id="baja-unidad" class="input-merma" readonly placeholder="(autocompletado)">
-                            </div>
-                            <div class="form-group">
-                                <label>Cantidad *</label>
-                                <input type="number" id="baja-cantidad" class="input-merma"
-                                       min="0" step="0.01" placeholder="0"
-                                       oninput="calcularCostoBaja()">
-                            </div>
-                            <div class="form-group">
-                                <label>Costo Unitario ($)</label>
-                                <input type="number" id="baja-costo-unitario" class="input-merma"
-                                       min="0" step="0.0001" placeholder="0.00"
-                                       oninput="calcularCostoBaja()">
-                            </div>
-                            <div class="form-group">
-                                <label>Costo Total</label>
-                                <input type="text" id="baja-costo-total" class="input-merma merma-costo-display" readonly value="$0.00">
+                            <div id="baja-total-bar" class="baja-total-bar hidden">
+                                Total: <strong id="baja-total-valor">$0.00</strong>
                             </div>
                         </div>
-                        <div class="form-group" style="margin-top:12px;">
-                            <label>Persona Responsable *</label>
-                            <select id="baja-persona" class="input-merma">
-                                <option value="">Seleccionar persona...</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="margin-top:12px;">
-                            <label>Motivo / Observación</label>
-                            <textarea id="baja-motivo" class="input-merma" rows="2"
-                                      placeholder="Describe el motivo de la baja..."></textarea>
-                        </div>
+
                         <div class="merma-form-actions">
                             <button class="btn-primary" onclick="registrarBaja()">
                                 <i class="fas fa-save"></i> Registrar Baja
@@ -516,7 +503,7 @@
     <!-- Toast notifications -->
     <div id="toast-container"></div>
 
-    <script src="js/config.js?v=20260226d"></script>
-    <script src="js/app.js?v=20260226d"></script>
+    <script src="js/config.js?v=20260226e"></script>
+    <script src="js/app.js?v=20260226e"></script>
 </body>
 </html>

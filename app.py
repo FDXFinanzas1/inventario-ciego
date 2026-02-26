@@ -1694,29 +1694,34 @@ def registrar_baja():
     data = request.json
     fecha = data.get('fecha')
     local = data.get('local')
-    codigo = data.get('codigo', '').strip()
-    nombre = data.get('nombre', '').strip()
-    unidad = data.get('unidad', '').strip()
-    cantidad = data.get('cantidad')
     persona = data.get('persona', '').strip()
     motivo = data.get('motivo', '').strip()
-    costo_unitario = float(data.get('costo_unitario') or 0)
-    if not all([fecha, local, codigo, nombre, cantidad, persona]):
-        return jsonify({'error': 'Faltan campos requeridos: fecha, local, codigo, nombre, cantidad, persona'}), 400
-    costo_total = float(cantidad) * costo_unitario
+    items = data.get('items', [])
+    if not all([fecha, local, persona]):
+        return jsonify({'error': 'Faltan campos requeridos: fecha, local, persona'}), 400
+    if not items:
+        return jsonify({'error': 'Debes incluir al menos un producto'}), 400
     conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO inventario_diario.bajas_directas
-                (fecha, local, codigo, nombre, unidad, cantidad, persona, motivo, costo_unitario, costo_total)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (fecha, local, codigo, nombre, unidad, float(cantidad), persona, motivo, costo_unitario, costo_total))
-        nuevo_id = cur.fetchone()['id']
+        ids = []
+        for item in items:
+            codigo = item.get('codigo', '').strip()
+            nombre = item.get('nombre', '').strip()
+            unidad = item.get('unidad', '').strip()
+            cantidad = float(item.get('cantidad') or 0)
+            costo_unitario = float(item.get('costo_unitario') or 0)
+            costo_total = cantidad * costo_unitario
+            cur.execute("""
+                INSERT INTO inventario_diario.bajas_directas
+                    (fecha, local, codigo, nombre, unidad, cantidad, persona, motivo, costo_unitario, costo_total)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (fecha, local, codigo, nombre, unidad, cantidad, persona, motivo, costo_unitario, costo_total))
+            ids.append(cur.fetchone()['id'])
         conn.commit()
-        return jsonify({'success': True, 'id': nuevo_id})
+        return jsonify({'success': True, 'ids': ids, 'count': len(ids)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:

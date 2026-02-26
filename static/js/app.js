@@ -2817,25 +2817,21 @@ function seleccionarProductoMerma(idx) {
 
 let _bajaProductos = [];
 
+// ---- estado lista de items de la baja en curso ----
+let _bajaItems = []; // [{codigo, nombre, unidad, cantidad, costo_unitario}]
+
 function poblarPersonasBaja() {
     const sel = document.getElementById('baja-persona');
     if (!sel) return;
-    // Guardar valor actual
     const valorActual = sel.value;
-    // Obtener personas del state o localStorage
     let personas = state.personas || [];
     if (!personas.length) {
-        try {
-            const cache = localStorage.getItem('personas_cache');
-            if (cache) personas = JSON.parse(cache);
-        } catch(e) {}
+        try { const c = localStorage.getItem('personas_cache'); if (c) personas = JSON.parse(c); } catch(e) {}
     }
-    // Repoblar
     sel.innerHTML = '<option value="">Seleccionar persona...</option>';
     personas.forEach(p => {
         const opt = document.createElement('option');
-        opt.value = p;
-        opt.textContent = p;
+        opt.value = p; opt.textContent = p;
         sel.appendChild(opt);
     });
     if (valorActual) sel.value = valorActual;
@@ -2845,18 +2841,13 @@ function cargarBajas() {
     const desde = document.getElementById('baja-fecha-desde')?.value || '';
     const hasta = document.getElementById('baja-fecha-hasta')?.value || '';
     const local = document.getElementById('baja-filtro-bodega')?.value || '';
-
     let url = `${CONFIG.API_URL}/api/bajas?`;
     if (desde) url += `fecha_desde=${desde}&`;
     if (hasta) url += `fecha_hasta=${hasta}&`;
     if (local) url += `local=${local}`;
-
     fetch(url)
         .then(r => r.json())
-        .then(data => {
-            if (data.error) { showToast(data.error, 'error'); return; }
-            renderTablaBajas(data);
-        })
+        .then(data => { if (data.error) { showToast(data.error, 'error'); return; } renderTablaBajas(data); })
         .catch(() => showToast('Error al cargar bajas', 'error'));
 }
 
@@ -2866,96 +2857,122 @@ function renderTablaBajas(bajas) {
         container.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay bajas registradas en el periodo seleccionado</p></div>';
         return;
     }
-
     const totalCosto = bajas.reduce((sum, b) => sum + b.costo_total, 0);
-    const BODEGAS = {
-        'real_audiencia': 'Real Audiencia', 'floreana': 'Floreana',
-        'portugal': 'Portugal', 'santo_cachon_real': 'S.Cachon Real',
-        'santo_cachon_portugal': 'S.Cachon Portugal', 'simon_bolon': 'Simon Bolon'
-    };
-
-    let html = `
-        <div class="tabla-merma-wrapper">
-        <table class="tabla-merma">
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Bodega</th>
-                    <th>Código</th>
-                    <th>Producto</th>
-                    <th>Cantidad</th>
-                    <th>Unidad</th>
-                    <th>Persona</th>
-                    <th>Motivo</th>
-                    <th>Costo Total</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
+    const BODEGAS = {'real_audiencia':'Real Audiencia','floreana':'Floreana','portugal':'Portugal',
+        'santo_cachon_real':'S.Cachon Real','santo_cachon_portugal':'S.Cachon Portugal','simon_bolon':'Simon Bolon'};
+    let html = `<div class="tabla-merma-wrapper"><table class="tabla-merma">
+        <thead><tr><th>Fecha</th><th>Bodega</th><th>Código</th><th>Producto</th>
+        <th>Cant.</th><th>Und.</th><th>Persona</th><th>Motivo</th><th>Costo</th><th></th></tr></thead><tbody>`;
     for (const b of bajas) {
-        html += `
-            <tr>
-                <td>${b.fecha}</td>
-                <td>${BODEGAS[b.local] || b.local}</td>
-                <td><code>${b.codigo}</code></td>
-                <td>${b.nombre}</td>
-                <td>${b.cantidad}</td>
-                <td>${b.unidad}</td>
-                <td><strong>${b.persona}</strong></td>
-                <td>${b.motivo || '-'}</td>
-                <td class="merma-costo-cell">$${b.costo_total.toFixed(2)}</td>
-                <td><button class="btn-eliminar-merma" onclick="eliminarBaja(${b.id})" title="Eliminar"><i class="fas fa-trash"></i></button></td>
-            </tr>
-        `;
+        html += `<tr>
+            <td>${b.fecha}</td><td>${BODEGAS[b.local]||b.local}</td>
+            <td><code>${b.codigo}</code></td><td>${b.nombre}</td>
+            <td>${b.cantidad}</td><td>${b.unidad}</td>
+            <td><strong>${b.persona}</strong></td><td>${b.motivo||'-'}</td>
+            <td class="merma-costo-cell">$${b.costo_total.toFixed(2)}</td>
+            <td><button class="btn-eliminar-merma" onclick="eliminarBaja(${b.id})" title="Eliminar"><i class="fas fa-trash"></i></button></td>
+        </tr>`;
+    }
+    html += `</tbody><tfoot><tr class="merma-total-row">
+        <td colspan="8"><strong>TOTAL BAJAS</strong></td>
+        <td><strong>$${totalCosto.toFixed(2)}</strong></td><td></td>
+    </tr></tfoot></table></div>`;
+    container.innerHTML = html;
+}
+
+// ---- gestión de items en el formulario ----
+
+function _renderBajaItems() {
+    const container = document.getElementById('baja-items-container');
+    const emptyEl = document.getElementById('baja-items-empty');
+    const totalBar = document.getElementById('baja-total-bar');
+    if (!container) return;
+
+    if (_bajaItems.length === 0) {
+        container.innerHTML = `<div class="baja-items-empty" id="baja-items-empty">
+            <i class="fas fa-box-open"></i><p>Agrega productos a la baja</p></div>`;
+        totalBar?.classList.add('hidden');
+        return;
     }
 
-    html += `
-            </tbody>
-            <tfoot>
-                <tr class="merma-total-row">
-                    <td colspan="8"><strong>TOTAL BAJAS</strong></td>
-                    <td><strong>$${totalCosto.toFixed(2)}</strong></td>
-                    <td></td>
-                </tr>
-            </tfoot>
-        </table>
-        </div>
-    `;
-
+    let totalGeneral = 0;
+    let html = '';
+    _bajaItems.forEach((item, idx) => {
+        const subtotal = (item.cantidad || 0) * (item.costo_unitario || 0);
+        totalGeneral += subtotal;
+        html += `
+        <div class="baja-item-row">
+            <div class="baja-item-info">
+                <span class="baja-item-codigo">${escapeHtml(item.codigo)}</span>
+                <span class="baja-item-nombre">${escapeHtml(item.nombre)}</span>
+                <span class="baja-item-unidad">${item.unidad || ''}</span>
+            </div>
+            <div class="baja-item-inputs">
+                <input type="number" class="baja-item-input" value="${item.cantidad||''}"
+                       placeholder="Cant." min="0" step="0.01"
+                       onchange="_actualizarItemBaja(${idx},'cantidad',this.value)"
+                       oninput="_actualizarItemBaja(${idx},'cantidad',this.value)">
+                <input type="number" class="baja-item-input" value="${item.costo_unitario||''}"
+                       placeholder="C/U $" min="0" step="0.0001"
+                       onchange="_actualizarItemBaja(${idx},'costo_unitario',this.value)"
+                       oninput="_actualizarItemBaja(${idx},'costo_unitario',this.value)">
+                <span class="baja-item-subtotal" id="baja-sub-${idx}">$${subtotal.toFixed(2)}</span>
+                <button class="baja-item-del" onclick="_eliminarItemBaja(${idx})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>`;
+    });
     container.innerHTML = html;
+
+    if (totalBar) {
+        totalBar.classList.remove('hidden');
+        document.getElementById('baja-total-valor').textContent = `$${totalGeneral.toFixed(2)}`;
+    }
+}
+
+function _actualizarItemBaja(idx, campo, valor) {
+    if (!_bajaItems[idx]) return;
+    _bajaItems[idx][campo] = parseFloat(valor) || 0;
+    // Actualizar subtotal sin re-renderizar todo
+    const subtotal = (_bajaItems[idx].cantidad || 0) * (_bajaItems[idx].costo_unitario || 0);
+    const subEl = document.getElementById(`baja-sub-${idx}`);
+    if (subEl) subEl.textContent = `$${subtotal.toFixed(2)}`;
+    // Actualizar total general
+    const total = _bajaItems.reduce((s, i) => s + (i.cantidad||0)*(i.costo_unitario||0), 0);
+    const totalEl = document.getElementById('baja-total-valor');
+    if (totalEl) totalEl.textContent = `$${total.toFixed(2)}`;
+}
+
+function _eliminarItemBaja(idx) {
+    _bajaItems.splice(idx, 1);
+    _renderBajaItems();
 }
 
 function registrarBaja() {
     const fecha = document.getElementById('baja-fecha').value;
     const local = document.getElementById('baja-bodega').value;
-    const codigo = document.getElementById('baja-codigo').value.trim();
-    const nombre = document.getElementById('baja-nombre').value.trim();
-    const unidad = document.getElementById('baja-unidad').value.trim();
-    const cantidad = parseFloat(document.getElementById('baja-cantidad').value) || 0;
     const persona = document.getElementById('baja-persona').value;
     const motivo = document.getElementById('baja-motivo').value.trim();
-    const costo_unitario = parseFloat(document.getElementById('baja-costo-unitario').value) || 0;
 
-    if (!fecha || !local || !codigo || !nombre || cantidad <= 0) {
-        showToast('Completa: fecha, bodega, producto y cantidad mayor a 0', 'error');
-        return;
-    }
-    if (!persona) {
-        showToast('Selecciona una persona responsable', 'error');
-        return;
+    if (!fecha || !local) { showToast('Selecciona fecha y bodega', 'error'); return; }
+    if (!persona) { showToast('Selecciona una persona responsable', 'error'); return; }
+    if (_bajaItems.length === 0) { showToast('Agrega al menos un producto', 'error'); return; }
+
+    const itemsInvalidos = _bajaItems.filter(i => !i.cantidad || i.cantidad <= 0);
+    if (itemsInvalidos.length > 0) {
+        showToast('Todos los productos deben tener cantidad mayor a 0', 'error'); return;
     }
 
     fetch(`${CONFIG.API_URL}/api/bajas/registrar`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({fecha, local, codigo, nombre, unidad, cantidad, persona, motivo, costo_unitario})
+        body: JSON.stringify({fecha, local, persona, motivo, items: _bajaItems})
     })
     .then(r => r.json())
     .then(data => {
         if (data.error) { showToast(data.error, 'error'); return; }
-        showToast('Baja registrada correctamente', 'success');
+        showToast(`${_bajaItems.length} producto(s) registrados correctamente`, 'success');
         limpiarFormularioBaja();
         cargarBajas();
     })
@@ -2975,41 +2992,22 @@ function eliminarBaja(id) {
 }
 
 function limpiarFormularioBaja() {
-    document.getElementById('baja-codigo').value = '';
-    document.getElementById('baja-nombre').value = '';
-    document.getElementById('baja-unidad').value = '';
-    document.getElementById('baja-cantidad').value = '';
     document.getElementById('baja-motivo').value = '';
-    document.getElementById('baja-costo-unitario').value = '';
-    document.getElementById('baja-costo-total').value = '$0.00';
-    cerrarSelectorProductoBaja();
-}
-
-function calcularCostoBaja() {
-    const cantidad = parseFloat(document.getElementById('baja-cantidad').value) || 0;
-    const costoUnit = parseFloat(document.getElementById('baja-costo-unitario').value) || 0;
-    const total = cantidad * costoUnit;
-    document.getElementById('baja-costo-total').value = `$${total.toFixed(2)}`;
+    _bajaItems = [];
+    _renderBajaItems();
 }
 
 async function cargarProductosBaja() {
-    if (_bajaProductos.length > 0) return; // ya cargado
+    if (_bajaProductos.length > 0) return;
     try {
         const resp = await fetch(`${CONFIG.API_URL}/api/catalogo-productos`);
         const data = await resp.json();
-        if (Array.isArray(data)) {
-            _bajaProductos = data;
-        }
-    } catch(e) {
-        // No crítico
-    }
+        if (Array.isArray(data)) _bajaProductos = data;
+    } catch(e) {}
 }
 
 async function abrirSelectorProductoBaja() {
-    // Precargar catálogo si no está listo
-    if (_bajaProductos.length === 0) {
-        await cargarProductosBaja();
-    }
+    if (_bajaProductos.length === 0) await cargarProductosBaja();
 
     let modal = document.getElementById('modal-producto-baja');
     if (modal) modal.remove();
@@ -3030,10 +3028,7 @@ async function abrirSelectorProductoBaja() {
         </div>
     `;
     document.body.appendChild(modal);
-
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) cerrarSelectorProductoBaja();
-    });
+    modal.addEventListener('click', e => { if (e.target === modal) cerrarSelectorProductoBaja(); });
 
     _renderListaProductosBaja(_bajaProductos);
 
@@ -3042,11 +3037,8 @@ async function abrirSelectorProductoBaja() {
         buscarInput.focus();
         buscarInput.addEventListener('input', function() {
             const term = this.value.toLowerCase();
-            const filtrados = term.length < 1
-                ? _bajaProductos
-                : _bajaProductos.filter(p =>
-                    p.codigo.toLowerCase().includes(term) ||
-                    p.nombre.toLowerCase().includes(term));
+            const filtrados = term.length < 1 ? _bajaProductos
+                : _bajaProductos.filter(p => p.codigo.toLowerCase().includes(term) || p.nombre.toLowerCase().includes(term));
             _renderListaProductosBaja(filtrados);
         });
     }
@@ -3059,11 +3051,11 @@ function _renderListaProductosBaja(lista) {
         container.innerHTML = '<div style="padding:20px;text-align:center;color:#64748b;">Sin resultados</div>';
         return;
     }
-    container.innerHTML = lista.map((p, i) => `
+    container.innerHTML = lista.map(p => `
         <div class="persona-opcion" onclick="_seleccionarProdBaja(${_bajaProductos.indexOf(p)})">
             <span style="font-weight:600;color:#1E3A5F;">${escapeHtml(p.codigo)}</span>
             &nbsp;—&nbsp;${escapeHtml(p.nombre)}
-            <span style="font-size:11px;color:#94a3b8;margin-left:6px;">${p.unidad || ''}</span>
+            <span style="font-size:11px;color:#94a3b8;margin-left:6px;">${p.unidad||''}</span>
         </div>
     `).join('');
 }
@@ -3071,11 +3063,16 @@ function _renderListaProductosBaja(lista) {
 function _seleccionarProdBaja(idx) {
     const p = _bajaProductos[idx];
     if (!p) return;
-    document.getElementById('baja-codigo').value = p.codigo;
-    document.getElementById('baja-nombre').value = p.nombre;
-    document.getElementById('baja-unidad').value = p.unidad || '';
+    // Agregar a la lista (no duplicar el mismo código)
+    const yaExiste = _bajaItems.findIndex(i => i.codigo === p.codigo);
+    if (yaExiste >= 0) {
+        showToast(`${p.codigo} ya está en la lista`, 'info');
+        cerrarSelectorProductoBaja();
+        return;
+    }
+    _bajaItems.push({codigo: p.codigo, nombre: p.nombre, unidad: p.unidad || '', cantidad: null, costo_unitario: null});
     cerrarSelectorProductoBaja();
-    document.getElementById('baja-cantidad').focus();
+    _renderBajaItems();
 }
 
 function cerrarSelectorProductoBaja() {
