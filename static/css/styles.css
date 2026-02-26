@@ -3492,3 +3492,135 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     .baja-dos-paneles { grid-template-columns: 1fr; }
     .baja-item-input { width: 60px; }
 }
+
+/* ===== TABLA PIVOTE BAJAS ===== */
+.baja-pivot-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.baja-pivot-info { font-size: 12px; color: var(--text-gray); }
+.baja-pivot-toggle {
+    display: flex;
+    gap: 3px;
+    background: #F1F5F9;
+    border-radius: 8px;
+    padding: 3px;
+}
+.baja-toggle-btn {
+    padding: 5px 14px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    color: var(--text-gray);
+    font-weight: 500;
+    transition: all 0.15s;
+}
+.baja-toggle-btn.active {
+    background: #fff;
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    font-weight: 600;
+}
+.tabla-bajas-pivot {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.tabla-bajas-pivot thead tr { background: var(--primary); }
+.tabla-bajas-pivot th {
+    background: var(--primary);
+    color: #fff;
+    padding: 9px 10px;
+    text-align: center;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 11px;
+}
+.bpiv-cod { text-align: left !important; width: 80px; }
+.bpiv-nom { text-align: left !important; min-width: 160px; }
+.bpiv-uni { width: 55px; }
+.bpiv-fecha { min-width: 68px; }
+.bpiv-tot { background: var(--primary-dark) !important; min-width: 75px; }
+.tabla-bajas-pivot tbody tr:nth-child(even) { background: #F8FAFC; }
+.tabla-bajas-pivot tbody tr:hover td { background: #EFF6FF !important; }
+.tabla-bajas-pivot td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    vertical-align: middle;
+}
+.bpiv-codigo-val { font-size: 10px; font-weight: 700; color: var(--primary); letter-spacing: 0.3px; }
+.bpiv-nombre-val { text-align: left; font-size: 12px; color: var(--text-dark); }
+.bpiv-uni-val { font-size: 11px; color: var(--text-gray); }
+.bpiv-val { font-weight: 600; color: var(--primary); }
+.bpiv-empty { color: #CBD5E1; font-size: 13px; }
+.bpiv-rowtot {
+    font-weight: 700;
+    color: var(--primary);
+    background: #DBEAFE !important;
+    border-left: 2px solid #93C5FD;
+}
+.bpiv-row-total td {
+    background: var(--primary) !important;
+    color: #fff !important;
+    font-weight: 700;
+    font-size: 12px;
+    border-bottom: none;
+}
+.bpiv-row-total td:last-child { background: var(--primary-dark) !important; }
+
+/* Registros individuales (colapsables) */
+.baja-detalle-row {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    font-size: 12px;
+}
+.baja-detalle-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #F8FAFC;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.baja-detalle-items {
+    padding: 7px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+.baja-item-chip {
+    background: #EFF6FF;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--text-dark);
+}
+.baja-detalle-asig {
+    padding: 5px 12px 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dark);
+}
+.baja-tag {
+    display: inline-block;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+}
+.baja-tag.green { background: #F0FDF4; color: #166534; }
+.baja-tag.blue  { background: #EFF6FF; color: #1E40AF; }

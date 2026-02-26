@@ -2825,6 +2825,9 @@ function poblarPersonasBaja() {
     // No hay select fijo de persona — se usan botones en el panel de asignaciones
 }
 
+let _bajaPivotModo = 'cantidad'; // 'cantidad' | 'costo'
+let _bajaGruposCache = [];
+
 function cargarBajas() {
     const desde = document.getElementById('baja-fecha-desde')?.value || '';
     const hasta = document.getElementById('baja-fecha-hasta')?.value || '';
@@ -2835,53 +2838,159 @@ function cargarBajas() {
     if (local) url += `local=${local}`;
     fetch(url)
         .then(r => r.json())
-        .then(data => { if (data.error) { showToast(data.error, 'error'); return; } renderTablaBajas(data); })
+        .then(data => {
+            if (data.error) { showToast(data.error, 'error'); return; }
+            _bajaGruposCache = data;
+            renderTablaBajas(data);
+        })
         .catch(() => showToast('Error al cargar bajas', 'error'));
+}
+
+function _setBajaModo(modo) {
+    _bajaPivotModo = modo;
+    renderTablaBajas(_bajaGruposCache);
 }
 
 function renderTablaBajas(grupos) {
     const container = document.getElementById('baja-tabla-container');
-    if (!grupos.length) {
+    if (!grupos || !grupos.length) {
         container.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay bajas registradas en el periodo seleccionado</p></div>';
         return;
     }
+
+    const esCosto = _bajaPivotModo === 'costo';
+    const fmtF = f => { const p = f.split('-'); return `${p[2]}/${p[1]}`; };
     const BODEGAS = {'real_audiencia':'Real Audiencia','floreana':'Floreana','portugal':'Portugal',
         'santo_cachon_real':'S.Cachon Real','santo_cachon_portugal':'S.Cachon Portugal','simon_bolon':'Simon Bolon'};
-    const totalGeneral = grupos.reduce((s, g) => s + g.total_costo, 0);
 
-    let html = '<div class="tabla-merma-wrapper">';
+    // ---- Construir pivote ----
+    const fechas = [...new Set(grupos.map(g => g.fecha))].sort();
+    const prodMap = {};
+
+    for (const g of grupos) {
+        for (const item of g.items) {
+            if (!prodMap[item.codigo]) {
+                prodMap[item.codigo] = {codigo: item.codigo, nombre: item.nombre, unidad: item.unidad, porFecha: {}};
+            }
+            if (!prodMap[item.codigo].porFecha[g.fecha]) {
+                prodMap[item.codigo].porFecha[g.fecha] = {qty: 0, costo: 0};
+            }
+            prodMap[item.codigo].porFecha[g.fecha].qty  += parseFloat(item.cantidad) || 0;
+            prodMap[item.codigo].porFecha[g.fecha].costo += parseFloat(item.costo_total) || 0;
+        }
+    }
+    const productos = Object.values(prodMap).sort((a, b) => a.codigo.localeCompare(b.codigo));
+
+    // ---- Totales por fecha ----
+    const totPorFecha = {};
+    fechas.forEach(f => { totPorFecha[f] = 0; });
+    let totGeneral = 0;
+
+    const fmtVal = v => esCosto ? `$${v.toFixed(2)}` : (Number.isInteger(v) || v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+
+    // ---- HTML tabla ----
+    let html = `
+    <div class="baja-pivot-toolbar">
+        <span class="baja-pivot-info">${productos.length} producto(s) · ${fechas.length} fecha(s)</span>
+        <div class="baja-pivot-toggle">
+            <button class="baja-toggle-btn ${!esCosto ? 'active' : ''}" onclick="_setBajaModo('cantidad')">
+                <i class="fas fa-cubes"></i> Cantidad
+            </button>
+            <button class="baja-toggle-btn ${esCosto ? 'active' : ''}" onclick="_setBajaModo('costo')">
+                <i class="fas fa-dollar-sign"></i> Valor
+            </button>
+        </div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="tabla-bajas-pivot">
+        <thead>
+            <tr>
+                <th class="bpiv-cod">Código</th>
+                <th class="bpiv-nom">Producto</th>
+                <th class="bpiv-uni">Unid.</th>
+                ${fechas.map(f => `<th class="bpiv-fecha">${fmtF(f)}</th>`).join('')}
+                <th class="bpiv-tot">Total</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    for (const prod of productos) {
+        let totProd = 0;
+        html += `<tr>
+            <td><code class="bpiv-codigo-val">${escapeHtml(prod.codigo)}</code></td>
+            <td class="bpiv-nombre-val">${escapeHtml(prod.nombre)}</td>
+            <td class="bpiv-uni-val">${escapeHtml(prod.unidad)}</td>`;
+        for (const f of fechas) {
+            const val = prod.porFecha[f];
+            if (val) {
+                const v = esCosto ? val.costo : val.qty;
+                totPorFecha[f] += v;
+                totProd += v;
+                totGeneral += v;
+                html += `<td class="bpiv-val">${fmtVal(v)}</td>`;
+            } else {
+                html += `<td class="bpiv-empty">—</td>`;
+            }
+        }
+        html += `<td class="bpiv-rowtot">${fmtVal(totProd)}</td></tr>`;
+    }
+
+    // Fila de totales
+    html += `<tr class="bpiv-row-total">
+        <td colspan="3">TOTAL</td>
+        ${fechas.map(f => `<td>${fmtVal(totPorFecha[f])}</td>`).join('')}
+        <td>${fmtVal(totGeneral)}</td>
+    </tr>`;
+
+    html += `</tbody></table></div>`;
+
+    // ---- Sección detalle con delete ----
+    html += `
+    <div style="margin-top:16px;">
+        <button class="btn-secondary btn-sm" onclick="_toggleDetalleBajas(this)">
+            <i class="fas fa-list"></i> Ver registros individuales
+        </button>
+        <div id="baja-detalle-lista" style="display:none;margin-top:10px;">`;
+
     for (const g of grupos) {
         const asigTexto = g.asignaciones.length
-            ? g.asignaciones.map(a => `<span style="display:inline-block;margin-right:6px;"><strong>${a.persona}</strong>: $${a.monto.toFixed(2)}</span>`).join('')
+            ? g.asignaciones.map(a => `<strong>${escapeHtml(a.persona)}</strong>: $${a.monto.toFixed(2)}`).join(' · ')
             : '<em style="color:#94a3b8">Sin asignar</em>';
         html += `
-        <div style="border:1px solid var(--border-color);border-radius:8px;margin-bottom:12px;overflow:hidden;">
-            <div style="padding:9px 14px;background:var(--bg-secondary);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div class="baja-detalle-row">
+            <div class="baja-detalle-head">
                 <div>
-                    <strong>${g.fecha}</strong> &nbsp;·&nbsp; ${BODEGAS[g.local]||g.local}
-                    ${g.codigo_baja ? `&nbsp;·&nbsp; <span style="background:#F0FDF4;color:#166534;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;">${escapeHtml(g.codigo_baja)}</span>` : ''}
-                    ${g.documento ? `&nbsp;·&nbsp; <span style="background:#EFF6FF;color:#1E40AF;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;"><i class="fas fa-file-alt" style="margin-right:3px;"></i>${escapeHtml(g.documento)}</span>` : ''}
-                    ${g.motivo ? `&nbsp;·&nbsp; <em style="color:#64748b;">${escapeHtml(g.motivo)}</em>` : ''}
+                    <strong>${g.fecha}</strong> · ${BODEGAS[g.local]||g.local}
+                    ${g.codigo_baja ? `<span class="baja-tag green">${escapeHtml(g.codigo_baja)}</span>` : ''}
+                    ${g.documento ? `<span class="baja-tag blue"><i class="fas fa-file-alt"></i> ${escapeHtml(g.documento)}</span>` : ''}
+                    ${g.motivo ? `<em style="font-size:11px;color:#64748b;"> · ${escapeHtml(g.motivo)}</em>` : ''}
                 </div>
-                <div style="display:flex;align-items:center;gap:10px;">
-                    <strong style="color:var(--primary-color);">$${g.total_costo.toFixed(2)}</strong>
-                    <button class="btn-eliminar-merma" onclick="eliminarBajaGrupo(${g.baja_grupo})" title="Eliminar baja completa"><i class="fas fa-trash"></i></button>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <strong style="color:#1E3A5F;">$${g.total_costo.toFixed(2)}</strong>
+                    <button class="btn-eliminar-merma" onclick="eliminarBajaGrupo(${g.baja_grupo})" title="Eliminar"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
-            <div style="padding:8px 14px;font-size:12px;display:flex;flex-wrap:wrap;gap:6px;">
-                ${g.items.map(i => `<span style="background:var(--bg-secondary);border-radius:4px;padding:2px 7px;">
-                    <code>${i.codigo}</code> ${i.nombre} · ${i.cantidad} ${i.unidad} · $${i.costo_total.toFixed(2)}
-                </span>`).join('')}
+            <div class="baja-detalle-items">
+                ${g.items.map(i => `<span class="baja-item-chip"><code>${escapeHtml(i.codigo)}</code> ${escapeHtml(i.nombre)} · ${i.cantidad} ${escapeHtml(i.unidad)} · $${i.costo_total.toFixed(2)}</span>`).join('')}
             </div>
-            <div style="padding:6px 14px 10px;font-size:12px;border-top:1px solid var(--border-color);">
+            <div class="baja-detalle-asig">
                 <i class="fas fa-users" style="color:#94a3b8;margin-right:5px;"></i>${asigTexto}
             </div>
         </div>`;
     }
-    html += `<div style="text-align:right;padding:8px 4px;font-size:14px;font-weight:600;">
-        TOTAL: <span style="color:var(--primary-color);font-size:16px;">$${totalGeneral.toFixed(2)}</span>
-    </div></div>`;
+
+    html += `</div></div>`;
     container.innerHTML = html;
+}
+
+function _toggleDetalleBajas(btn) {
+    const lista = document.getElementById('baja-detalle-lista');
+    if (!lista) return;
+    const oculto = lista.style.display === 'none';
+    lista.style.display = oculto ? 'block' : 'none';
+    btn.innerHTML = oculto
+        ? '<i class="fas fa-times"></i> Ocultar registros'
+        : '<i class="fas fa-list"></i> Ver registros individuales';
 }
 
 // ---- gestión de items en el formulario ----
