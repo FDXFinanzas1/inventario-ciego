@@ -3121,13 +3121,16 @@ function _filtrarPersonasBaja(q) {
         return;
     }
     lista.innerHTML = _personasBajaLista.map((p, i) => `
-        <div class="persona-opcion" onclick="_seleccionarPersonaBaja(_personasBajaLista[${i}])">
+        <div class="persona-opcion" onclick="_seleccionarPersonaBaja(${i})">
             <i class="fas fa-user" style="margin-right:8px;color:#94a3b8;"></i>${escapeHtml(p)}
         </div>
     `).join('');
 }
 
-function _seleccionarPersonaBaja(nombre) {
+function _seleccionarPersonaBaja(idx) {
+    // idx es el índice en _personasBajaLista (let no está en window, sí accesible desde función)
+    const nombre = _personasBajaLista[idx];
+    if (!nombre) return;
     // Evitar duplicados
     if (_bajaAsignaciones.find(a => a.persona === nombre)) {
         showToast(`${nombre} ya está asignado`, 'info');
