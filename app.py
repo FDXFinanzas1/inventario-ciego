@@ -914,6 +914,52 @@ def _get_airtable_token():
 AIRTABLE_BASE = os.environ.get('AIRTABLE_BASE', 'appzTllAjxu4TOs1a')
 AIRTABLE_TABLE = os.environ.get('AIRTABLE_TABLE', 'tbldYTLfQ3DoEK0WA')
 
+# Catálogo de productos desde Airtable (base app5zYXr1GmF2bmVF)
+CATALOGO_BASE = 'app5zYXr1GmF2bmVF'
+CATALOGO_TABLE = 'tbl8hyvwwfSnrspAt'
+_catalogo_cache = {'datos': [], 'ts': 0}
+
+def _cargar_catalogo_airtable():
+    import time
+    token = _get_airtable_token()
+    all_records = []
+    offset = None
+    while True:
+        url = f'https://api.airtable.com/v0/{CATALOGO_BASE}/{CATALOGO_TABLE}?pageSize=100'
+        if offset:
+            url += f'&offset={offset}'
+        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
+        for rec in data['records']:
+            f = rec['fields']
+            codigo = f.get('Código', '').strip()
+            nombre = f.get('Nombre Producto', f.get('Nombre Copia', '')).strip()
+            unidad = f.get('Unidad Contifico', '').strip()
+            if codigo and nombre:
+                all_records.append({'codigo': codigo, 'nombre': nombre, 'unidad': unidad})
+        offset = data.get('offset')
+        if not offset:
+            break
+    _catalogo_cache['datos'] = all_records
+    _catalogo_cache['ts'] = time.time()
+    return all_records
+
+@app.route('/api/catalogo-productos', methods=['GET'])
+def get_catalogo_productos():
+    import time
+    # Cache de 1 hora
+    if time.time() - _catalogo_cache['ts'] < 3600 and _catalogo_cache['datos']:
+        return jsonify(_catalogo_cache['datos'])
+    try:
+        datos = _cargar_catalogo_airtable()
+        return jsonify(datos)
+    except Exception as e:
+        # Si falla pero hay cache viejo, devolver igual
+        if _catalogo_cache['datos']:
+            return jsonify(_catalogo_cache['datos'])
+        return jsonify({'error': str(e)}), 500
+
 # Cache de personas en memoria del servidor
 import time as _time
 _personas_cache = {'datos': [], 'timestamp': 0}

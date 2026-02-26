@@ -516,6 +516,7 @@ function cambiarVista(viewName) {
     if (viewName === 'bajas') {
         cargarBajas();
         poblarPersonasBaja();
+        cargarProductosBaja(); // precarga catálogo Airtable
     }
 
     // Auto-cargar dashboard al entrar
@@ -2994,18 +2995,15 @@ function calcularCostoBaja() {
 }
 
 async function cargarProductosBaja() {
-    const fecha = document.getElementById('baja-fecha').value;
-    const local = document.getElementById('baja-bodega').value;
-    if (!fecha || !local) return;
-    _bajaProductos = [];
+    if (_bajaProductos.length > 0) return; // ya cargado
     try {
-        const resp = await fetch(`${CONFIG.API_URL}/api/inventario/consultar?fecha=${fecha}&local=${local}`);
+        const resp = await fetch(`${CONFIG.API_URL}/api/catalogo-productos`);
         const data = await resp.json();
-        if (data.productos) {
-            _bajaProductos = data.productos;
+        if (Array.isArray(data)) {
+            _bajaProductos = data;
         }
     } catch(e) {
-        // No crítico - el autocomplete funcionará vacío
+        // No crítico
     }
 }
 
@@ -3014,6 +3012,10 @@ function buscarProductoBaja(term) {
     if (!lista) return;
     if (!term || term.length < 2) {
         lista.classList.add('hidden');
+        return;
+    }
+    if (_bajaProductos.length === 0) {
+        cargarProductosBaja();
         return;
     }
     const termLower = term.toLowerCase();
