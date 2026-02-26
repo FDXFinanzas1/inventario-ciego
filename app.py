@@ -920,7 +920,7 @@ CATALOGO_TABLE = 'tbl8hyvwwfSnrspAt'
 _catalogo_cache = {'datos': [], 'ts': 0}
 
 def _cargar_catalogo_airtable():
-    import time
+    import time, urllib.request, json as json_lib
     token = _get_airtable_token()
     all_records = []
     offset = None
@@ -930,7 +930,7 @@ def _cargar_catalogo_airtable():
             url += f'&offset={offset}'
         req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
         with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.loads(r.read())
+            data = json_lib.loads(r.read())
         for rec in data['records']:
             f = rec['fields']
             codigo = f.get('Código', '').strip()
@@ -947,7 +947,7 @@ def _cargar_catalogo_airtable():
 
 @app.route('/api/catalogo-productos', methods=['GET'])
 def get_catalogo_productos():
-    import time
+    import time, urllib.request, json as json_lib
     # Cache de 1 hora
     if time.time() - _catalogo_cache['ts'] < 3600 and _catalogo_cache['datos']:
         return jsonify(_catalogo_cache['datos'])
