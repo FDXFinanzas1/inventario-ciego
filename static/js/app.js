@@ -2859,7 +2859,8 @@ function renderTablaBajas(grupos) {
             <div style="padding:9px 14px;background:var(--bg-secondary);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                 <div>
                     <strong>${g.fecha}</strong> &nbsp;·&nbsp; ${BODEGAS[g.local]||g.local}
-                    ${g.motivo ? `&nbsp;·&nbsp; <em>${g.motivo}</em>` : ''}
+                    ${g.documento ? `&nbsp;·&nbsp; <span style="background:#EFF6FF;color:#1E40AF;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;"><i class="fas fa-file-alt" style="margin-right:3px;"></i>${escapeHtml(g.documento)}</span>` : ''}
+                    ${g.motivo ? `&nbsp;·&nbsp; <em style="color:#64748b;">${escapeHtml(g.motivo)}</em>` : ''}
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;">
                     <strong style="color:var(--primary-color);">$${g.total_costo.toFixed(2)}</strong>
@@ -2955,6 +2956,7 @@ function registrarBaja() {
     const fecha = document.getElementById('baja-fecha').value;
     const local = document.getElementById('baja-bodega').value;
     const motivo = document.getElementById('baja-motivo').value.trim();
+    const documento = document.getElementById('baja-documento').value.trim();
 
     if (!fecha || !local) { showToast('Selecciona fecha y bodega', 'error'); return; }
     if (_bajaItems.length === 0) { showToast('Agrega al menos un producto', 'error'); return; }
@@ -2965,7 +2967,7 @@ function registrarBaja() {
     fetch(`${CONFIG.API_URL}/api/bajas/registrar`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({fecha, local, motivo, items: _bajaItems, asignaciones: _bajaAsignaciones})
+        body: JSON.stringify({fecha, local, motivo, documento, items: _bajaItems, asignaciones: _bajaAsignaciones})
     })
     .then(r => r.json())
     .then(data => {
@@ -2991,6 +2993,7 @@ function eliminarBajaGrupo(baja_grupo) {
 
 function limpiarFormularioBaja() {
     document.getElementById('baja-motivo').value = '';
+    document.getElementById('baja-documento').value = '';
     _bajaItems = [];
     _bajaAsignaciones = [];
     _renderBajaItems();

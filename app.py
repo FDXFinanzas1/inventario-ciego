@@ -140,6 +140,10 @@ def init_db():
                 ADD COLUMN IF NOT EXISTS baja_grupo BIGINT
         """)
         cur.execute("""
+            ALTER TABLE inventario_diario.bajas_directas
+                ADD COLUMN IF NOT EXISTS documento VARCHAR(100)
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS inventario_diario.bajas_asignaciones (
                 id SERIAL PRIMARY KEY,
                 baja_grupo BIGINT NOT NULL,
@@ -1678,6 +1682,7 @@ def listar_bajas():
                    MIN(b.fecha) AS fecha,
                    MIN(b.local) AS local,
                    MIN(b.motivo) AS motivo,
+                   MIN(b.documento) AS documento,
                    SUM(b.costo_total) AS total_costo,
                    MIN(b.created_at) AS created_at
             FROM inventario_diario.bajas_directas b
@@ -1710,6 +1715,7 @@ def listar_bajas():
                 'fecha': str(g['fecha']),
                 'local': g['local'],
                 'motivo': g['motivo'] or '',
+                'documento': g['documento'] or '',
                 'total_costo': float(g['total_costo'] or 0),
                 'created_at': str(g['created_at']),
                 'items': items,
@@ -1730,6 +1736,7 @@ def registrar_baja():
     fecha = data.get('fecha')
     local = data.get('local')
     motivo = data.get('motivo', '').strip()
+    documento = data.get('documento', '').strip()
     items = data.get('items', [])
     asignaciones = data.get('asignaciones', [])
     if not all([fecha, local]):
@@ -1750,9 +1757,9 @@ def registrar_baja():
             costo_total = cantidad * costo_unitario
             cur.execute("""
                 INSERT INTO inventario_diario.bajas_directas
-                    (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, motivo, costo_unitario, costo_total)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, motivo, costo_unitario, costo_total))
+                    (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, motivo, documento, costo_unitario, costo_total)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, motivo, documento or None, costo_unitario, costo_total))
         for asig in asignaciones:
             persona = asig.get('persona', '').strip()
             monto = float(asig.get('monto') or 0)
