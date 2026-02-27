@@ -3798,7 +3798,41 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     font-weight: 700;
     color: #1E3A5F;
     white-space: nowrap;
-    margin-left: auto;
+    flex-shrink: 0;
+}
+.sec-prod-valor-dim {
+    color: #94a3b8;
+    font-weight: 500;
+}
+.sec-prod-qty {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+.sec-qty-input {
+    width: 58px;
+    border: 1px solid #93C5FD;
+    border-radius: 5px;
+    padding: 3px 5px;
+    font-size: 12px;
+    font-family: inherit;
+    text-align: right;
+    background: white;
+    outline: none;
+    color: #1E3A5F;
+}
+.sec-qty-input:focus { border-color: #3B82F6; box-shadow: 0 0 0 2px #BFDBFE; }
+.sec-qty-unidad {
+    font-size: 11px;
+    color: #64748B;
+    white-space: nowrap;
+}
+/* Cuando está seleccionado, el layout del item se ajusta */
+.sec-prod-item.selected {
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
 }
 .sec-empty-inner {
     padding: 20px;

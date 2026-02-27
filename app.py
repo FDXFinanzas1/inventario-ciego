@@ -179,8 +179,13 @@ def init_db():
                 nombre VARCHAR(150),
                 diferencia NUMERIC(12,4),
                 costo_unitario NUMERIC(12,4),
+                cantidad_asignada NUMERIC(12,4),
                 valor NUMERIC(12,2)
             )
+        """)
+        cur.execute("""
+            ALTER TABLE inventario_diario.asig_seccion_productos
+                ADD COLUMN IF NOT EXISTS cantidad_asignada NUMERIC(12,4)
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS inventario_diario.asig_seccion_personas (
@@ -1610,13 +1615,14 @@ def listar_secciones_conteo():
         result = []
         for s in secciones:
             cur.execute("""
-                SELECT conteo_id, codigo, nombre, diferencia, costo_unitario, valor
+                SELECT conteo_id, codigo, nombre, diferencia, costo_unitario, cantidad_asignada, valor
                 FROM inventario_diario.asig_seccion_productos
                 WHERE seccion_id = %s ORDER BY id
             """, (s['id'],))
             productos = [{'conteo_id': r['conteo_id'], 'codigo': r['codigo'],
                           'nombre': r['nombre'], 'diferencia': float(r['diferencia'] or 0),
                           'costo_unitario': float(r['costo_unitario'] or 0),
+                          'cantidad_asignada': float(r['cantidad_asignada'] or 0),
                           'valor': float(r['valor'] or 0)} for r in cur.fetchall()]
             cur.execute("""
                 SELECT persona, monto
@@ -1664,10 +1670,11 @@ def guardar_seccion_conteo():
         for p in productos:
             cur.execute("""
                 INSERT INTO inventario_diario.asig_seccion_productos
-                    (seccion_id, conteo_id, codigo, nombre, diferencia, costo_unitario, valor)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (seccion_id, conteo_id, codigo, nombre, diferencia, costo_unitario, cantidad_asignada, valor)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (seccion_id, p['conteo_id'], p.get('codigo',''), p.get('nombre',''),
-                  float(p.get('diferencia', 0)), float(p.get('costo_unitario', 0)), float(p.get('valor', 0))))
+                  float(p.get('diferencia', 0)), float(p.get('costo_unitario', 0)),
+                  float(p.get('cantidad_asignada', 0)), float(p.get('valor', 0))))
         for p in personas:
             if p.get('persona'):
                 cur.execute("""

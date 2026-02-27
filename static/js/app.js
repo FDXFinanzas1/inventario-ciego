@@ -3465,7 +3465,10 @@ async function cargarSecciones(fecha, local) {
             _seccionesLocal = data.map(s => ({
                 seccion_id: s.id,
                 nombre: s.nombre || '',
-                productos: s.productos.slice(),
+                productos: s.productos.map(p => ({
+                    ...p,
+                    cantidad_asignada: p.cantidad_asignada ?? Math.abs(p.diferencia ?? 0)
+                })),
                 personas: s.personas.slice()
             }));
         } else {
@@ -3545,20 +3548,35 @@ function _htmlSeccion(sec, sIdx) {
             const diferencia = cantFinal - prod.cantidad_sistema;
             const difAbs = Math.abs(diferencia);
             const costo = parseFloat(prod.costo_unitario) || 0;
-            const valor = difAbs * costo;
-            const seleccionado = sec.productos.some(p => p.conteo_id === prod.id);
+            const unidad = prod.unidad || '';
+            const secProd = sec.productos.find(p => p.conteo_id === prod.id);
+            const seleccionado = !!secProd;
+            const cantAsig = seleccionado ? (secProd.cantidad_asignada ?? difAbs) : difAbs;
+            const valorAsig = seleccionado ? (secProd.valor ?? cantAsig * costo) : difAbs * costo;
             const difClass = diferencia < 0 ? 'negativa' : 'positiva';
             const difLabel = diferencia < 0 ? '▼' : '▲';
-            const valorStr = costo > 0 ? `$${valor.toFixed(2)}` : '—';
-            // Pasar datos via data-attributes para evitar comillas en onclick
+
+            const qtyHtml = seleccionado ? `
+                <div class="sec-prod-qty">
+                    <input type="number" class="sec-qty-input" value="${cantAsig.toFixed(2)}"
+                           min="0" step="0.01" placeholder="Cant."
+                           oninput="_actualizarCantidadSec(${sIdx}, ${prod.id}, this.value)">
+                    <span class="sec-qty-unidad">${unidad}</span>
+                </div>` : '';
+
+            const valorStr = costo > 0
+                ? `<span class="sec-prod-valor${seleccionado ? '' : ' sec-prod-valor-dim'}" id="sec-val-${sIdx}-${prod.id}">$${valorAsig.toFixed(2)}</span>`
+                : `<span class="sec-prod-valor sec-prod-valor-dim">—</span>`;
+
             return `
-            <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-sidx="${sIdx}" data-pid="${prod.id}" data-dif="${diferencia.toFixed(4)}" data-costo="${costo.toFixed(4)}" data-valor="${valor.toFixed(2)}" data-codigo="${escapeHtml(prod.codigo)}" data-nombre="${escapeHtml(prod.nombre).replace(/"/g,'&quot;')}">
+            <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-sidx="${sIdx}" data-pid="${prod.id}" data-dif="${diferencia.toFixed(4)}" data-difabs="${difAbs.toFixed(4)}" data-costo="${costo.toFixed(4)}" data-unidad="${unidad}" data-codigo="${escapeHtml(prod.codigo)}" data-nombre="${escapeHtml(prod.nombre).replace(/"/g,'&quot;')}">
                 <input type="checkbox" ${seleccionado ? 'checked' : ''} onchange="_toggleProdSec(this)">
                 <div class="sec-prod-info">
                     <span class="sec-prod-nombre">${escapeHtml(prod.nombre)}</span>
-                    <span class="sec-prod-dif ${difClass}">${difLabel} ${difAbs.toFixed(2)} ${prod.unidad || ''}</span>
+                    <span class="sec-prod-dif ${difClass}">${difLabel} máx ${difAbs.toFixed(2)} ${unidad}</span>
                 </div>
-                <span class="sec-prod-valor">${valorStr}</span>
+                ${qtyHtml}
+                ${valorStr}
             </label>`;
         }).join('');
 
@@ -3650,18 +3668,24 @@ function _htmlSeccion(sec, sIdx) {
 function _toggleProdSec(checkbox) {
     const label = checkbox.closest('label.sec-prod-item');
     if (!label) return;
-    const sIdx    = parseInt(label.dataset.sidx);
-    const prodId  = parseInt(label.dataset.pid);
-    const dif     = parseFloat(label.dataset.dif);
-    const costo   = parseFloat(label.dataset.costo);
-    const valor   = parseFloat(label.dataset.valor);
-    const codigo  = label.dataset.codigo;
-    const nombre  = label.dataset.nombre;
+    const sIdx   = parseInt(label.dataset.sidx);
+    const prodId = parseInt(label.dataset.pid);
+    const dif    = parseFloat(label.dataset.dif);
+    const difAbs = parseFloat(label.dataset.difabs);
+    const costo  = parseFloat(label.dataset.costo);
+    const codigo = label.dataset.codigo;
+    const nombre = label.dataset.nombre;
     const sec = _seccionesLocal[sIdx];
     if (!sec) return;
     if (checkbox.checked) {
         if (!sec.productos.some(p => p.conteo_id === prodId)) {
-            sec.productos.push({conteo_id: prodId, codigo, nombre, diferencia: dif, costo_unitario: costo, valor});
+            // Por defecto asigna la diferencia completa
+            sec.productos.push({
+                conteo_id: prodId, codigo, nombre,
+                diferencia: dif, costo_unitario: costo,
+                cantidad_asignada: difAbs,
+                valor: difAbs * costo
+            });
         }
     } else {
         sec.productos = sec.productos.filter(p => p.conteo_id !== prodId);
@@ -3694,10 +3718,58 @@ function _dividirSec(sIdx) {
     _reRenderSecciones();
 }
 
+// Actualiza el monto de una persona sin re-renderizar (evita pérdida de foco)
 function _actualizarMontoSec(sIdx, pIdx, valor) {
     if (!_seccionesLocal[sIdx] || !_seccionesLocal[sIdx].personas[pIdx]) return;
     _seccionesLocal[sIdx].personas[pIdx].monto = parseFloat(valor) || 0;
-    _reRenderSecciones();
+    _actualizarFooterSec(sIdx);
+}
+
+// Actualiza cantidad asignada a un producto y recalcula valor (sin re-renderizar)
+function _actualizarCantidadSec(sIdx, conteoId, cantStr) {
+    const sec = _seccionesLocal[sIdx];
+    if (!sec) return;
+    const prod = sec.productos.find(p => p.conteo_id === conteoId);
+    if (!prod) return;
+    const cantidad = parseFloat(cantStr) || 0;
+    prod.cantidad_asignada = cantidad;
+    prod.valor = cantidad * (prod.costo_unitario || 0);
+    // Actualizar solo el span del valor de ese producto
+    const valEl = document.getElementById(`sec-val-${sIdx}-${conteoId}`);
+    if (valEl) valEl.textContent = prod.costo_unitario > 0 ? `$${prod.valor.toFixed(2)}` : '—';
+    _actualizarFooterSec(sIdx);
+}
+
+// Actualiza chip de total + indicador de cuadre sin re-renderizar la sección completa
+function _actualizarFooterSec(sIdx) {
+    const sec = _seccionesLocal[sIdx];
+    if (!sec) return;
+    const totalValor = sec.productos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+    const totalAsig  = sec.personas.reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
+    const diff = totalValor - totalAsig;
+    const cuadra = Math.abs(diff) < 0.01;
+
+    const card = document.getElementById(`sec-card-${sIdx}`);
+    if (!card) return;
+
+    // Chip total productos
+    const chip = card.querySelector('.sec-total-chip');
+    if (chip) chip.textContent = `$${totalValor.toFixed(2)}`;
+
+    // Footer: "Asignado X / Y"
+    const footerSpan = card.querySelector('.sec-divide-row > span');
+    if (footerSpan) footerSpan.innerHTML = `Asignado: <strong>$${totalAsig.toFixed(2)}</strong> / $${totalValor.toFixed(2)}`;
+
+    // Badge cuadre
+    const diffEl = card.querySelector('.baja-asig-diff');
+    if (diffEl) {
+        if (cuadra)       { diffEl.className = 'baja-asig-diff ok';   diffEl.textContent = '✓ Cuadra'; }
+        else if (diff > 0){ diffEl.className = 'baja-asig-diff warn'; diffEl.textContent = `Falta $${diff.toFixed(2)}`; }
+        else              { diffEl.className = 'baja-asig-diff warn'; diffEl.textContent = `Excede $${Math.abs(diff).toFixed(2)}`; }
+    } else if (sec.personas.length > 0 && totalValor > 0) {
+        // Footer aún no existe (primera persona agregada), re-render completo necesario
+        _reRenderSecciones();
+    }
 }
 
 function _quitarPersonaSec(sIdx, pIdx) {
