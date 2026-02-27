@@ -645,7 +645,7 @@ async function consultarInventario() {
                 if (state.productosFallidos.length === 0) {
                     // Todo coincidió en el primer conteo, está finalizado
                     state.etapaConteo = 3;
-                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarSecciones(fecha, local)]);
                     renderProductosInventario();
                     showToast('Conteo ya completado - todos los productos coinciden.', 'success');
                     return;
@@ -655,7 +655,7 @@ async function consultarInventario() {
                 const todosConConteo2 = state.productos.every(p => p.cantidad_contada_2 !== null);
                 if (todosConConteo2) {
                     state.etapaConteo = 3;
-                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarSecciones(fecha, local)]);
                     renderProductosInventario();
                     showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
                     return;
@@ -690,7 +690,7 @@ async function consultarInventario() {
                 if (fallidosSinConteo2.length === 0) {
                     // Todos los que tenían diferencia ya tienen conteo 2
                     state.etapaConteo = 3;
-                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas()]);
+                    await Promise.all([cargarAsignaciones(fecha, local), cargarPersonas(), cargarSecciones(fecha, local)]);
                     renderProductosInventario();
                     showToast('Este conteo ya fue finalizado. Solo lectura.', 'warning');
                     return;
@@ -860,6 +860,7 @@ function renderProductosInventario() {
 
     // Renderizar modulo de asignacion de diferencias (solo etapa 3)
     const asigContainer = document.getElementById('asignaciones-container');
+    const seccionesContainer = document.getElementById('secciones-asig-container');
     if (asigContainer) {
         if (state.etapaConteo === 3) {
             const productosConDif = productosAMostrar.filter(prod => {
@@ -869,11 +870,17 @@ function renderProductosInventario() {
             });
             if (productosConDif.length > 0) {
                 renderAsignacionesDiferencias(asigContainer, productosConDif);
+                // ---- PROTOTIPO: panel secciones ----
+                if (seccionesContainer) {
+                    renderPanelSecciones(seccionesContainer, productosConDif);
+                }
             } else {
                 asigContainer.innerHTML = '';
+                if (seccionesContainer) seccionesContainer.innerHTML = '';
             }
         } else {
             asigContainer.innerHTML = '';
+            if (seccionesContainer) seccionesContainer.innerHTML = '';
         }
     }
 
@@ -3442,4 +3449,362 @@ function _actualizarMontoAsig(idx, valor) {
 function _eliminarAsigBaja(idx) {
     _bajaAsignaciones.splice(idx, 1);
     _renderAsignacionesBaja();
+}
+
+// ==================== ASIGNACIÓN POR SECCIÓN (PROTOTIPO) ====================
+
+let _seccionesLocal = [];      // [{seccion_id, nombre, productos:[...], personas:[...]}]
+let _prodConDifCache = [];     // cache de productos con diferencia del conteo actual
+let _secPersonasLista = [];    // lista filtrada para onclick por índice
+
+async function cargarSecciones(fecha, local) {
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/conteo/secciones?fecha=${fecha}&local=${local}`);
+        const data = await r.json();
+        if (Array.isArray(data)) {
+            _seccionesLocal = data.map(s => ({
+                seccion_id: s.id,
+                nombre: s.nombre || '',
+                productos: s.productos.slice(),
+                personas: s.personas.slice()
+            }));
+        } else {
+            _seccionesLocal = [];
+        }
+    } catch(e) {
+        _seccionesLocal = [];
+    }
+}
+
+function renderPanelSecciones(container, productosConDif) {
+    _prodConDifCache = productosConDif;
+    const badge = _seccionesLocal.length > 0 ? `<span class="sec-badge">${_seccionesLocal.length}</span>` : '';
+    const listaHtml = _seccionesLocal.length === 0
+        ? `<div class="sec-empty-state"><i class="fas fa-layer-group"></i><p>Crea secciones para asignar grupos de productos a personas y dividir automáticamente el valor</p></div>`
+        : _seccionesLocal.map((s, i) => _htmlSeccion(s, i)).join('');
+
+    container.innerHTML = `
+    <div class="sec-panel">
+        <div class="sec-panel-header">
+            <div class="sec-panel-title">
+                <i class="fas fa-layer-group"></i> Asignación por Sección ${badge}
+            </div>
+            <button class="btn-secondary btn-sm" onclick="_crearSeccion()">
+                <i class="fas fa-plus"></i> Nueva Sección
+            </button>
+        </div>
+        <div id="sec-lista">${listaHtml}</div>
+    </div>`;
+}
+
+function _reRenderSecciones() {
+    const lista = document.getElementById('sec-lista');
+    if (!lista) return;
+    if (_seccionesLocal.length === 0) {
+        lista.innerHTML = `<div class="sec-empty-state"><i class="fas fa-layer-group"></i><p>Crea secciones para asignar grupos de productos a personas y dividir automáticamente el valor</p></div>`;
+    } else {
+        lista.innerHTML = _seccionesLocal.map((s, i) => _htmlSeccion(s, i)).join('');
+    }
+    const badge = document.querySelector('.sec-panel-title .sec-badge');
+    if (badge) badge.textContent = _seccionesLocal.length;
+    else {
+        const title = document.querySelector('.sec-panel-title');
+        if (title && _seccionesLocal.length > 0) {
+            title.innerHTML = `<i class="fas fa-layer-group"></i> Asignación por Sección <span class="sec-badge">${_seccionesLocal.length}</span>`;
+        }
+    }
+}
+
+function _crearSeccion() {
+    _seccionesLocal.push({
+        seccion_id: null,
+        nombre: `Sección ${_seccionesLocal.length + 1}`,
+        productos: [],
+        personas: []
+    });
+    _reRenderSecciones();
+    // Scroll al final para ver la nueva sección
+    setTimeout(() => {
+        const cards = document.querySelectorAll('.sec-card');
+        if (cards.length) cards[cards.length - 1].scrollIntoView({behavior: 'smooth', block: 'start'});
+    }, 50);
+}
+
+function _htmlSeccion(sec, sIdx) {
+    const totalValor = sec.productos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+    const totalAsig  = sec.personas.reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
+    const diff = totalValor - totalAsig;
+    const cuadra = Math.abs(diff) < 0.01;
+
+    // ---- HTML productos con checkboxes ----
+    const productosHtml = _prodConDifCache.length === 0
+        ? '<div class="sec-empty-inner">No hay productos con diferencia</div>'
+        : _prodConDifCache.map(prod => {
+            const c2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+            const cantFinal = c2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+            const diferencia = cantFinal - prod.cantidad_sistema;
+            const difAbs = Math.abs(diferencia);
+            const costo = parseFloat(prod.costo_unitario) || 0;
+            const valor = difAbs * costo;
+            const seleccionado = sec.productos.some(p => p.conteo_id === prod.id);
+            const difClass = diferencia < 0 ? 'negativa' : 'positiva';
+            const difLabel = diferencia < 0 ? '▼' : '▲';
+            const valorStr = costo > 0 ? `$${valor.toFixed(2)}` : '—';
+            // Pasar datos via data-attributes para evitar comillas en onclick
+            return `
+            <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-sidx="${sIdx}" data-pid="${prod.id}" data-dif="${diferencia.toFixed(4)}" data-costo="${costo.toFixed(4)}" data-valor="${valor.toFixed(2)}" data-codigo="${escapeHtml(prod.codigo)}" data-nombre="${escapeHtml(prod.nombre).replace(/"/g,'&quot;')}">
+                <input type="checkbox" ${seleccionado ? 'checked' : ''} onchange="_toggleProdSec(this)">
+                <div class="sec-prod-info">
+                    <span class="sec-prod-nombre">${escapeHtml(prod.nombre)}</span>
+                    <span class="sec-prod-dif ${difClass}">${difLabel} ${difAbs.toFixed(2)} ${prod.unidad || ''}</span>
+                </div>
+                <span class="sec-prod-valor">${valorStr}</span>
+            </label>`;
+        }).join('');
+
+    // ---- HTML personas ----
+    const personasHtml = sec.personas.length === 0
+        ? `<div class="sec-empty-inner"><i class="fas fa-user-plus"></i> Agrega personas</div>`
+        : sec.personas.map((p, pIdx) => `
+            <div class="sec-persona-row">
+                <span class="sec-persona-nombre"><i class="fas fa-user"></i> ${escapeHtml(p.persona)}</span>
+                <div class="sec-monto-wrap">
+                    <span class="sec-monto-prefix">$</span>
+                    <input type="number" class="sec-monto-input" min="0" step="0.01"
+                           value="${parseFloat(p.monto || 0).toFixed(2)}"
+                           oninput="_actualizarMontoSec(${sIdx}, ${pIdx}, this.value)"
+                           onchange="_actualizarMontoSec(${sIdx}, ${pIdx}, this.value)">
+                </div>
+                <button class="baja-item-del" onclick="_quitarPersonaSec(${sIdx}, ${pIdx})" title="Quitar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>`).join('');
+
+    // ---- Footer cuadre ----
+    let diffHtml = '';
+    if (sec.personas.length > 0 && totalValor > 0) {
+        if (cuadra) diffHtml = `<span class="baja-asig-diff ok">✓ Cuadra</span>`;
+        else if (diff > 0) diffHtml = `<span class="baja-asig-diff warn">Falta $${diff.toFixed(2)}</span>`;
+        else diffHtml = `<span class="baja-asig-diff warn">Excede $${Math.abs(diff).toFixed(2)}</span>`;
+    }
+
+    const savedBadge = sec.seccion_id
+        ? `<span class="sec-saved-badge"><i class="fas fa-check-circle"></i> Guardado</span>` : '';
+
+    return `
+    <div class="sec-card" id="sec-card-${sIdx}">
+        <div class="sec-card-header">
+            <input type="text" class="sec-nombre-input" value="${escapeHtml(sec.nombre)}"
+                   placeholder="Nombre de sección..."
+                   onchange="_actualizarNombreSec(${sIdx}, this.value)">
+            <div style="display:flex;align-items:center;gap:8px;">
+                ${savedBadge}
+                <button class="btn-eliminar-merma" onclick="_eliminarSec(${sIdx})" title="Eliminar sección">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="sec-two-col">
+            <!-- Panel Productos -->
+            <div class="sec-col">
+                <div class="sec-col-header">
+                    <span><i class="fas fa-box-open"></i> Productos con descuadre</span>
+                    ${totalValor > 0 ? `<span class="sec-total-chip">$${totalValor.toFixed(2)}</span>` : ''}
+                </div>
+                <div class="sec-productos-lista">${productosHtml}</div>
+            </div>
+
+            <!-- Panel Personas -->
+            <div class="sec-col">
+                <div class="sec-col-header">
+                    <span><i class="fas fa-users"></i> Personas responsables</span>
+                    <button class="btn-secondary btn-xs" onclick="_abrirPersonaSec(${sIdx})">
+                        <i class="fas fa-plus"></i> Agregar
+                    </button>
+                </div>
+                <div class="sec-personas-lista">${personasHtml}</div>
+                ${sec.personas.length > 0 && totalValor > 0 ? `
+                <div class="sec-personas-footer">
+                    <div class="sec-divide-row">
+                        <span>Asignado: <strong>$${totalAsig.toFixed(2)}</strong> / $${totalValor.toFixed(2)}</span>
+                        ${diffHtml}
+                    </div>
+                    <button class="btn-dividir" onclick="_dividirSec(${sIdx})">
+                        <i class="fas fa-divide"></i> Dividir equitativamente
+                    </button>
+                </div>` : ''}
+            </div>
+        </div>
+
+        <div class="sec-card-footer">
+            <button class="btn-primary btn-sm" onclick="_guardarSec(${sIdx})">
+                <i class="fas fa-save"></i> Guardar sección
+            </button>
+        </div>
+    </div>`;
+}
+
+// ---- Acciones de productos ----
+
+function _toggleProdSec(checkbox) {
+    const label = checkbox.closest('label.sec-prod-item');
+    if (!label) return;
+    const sIdx    = parseInt(label.dataset.sidx);
+    const prodId  = parseInt(label.dataset.pid);
+    const dif     = parseFloat(label.dataset.dif);
+    const costo   = parseFloat(label.dataset.costo);
+    const valor   = parseFloat(label.dataset.valor);
+    const codigo  = label.dataset.codigo;
+    const nombre  = label.dataset.nombre;
+    const sec = _seccionesLocal[sIdx];
+    if (!sec) return;
+    if (checkbox.checked) {
+        if (!sec.productos.some(p => p.conteo_id === prodId)) {
+            sec.productos.push({conteo_id: prodId, codigo, nombre, diferencia: dif, costo_unitario: costo, valor});
+        }
+    } else {
+        sec.productos = sec.productos.filter(p => p.conteo_id !== prodId);
+    }
+    _reRenderSecciones();
+}
+
+function _actualizarNombreSec(sIdx, valor) {
+    if (_seccionesLocal[sIdx]) _seccionesLocal[sIdx].nombre = valor;
+}
+
+// ---- División automática ----
+
+function _dividirSec(sIdx) {
+    const sec = _seccionesLocal[sIdx];
+    if (!sec || sec.personas.length === 0) return;
+    const total = sec.productos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+    if (total === 0) { showToast('Selecciona productos con costo para dividir', 'error'); return; }
+    const n = sec.personas.length;
+    const base = Math.floor((total / n) * 100) / 100;
+    let restante = total;
+    sec.personas.forEach((p, i) => {
+        if (i === n - 1) {
+            p.monto = Math.round(restante * 100) / 100;
+        } else {
+            p.monto = base;
+            restante = Math.round((restante - base) * 100) / 100;
+        }
+    });
+    _reRenderSecciones();
+}
+
+function _actualizarMontoSec(sIdx, pIdx, valor) {
+    if (!_seccionesLocal[sIdx] || !_seccionesLocal[sIdx].personas[pIdx]) return;
+    _seccionesLocal[sIdx].personas[pIdx].monto = parseFloat(valor) || 0;
+    _reRenderSecciones();
+}
+
+function _quitarPersonaSec(sIdx, pIdx) {
+    if (!_seccionesLocal[sIdx]) return;
+    _seccionesLocal[sIdx].personas.splice(pIdx, 1);
+    _reRenderSecciones();
+}
+
+function _eliminarSec(sIdx) {
+    const sec = _seccionesLocal[sIdx];
+    if (!sec) return;
+    if (sec.seccion_id) {
+        if (!confirm('¿Eliminar esta sección y sus asignaciones guardadas?')) return;
+        fetch(`${CONFIG.API_URL}/api/conteo/secciones/${sec.seccion_id}`, {method: 'DELETE'})
+            .then(r => r.json()).catch(() => {});
+    }
+    _seccionesLocal.splice(sIdx, 1);
+    _reRenderSecciones();
+}
+
+// ---- Selector de persona ----
+
+function _abrirPersonaSec(sIdx) {
+    let modal = document.getElementById('modal-persona-sec');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = 'modal-persona-sec';
+    modal.className = 'modal-persona-overlay';
+    modal.innerHTML = `
+        <div class="modal-persona-content">
+            <div class="modal-persona-header">
+                <input type="text" id="sec-pers-buscar" class="persona-buscar-input"
+                       placeholder="Buscar persona..." oninput="_filtrarPersonasSec(this.value, ${sIdx})">
+                <button class="btn-close-persona" onclick="_cerrarPersonaSec()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-persona-list" id="sec-pers-lista"></div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) _cerrarPersonaSec(); });
+    _filtrarPersonasSec('', sIdx);
+    setTimeout(() => { const b = document.getElementById('sec-pers-buscar'); if (b) b.focus(); }, 100);
+}
+
+function _filtrarPersonasSec(q, sIdx) {
+    const lista = document.getElementById('sec-pers-lista');
+    if (!lista) return;
+    const personas = state.personas || [];
+    _secPersonasLista = q ? personas.filter(p => p.toLowerCase().includes(q.toLowerCase())) : personas.slice();
+    if (!_secPersonasLista.length) {
+        lista.innerHTML = '<div style="padding:20px;text-align:center;color:#64748b;">Sin resultados</div>';
+        return;
+    }
+    lista.innerHTML = _secPersonasLista.map((p, i) => `
+        <div class="persona-opcion" onclick="_selPersonaSec(${i}, ${sIdx})">
+            <i class="fas fa-user" style="margin-right:8px;color:#94a3b8;"></i>${escapeHtml(p)}
+        </div>`).join('');
+}
+
+function _selPersonaSec(pIdx, sIdx) {
+    const nombre = _secPersonasLista[pIdx];
+    if (!nombre || !_seccionesLocal[sIdx]) return;
+    if (_seccionesLocal[sIdx].personas.find(p => p.persona === nombre)) {
+        showToast(`${nombre} ya está en la sección`, 'info');
+        _cerrarPersonaSec();
+        return;
+    }
+    _seccionesLocal[sIdx].personas.push({persona: nombre, monto: 0});
+    _cerrarPersonaSec();
+    _reRenderSecciones();
+}
+
+function _cerrarPersonaSec() {
+    const modal = document.getElementById('modal-persona-sec');
+    if (modal) modal.remove();
+}
+
+// ---- Guardar ----
+
+async function _guardarSec(sIdx) {
+    const sec = _seccionesLocal[sIdx];
+    if (!sec) return;
+    if (sec.productos.length === 0) { showToast('Selecciona al menos un producto', 'error'); return; }
+    if (sec.personas.length === 0)  { showToast('Agrega al menos una persona', 'error'); return; }
+    const fecha = document.getElementById('fecha-conteo')?.value;
+    const local = document.getElementById('bodega-select')?.value;
+    if (!fecha || !local) { showToast('No hay fecha/bodega activa', 'error'); return; }
+    const payload = {
+        fecha, local,
+        seccion_id: sec.seccion_id || null,
+        nombre: sec.nombre,
+        productos: sec.productos,
+        personas: sec.personas
+    };
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/conteo/secciones/guardar`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+        _seccionesLocal[sIdx].seccion_id = data.seccion_id;
+        showToast('Sección guardada', 'success');
+        _reRenderSecciones();
+    } catch(e) {
+        showToast('Error al guardar', 'error');
+    }
 }

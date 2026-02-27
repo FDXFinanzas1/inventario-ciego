@@ -159,6 +159,37 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # ---- Tablas para Asignación por Sección (prototipo) ----
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventario_diario.asignacion_seccion (
+                id SERIAL PRIMARY KEY,
+                fecha DATE NOT NULL,
+                local VARCHAR(50) NOT NULL,
+                nombre VARCHAR(100),
+                total_valor NUMERIC(12,2) DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventario_diario.asig_seccion_productos (
+                id SERIAL PRIMARY KEY,
+                seccion_id INT NOT NULL,
+                conteo_id INT NOT NULL,
+                codigo VARCHAR(50),
+                nombre VARCHAR(150),
+                diferencia NUMERIC(12,4),
+                costo_unitario NUMERIC(12,4),
+                valor NUMERIC(12,2)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventario_diario.asig_seccion_personas (
+                id SERIAL PRIMARY KEY,
+                seccion_id INT NOT NULL,
+                persona VARCHAR(100),
+                monto NUMERIC(12,2)
+            )
+        """)
         conn.commit()
         print('init_db: tablas OK')
     except Exception as e:
@@ -1553,6 +1584,122 @@ def guardar_asignaciones():
     finally:
         if conn:
             release_db(conn)
+
+
+# ============================================================
+# MÓDULO: Asignación por Sección (prototipo)
+# ============================================================
+
+@app.route('/api/conteo/secciones', methods=['GET'])
+def listar_secciones_conteo():
+    fecha = request.args.get('fecha')
+    local = request.args.get('local')
+    if not fecha or not local:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, nombre, total_valor
+            FROM inventario_diario.asignacion_seccion
+            WHERE fecha = %s AND local = %s
+            ORDER BY created_at
+        """, (fecha, local))
+        secciones = cur.fetchall()
+        result = []
+        for s in secciones:
+            cur.execute("""
+                SELECT conteo_id, codigo, nombre, diferencia, costo_unitario, valor
+                FROM inventario_diario.asig_seccion_productos
+                WHERE seccion_id = %s ORDER BY id
+            """, (s['id'],))
+            productos = [{'conteo_id': r['conteo_id'], 'codigo': r['codigo'],
+                          'nombre': r['nombre'], 'diferencia': float(r['diferencia'] or 0),
+                          'costo_unitario': float(r['costo_unitario'] or 0),
+                          'valor': float(r['valor'] or 0)} for r in cur.fetchall()]
+            cur.execute("""
+                SELECT persona, monto
+                FROM inventario_diario.asig_seccion_personas
+                WHERE seccion_id = %s ORDER BY id
+            """, (s['id'],))
+            personas = [{'persona': r['persona'], 'monto': float(r['monto'] or 0)} for r in cur.fetchall()]
+            result.append({'id': s['id'], 'nombre': s['nombre'] or '',
+                           'total_valor': float(s['total_valor'] or 0),
+                           'productos': productos, 'personas': personas})
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/conteo/secciones/guardar', methods=['POST'])
+def guardar_seccion_conteo():
+    data = request.json
+    fecha = data.get('fecha')
+    local = data.get('local')
+    nombre = data.get('nombre', '').strip()
+    productos = data.get('productos', [])
+    personas = data.get('personas', [])
+    seccion_id = data.get('seccion_id')
+    total_valor = sum(float(p.get('valor', 0)) for p in productos)
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        if seccion_id:
+            cur.execute("""
+                UPDATE inventario_diario.asignacion_seccion
+                SET nombre=%s, total_valor=%s WHERE id=%s
+            """, (nombre, total_valor, seccion_id))
+            cur.execute("DELETE FROM inventario_diario.asig_seccion_productos WHERE seccion_id=%s", (seccion_id,))
+            cur.execute("DELETE FROM inventario_diario.asig_seccion_personas WHERE seccion_id=%s", (seccion_id,))
+        else:
+            cur.execute("""
+                INSERT INTO inventario_diario.asignacion_seccion (fecha, local, nombre, total_valor)
+                VALUES (%s, %s, %s, %s) RETURNING id
+            """, (fecha, local, nombre, total_valor))
+            seccion_id = cur.fetchone()['id']
+        for p in productos:
+            cur.execute("""
+                INSERT INTO inventario_diario.asig_seccion_productos
+                    (seccion_id, conteo_id, codigo, nombre, diferencia, costo_unitario, valor)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (seccion_id, p['conteo_id'], p.get('codigo',''), p.get('nombre',''),
+                  float(p.get('diferencia', 0)), float(p.get('costo_unitario', 0)), float(p.get('valor', 0))))
+        for p in personas:
+            if p.get('persona'):
+                cur.execute("""
+                    INSERT INTO inventario_diario.asig_seccion_personas (seccion_id, persona, monto)
+                    VALUES (%s, %s, %s)
+                """, (seccion_id, p['persona'], float(p.get('monto', 0))))
+        conn.commit()
+        return jsonify({'success': True, 'seccion_id': seccion_id})
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/conteo/secciones/<int:seccion_id>', methods=['DELETE'])
+def eliminar_seccion_conteo(seccion_id):
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM inventario_diario.asig_seccion_productos WHERE seccion_id=%s", (seccion_id,))
+        cur.execute("DELETE FROM inventario_diario.asig_seccion_personas WHERE seccion_id=%s", (seccion_id,))
+        cur.execute("DELETE FROM inventario_diario.asignacion_seccion WHERE id=%s", (seccion_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
 
 
 @app.route('/api/health', methods=['GET'])
