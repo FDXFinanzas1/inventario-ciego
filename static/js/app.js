@@ -3551,17 +3551,37 @@ function _htmlSeccion(sec, sIdx) {
             const unidad = prod.unidad || '';
             const secProd = sec.productos.find(p => p.conteo_id === prod.id);
             const seleccionado = !!secProd;
-            const cantAsig = seleccionado ? (secProd.cantidad_asignada ?? difAbs) : difAbs;
-            const valorAsig = seleccionado ? (secProd.valor ?? cantAsig * costo) : difAbs * costo;
+
+            // Cuánto ya asignan las OTRAS secciones (no esta)
+            const asignadoOtras = _calcAsignadoOtras(prod.id, sIdx);
+            // Máximo disponible para esta sección
+            const disponible = Math.max(0, difAbs - asignadoOtras);
+
+            const cantAsig = seleccionado
+                ? Math.min(secProd.cantidad_asignada ?? disponible, disponible)
+                : disponible;
+            const valorAsig = cantAsig * costo;
             const difClass = diferencia < 0 ? 'negativa' : 'positiva';
             const difLabel = diferencia < 0 ? '▼' : '▲';
+
+            // Producto sin disponible y no seleccionado → mostrar deshabilitado
+            if (disponible <= 0 && !seleccionado) {
+                return `
+                <div class="sec-prod-item sec-prod-agotado">
+                    <div class="sec-prod-info">
+                        <span class="sec-prod-nombre">${escapeHtml(prod.nombre)}</span>
+                        <span class="sec-prod-dif ${difClass}">${difLabel} ${difAbs.toFixed(2)} ${unidad}</span>
+                    </div>
+                    <span class="sec-prod-asignado-badge">Ya asignado</span>
+                </div>`;
+            }
 
             const qtyHtml = seleccionado ? `
                 <div class="sec-prod-qty">
                     <input type="number" class="sec-qty-input" id="sec-qty-${sIdx}-${prod.id}"
                            value="${cantAsig.toFixed(2)}"
-                           min="0" max="${difAbs.toFixed(2)}" step="0.01" placeholder="Cant."
-                           oninput="_actualizarCantidadSec(${sIdx}, ${prod.id}, this.value, ${difAbs.toFixed(4)})">
+                           min="0" max="${disponible.toFixed(2)}" step="0.01" placeholder="Cant."
+                           oninput="_actualizarCantidadSec(${sIdx}, ${prod.id}, this.value, ${disponible.toFixed(4)})">
                     <span class="sec-qty-unidad">${unidad}</span>
                 </div>` : '';
 
@@ -3569,12 +3589,16 @@ function _htmlSeccion(sec, sIdx) {
                 ? `<span class="sec-prod-valor${seleccionado ? '' : ' sec-prod-valor-dim'}" id="sec-val-${sIdx}-${prod.id}">$${valorAsig.toFixed(2)}</span>`
                 : `<span class="sec-prod-valor sec-prod-valor-dim">—</span>`;
 
+            const disponibleLabel = asignadoOtras > 0
+                ? `${difLabel} disp. ${disponible.toFixed(2)} ${unidad}`
+                : `${difLabel} máx ${difAbs.toFixed(2)} ${unidad}`;
+
             return `
-            <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-sidx="${sIdx}" data-pid="${prod.id}" data-dif="${diferencia.toFixed(4)}" data-difabs="${difAbs.toFixed(4)}" data-costo="${costo.toFixed(4)}" data-unidad="${unidad}" data-codigo="${escapeHtml(prod.codigo)}" data-nombre="${escapeHtml(prod.nombre).replace(/"/g,'&quot;')}">
+            <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-sidx="${sIdx}" data-pid="${prod.id}" data-dif="${diferencia.toFixed(4)}" data-difabs="${disponible.toFixed(4)}" data-costo="${costo.toFixed(4)}" data-unidad="${unidad}" data-codigo="${escapeHtml(prod.codigo)}" data-nombre="${escapeHtml(prod.nombre).replace(/"/g,'&quot;')}">
                 <input type="checkbox" ${seleccionado ? 'checked' : ''} onchange="_toggleProdSec(this)">
                 <div class="sec-prod-info">
                     <span class="sec-prod-nombre">${escapeHtml(prod.nombre)}</span>
-                    <span class="sec-prod-dif ${difClass}">${difLabel} máx ${difAbs.toFixed(2)} ${unidad}</span>
+                    <span class="sec-prod-dif ${difClass}">${disponibleLabel}</span>
                 </div>
                 ${qtyHtml}
                 ${valorStr}
@@ -3664,28 +3688,39 @@ function _htmlSeccion(sec, sIdx) {
     </div>`;
 }
 
+// ---- Helpers ----
+
+// Suma lo que asignan todas las secciones EXCEPTO sIdx para un producto dado
+function _calcAsignadoOtras(conteoId, sIdx) {
+    return _seccionesLocal.reduce((total, s, i) => {
+        if (i === sIdx) return total;
+        const p = s.productos.find(p => p.conteo_id === conteoId);
+        return total + (p ? (parseFloat(p.cantidad_asignada) || 0) : 0);
+    }, 0);
+}
+
 // ---- Acciones de productos ----
 
 function _toggleProdSec(checkbox) {
     const label = checkbox.closest('label.sec-prod-item');
     if (!label) return;
-    const sIdx   = parseInt(label.dataset.sidx);
-    const prodId = parseInt(label.dataset.pid);
-    const dif    = parseFloat(label.dataset.dif);
-    const difAbs = parseFloat(label.dataset.difabs);
-    const costo  = parseFloat(label.dataset.costo);
-    const codigo = label.dataset.codigo;
-    const nombre = label.dataset.nombre;
+    const sIdx      = parseInt(label.dataset.sidx);
+    const prodId    = parseInt(label.dataset.pid);
+    const dif       = parseFloat(label.dataset.dif);
+    const disponible = parseFloat(label.dataset.difabs); // ya viene calculado como disponible
+    const costo     = parseFloat(label.dataset.costo);
+    const codigo    = label.dataset.codigo;
+    const nombre    = label.dataset.nombre;
     const sec = _seccionesLocal[sIdx];
     if (!sec) return;
     if (checkbox.checked) {
         if (!sec.productos.some(p => p.conteo_id === prodId)) {
-            // Por defecto asigna la diferencia completa
+            // Por defecto asigna solo lo disponible (diferencia - otras secciones)
             sec.productos.push({
                 conteo_id: prodId, codigo, nombre,
                 diferencia: dif, costo_unitario: costo,
-                cantidad_asignada: difAbs,
-                valor: difAbs * costo
+                cantidad_asignada: disponible,
+                valor: disponible * costo
             });
         }
     } else {
