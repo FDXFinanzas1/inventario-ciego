@@ -3718,6 +3718,34 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     gap: 4px;
     white-space: nowrap;
 }
+.sec-card-guardada {
+    background: #F0FDF4;
+    border-left: 3px solid #059669;
+}
+.sec-nombre-guardado {
+    font-size: 14px;
+    font-weight: 600;
+    color: #065F46;
+    flex: 1;
+}
+.sec-guardada-body { padding: 4px 0; }
+.sec-guardada-prods { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.sec-guardada-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #374151;
+    padding: 4px 8px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 4px;
+}
+.sec-guardada-nombre { flex: 1; font-weight: 500; }
+.sec-guardada-qty { color: #6B7280; white-space: nowrap; }
+.sec-guardada-val { color: #059669; font-weight: 600; white-space: nowrap; min-width: 50px; text-align: right; }
+.sec-chip-guardada { background: #D1FAE5 !important; }
+.sec-chip-guardada i { color: #059669 !important; }
+.sec-chip-guardada span { color: #065F46 !important; }
 .sec-two-col {
     display: grid;
     grid-template-columns: 1fr 1fr;

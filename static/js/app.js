@@ -3517,15 +3517,53 @@ function _crearSeccion() {
 }
 
 function _htmlSeccion(sec, sIdx) {
+    // ---- Sección guardada: render de solo lectura ----
+    if (sec.guardada) {
+        const totalValor = sec.productos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+        const prodsHtml = sec.productos.map(p => `
+            <div class="sec-guardada-row">
+                <span class="sec-guardada-nombre">${escapeHtml(p.nombre)}</span>
+                <span class="sec-guardada-qty">${parseFloat(p.cantidad_asignada).toFixed(2)} ${p.unidad||''}</span>
+                <span class="sec-guardada-val">$${parseFloat(p.valor).toFixed(2)}</span>
+            </div>`).join('');
+        const chipsHtml = sec.personas.map(p => `
+            <div class="sec-persona-chip sec-chip-guardada"><i class="fas fa-user"></i><span>${escapeHtml(p)}</span></div>`).join('');
+        const divInfo = sec.personas.length > 0 && totalValor > 0
+            ? `<div class="sec-division-info"><i class="fas fa-divide"></i> $${totalValor.toFixed(2)} ÷ ${sec.personas.length} persona(s) = <strong>$${(totalValor/sec.personas.length).toFixed(2)}</strong> c/u</div>`
+            : '';
+        return `
+        <div class="sec-card sec-card-guardada" id="sec-card-${sIdx}">
+            <div class="sec-card-header">
+                <span class="sec-nombre-guardado">${escapeHtml(sec.nombre)}</span>
+                <span class="sec-saved-badge"><i class="fas fa-check-circle"></i> Guardado</span>
+            </div>
+            <div class="sec-guardada-body">
+                <div class="sec-guardada-prods">${prodsHtml}</div>
+                <div class="sec-personas-lista chips" style="margin-top:8px;">${chipsHtml}</div>
+                ${divInfo}
+            </div>
+        </div>`;
+    }
+
     const totalValor = sec.productos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
     const totalAsig  = sec.personas.reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
     const diff = totalValor - totalAsig;
     const cuadra = Math.abs(diff) < 0.01;
 
-    // ---- HTML productos con checkboxes ----
-    const productosHtml = _prodConDifCache.length === 0
-        ? '<div class="sec-empty-inner">No hay productos con diferencia</div>'
-        : _prodConDifCache.map(prod => {
+    // ---- HTML productos con checkboxes (solo productos con disponible pendiente) ----
+    const _prodFiltrados = _prodConDifCache.filter(prod => {
+        const _c2f = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+        const _cantF = _c2f ? prod.cantidad_contada_2 : prod.cantidad_contada;
+        const _difAbsF = Math.abs(_cantF - prod.cantidad_sistema);
+        const _asigF = _calcAsignadoOtras(prod.id, sIdx);
+        const _dispF = Math.max(0, _difAbsF - _asigF);
+        return _dispF > 0.001 || sec.productos.some(p => p.conteo_id === prod.id);
+    });
+    const productosHtml = _prodFiltrados.length === 0
+        ? (_prodConDifCache.length === 0
+            ? '<div class="sec-empty-inner">No hay productos con diferencia</div>'
+            : '<div class="sec-empty-inner"><i class="fas fa-check-circle" style="color:#059669;margin-right:5px;"></i> Todos los productos ya fueron asignados en otras secciones</div>')
+        : _prodFiltrados.map(prod => {
             const c2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
             const cantFinal = c2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
             const diferencia = cantFinal - prod.cantidad_sistema;
@@ -3546,18 +3584,6 @@ function _htmlSeccion(sec, sIdx) {
             const valorAsig = cantAsig * costo;
             const difClass = diferencia < 0 ? 'negativa' : 'positiva';
             const difLabel = diferencia < 0 ? '▼' : '▲';
-
-            // Producto sin disponible y no seleccionado → mostrar deshabilitado
-            if (disponible <= 0 && !seleccionado) {
-                return `
-                <div class="sec-prod-item sec-prod-agotado">
-                    <div class="sec-prod-info">
-                        <span class="sec-prod-nombre">${escapeHtml(prod.nombre)}</span>
-                        <span class="sec-prod-dif ${difClass}">${difLabel} ${difAbs.toFixed(2)} ${unidad}</span>
-                    </div>
-                    <span class="sec-prod-asignado-badge">Ya asignado</span>
-                </div>`;
-            }
 
             const qtyHtml = seleccionado ? `
                 <div class="sec-prod-qty">
@@ -3847,8 +3873,8 @@ async function _guardarSec(sIdx) {
         });
         const data = await r.json();
         if (data.error) { showToast(data.error, 'error'); return; }
-        // Eliminar sección del panel (ya está guardada en asignacion_diferencias)
-        _seccionesLocal.splice(sIdx, 1);
+        // Marcar sección como guardada (queda visible como resumen de solo lectura)
+        sec.guardada = true;
         showToast(`Asignado: ${data.productos} producto(s) ÷ ${data.personas} persona(s)`, 'success');
         _reRenderSecciones();
         // Recargar asignaciones para reflejar los cambios en el panel de arriba
