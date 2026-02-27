@@ -1206,6 +1206,27 @@ function renderAsignacionesDiferencias(container, productosConDif) {
         `;
     }).join('');
 
+    // ---- Resumen por persona ----
+    const _resumenPersonas = {};
+    productosConDif.forEach(prod => {
+        const costoUnit = parseFloat(prod.costo_unitario) || 0;
+        const asigs = state.asignaciones[String(prod.id)] || [];
+        asigs.forEach(a => {
+            if (!_resumenPersonas[a.persona]) _resumenPersonas[a.persona] = 0;
+            _resumenPersonas[a.persona] += a.cantidad * costoUnit;
+        });
+    });
+    const _personasOrdenadas = Object.entries(_resumenPersonas).sort((a, b) => b[1] - a[1]);
+    const resumenPersonasHtml = _personasOrdenadas.length === 0 ? '' : `
+        <div class="asig-resumen-personas">
+            <div class="asig-resumen-title"><i class="fas fa-receipt"></i> Resumen por persona</div>
+            ${_personasOrdenadas.map(([nombre, total]) => `
+                <div class="asig-resumen-row">
+                    <span class="asig-resumen-nombre"><i class="fas fa-user"></i> ${escapeHtml(nombre)}</span>
+                    <span class="asig-resumen-monto">$${total.toFixed(2)}</span>
+                </div>`).join('')}
+        </div>`;
+
     container.innerHTML = `
         <div class="asig-container">
             <div class="asig-header">
@@ -1215,6 +1236,7 @@ function renderAsignacionesDiferencias(container, productosConDif) {
             </div>
             ${valorTotalGeneral > 0 ? `<div class="asig-valor-general"><i class="fas fa-dollar-sign"></i> Valor total diferencias: <strong>$${valorTotalGeneral.toFixed(2)}</strong></div>` : ''}
             ${productosHtml}
+            ${resumenPersonasHtml}
             <div class="asig-footer">
                 <button class="btn-guardar-todas-asig" onclick="guardarTodasAsignaciones()">
                     <i class="fas fa-save"></i> Guardar Todas las Asignaciones
@@ -3464,20 +3486,18 @@ async function cargarSecciones(fecha, local) {
 
 function renderPanelSecciones(container, productosConDif) {
     _prodConDifCache = productosConDif;
-    const badge = _seccionesLocal.length > 0 ? `<span class="sec-badge">${_seccionesLocal.length}</span>` : '';
-    const listaHtml = _seccionesLocal.length === 0
-        ? `<div class="sec-empty-state"><i class="fas fa-layer-group"></i><p>Crea secciones para asignar grupos de productos a personas y dividir automáticamente el valor</p></div>`
-        : _seccionesLocal.map((s, i) => _htmlSeccion(s, i)).join('');
+    // Siempre hay exactamente una sección activa
+    if (_seccionesLocal.length === 0) {
+        _seccionesLocal.push({ seccion_id: null, nombre: 'Sección 1', productos: [], personas: [] });
+    }
+    const listaHtml = _seccionesLocal.map((s, i) => _htmlSeccion(s, i)).join('');
 
     container.innerHTML = `
     <div class="sec-panel">
         <div class="sec-panel-header">
             <div class="sec-panel-title">
-                <i class="fas fa-layer-group"></i> Asignación por Sección ${badge}
+                <i class="fas fa-layer-group"></i> Asignación por Sección
             </div>
-            <button class="btn-secondary btn-sm" onclick="_crearSeccion()">
-                <i class="fas fa-plus"></i> Nueva Sección
-            </button>
         </div>
         <div id="sec-lista">${listaHtml}</div>
     </div>`;
@@ -3486,19 +3506,7 @@ function renderPanelSecciones(container, productosConDif) {
 function _reRenderSecciones() {
     const lista = document.getElementById('sec-lista');
     if (!lista) return;
-    if (_seccionesLocal.length === 0) {
-        lista.innerHTML = `<div class="sec-empty-state"><i class="fas fa-layer-group"></i><p>Crea secciones para asignar grupos de productos a personas y dividir automáticamente el valor</p></div>`;
-    } else {
-        lista.innerHTML = _seccionesLocal.map((s, i) => _htmlSeccion(s, i)).join('');
-    }
-    const badge = document.querySelector('.sec-panel-title .sec-badge');
-    if (badge) badge.textContent = _seccionesLocal.length;
-    else {
-        const title = document.querySelector('.sec-panel-title');
-        if (title && _seccionesLocal.length > 0) {
-            title.innerHTML = `<i class="fas fa-layer-group"></i> Asignación por Sección <span class="sec-badge">${_seccionesLocal.length}</span>`;
-        }
-    }
+    lista.innerHTML = _seccionesLocal.map((s, i) => _htmlSeccion(s, i)).join('');
 }
 
 function _crearSeccion() {
@@ -3517,34 +3525,6 @@ function _crearSeccion() {
 }
 
 function _htmlSeccion(sec, sIdx) {
-    // ---- Sección guardada: render de solo lectura ----
-    if (sec.guardada) {
-        const totalValor = sec.productos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-        const prodsHtml = sec.productos.map(p => `
-            <div class="sec-guardada-row">
-                <span class="sec-guardada-nombre">${escapeHtml(p.nombre)}</span>
-                <span class="sec-guardada-qty">${parseFloat(p.cantidad_asignada).toFixed(2)} ${p.unidad||''}</span>
-                <span class="sec-guardada-val">$${parseFloat(p.valor).toFixed(2)}</span>
-            </div>`).join('');
-        const chipsHtml = sec.personas.map(p => `
-            <div class="sec-persona-chip sec-chip-guardada"><i class="fas fa-user"></i><span>${escapeHtml(p)}</span></div>`).join('');
-        const divInfo = sec.personas.length > 0 && totalValor > 0
-            ? `<div class="sec-division-info"><i class="fas fa-divide"></i> $${totalValor.toFixed(2)} ÷ ${sec.personas.length} persona(s) = <strong>$${(totalValor/sec.personas.length).toFixed(2)}</strong> c/u</div>`
-            : '';
-        return `
-        <div class="sec-card sec-card-guardada" id="sec-card-${sIdx}">
-            <div class="sec-card-header">
-                <span class="sec-nombre-guardado">${escapeHtml(sec.nombre)}</span>
-                <span class="sec-saved-badge"><i class="fas fa-check-circle"></i> Guardado</span>
-            </div>
-            <div class="sec-guardada-body">
-                <div class="sec-guardada-prods">${prodsHtml}</div>
-                <div class="sec-personas-lista chips" style="margin-top:8px;">${chipsHtml}</div>
-                ${divInfo}
-            </div>
-        </div>`;
-    }
-
     const totalValor = sec.productos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
     const totalAsig  = sec.personas.reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
     const diff = totalValor - totalAsig;
@@ -3634,20 +3614,10 @@ function _htmlSeccion(sec, sIdx) {
             ${totalValor > 0 ? `· <strong>$${(totalValor / sec.personas.length).toFixed(2)}</strong> c/u` : ''}
         </div>` : '';
 
-    const savedBadge = '';
-
     return `
     <div class="sec-card" id="sec-card-${sIdx}">
         <div class="sec-card-header">
-            <input type="text" class="sec-nombre-input" value="${escapeHtml(sec.nombre)}"
-                   placeholder="Nombre de sección..."
-                   onchange="_actualizarNombreSec(${sIdx}, this.value)">
-            <div style="display:flex;align-items:center;gap:8px;">
-                ${savedBadge}
-                <button class="btn-eliminar-merma" onclick="_eliminarSec(${sIdx})" title="Eliminar sección">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
+            <span class="sec-nombre-input" style="pointer-events:none;">Asignación por Sección</span>
         </div>
 
         <div class="sec-two-col">
@@ -3873,8 +3843,9 @@ async function _guardarSec(sIdx) {
         });
         const data = await r.json();
         if (data.error) { showToast(data.error, 'error'); return; }
-        // Marcar sección como guardada (queda visible como resumen de solo lectura)
-        sec.guardada = true;
+        // Resetear la sección para continuar asignando
+        _seccionesLocal.splice(sIdx, 1);
+        _seccionesLocal.push({ seccion_id: null, nombre: 'Sección 1', productos: [], personas: [] });
         showToast(`Asignado: ${data.productos} producto(s) ÷ ${data.personas} persona(s)`, 'success');
         _reRenderSecciones();
         // Recargar asignaciones para reflejar los cambios en el panel de arriba
