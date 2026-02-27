@@ -3558,9 +3558,10 @@ function _htmlSeccion(sec, sIdx) {
 
             const qtyHtml = seleccionado ? `
                 <div class="sec-prod-qty">
-                    <input type="number" class="sec-qty-input" value="${cantAsig.toFixed(2)}"
-                           min="0" step="0.01" placeholder="Cant."
-                           oninput="_actualizarCantidadSec(${sIdx}, ${prod.id}, this.value)">
+                    <input type="number" class="sec-qty-input" id="sec-qty-${sIdx}-${prod.id}"
+                           value="${cantAsig.toFixed(2)}"
+                           min="0" max="${difAbs.toFixed(2)}" step="0.01" placeholder="Cant."
+                           oninput="_actualizarCantidadSec(${sIdx}, ${prod.id}, this.value, ${difAbs.toFixed(4)})">
                     <span class="sec-qty-unidad">${unidad}</span>
                 </div>` : '';
 
@@ -3726,12 +3727,20 @@ function _actualizarMontoSec(sIdx, pIdx, valor) {
 }
 
 // Actualiza cantidad asignada a un producto y recalcula valor (sin re-renderizar)
-function _actualizarCantidadSec(sIdx, conteoId, cantStr) {
+function _actualizarCantidadSec(sIdx, conteoId, cantStr, maxCant) {
     const sec = _seccionesLocal[sIdx];
     if (!sec) return;
     const prod = sec.productos.find(p => p.conteo_id === conteoId);
     if (!prod) return;
-    const cantidad = parseFloat(cantStr) || 0;
+    let cantidad = parseFloat(cantStr) || 0;
+    // Limitar al máximo del descuadre
+    if (maxCant !== undefined && cantidad > maxCant) {
+        cantidad = maxCant;
+        const inputEl = document.getElementById(`sec-qty-${sIdx}-${conteoId}`);
+        if (inputEl) inputEl.value = cantidad.toFixed(2);
+        showToast(`Máximo: ${maxCant.toFixed(2)} (diferencia del producto)`, 'error');
+    }
+    if (cantidad < 0) cantidad = 0;
     prod.cantidad_asignada = cantidad;
     prod.valor = cantidad * (prod.costo_unitario || 0);
     // Actualizar solo el span del valor de ese producto
