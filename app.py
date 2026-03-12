@@ -2008,9 +2008,9 @@ def registrar_baja():
             costo_total = cantidad * costo_unitario
             cur.execute("""
                 INSERT INTO inventario_diario.bajas_directas
-                    (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, motivo, documento, codigo_baja, costo_unitario, costo_total)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, motivo, documento or None, codigo_baja or None, costo_unitario, costo_total))
+                    (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, persona, motivo, documento, codigo_baja, costo_unitario, costo_total)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, '', motivo, documento or None, codigo_baja or None, costo_unitario, costo_total))
         for asig in asignaciones:
             persona = asig.get('persona', '').strip()
             monto = float(asig.get('monto') or 0)
