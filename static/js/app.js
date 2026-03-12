@@ -3904,7 +3904,11 @@ function renderTablaCorreccion(productos) {
         <tr id="corr-row-${p.id}">
             <td><span class="producto-codigo">${p.codigo}</span></td>
             <td>${p.nombre}</td>
-            <td style="text-align:center;">${p.cantidad ?? '-'}</td>
+            <td style="text-align:center;">
+                <input type="number" class="corr-input" id="corr-sis-${p.id}"
+                    value="${p.cantidad ?? ''}" min="0" step="0.01"
+                    style="width:80px;text-align:center;">
+            </td>
             <td style="text-align:center;">
                 <input type="number" class="corr-input" id="corr-c1-${p.id}"
                     value="${p.cantidad_contada ?? ''}" min="0" step="0.01"
@@ -3949,8 +3953,10 @@ function renderTablaCorreccion(productos) {
 }
 
 async function guardarCorreccionFila(id) {
+    const sisInput = document.getElementById(`corr-sis-${id}`);
     const c1Input = document.getElementById(`corr-c1-${id}`);
     const c2Input = document.getElementById(`corr-c2-${id}`);
+    const sis = sisInput.value !== '' ? parseFloat(sisInput.value) : null;
     const c1 = c1Input.value !== '' ? parseFloat(c1Input.value) : null;
     const c2 = c2Input.value !== '' ? parseFloat(c2Input.value) : null;
 
@@ -3958,7 +3964,7 @@ async function guardarCorreccionFila(id) {
         const res = await fetch('/api/admin/corregir-conteo', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, cantidad_contada: c1, cantidad_contada_2: c2 })
+            body: JSON.stringify({ id, cantidad: sis, cantidad_contada: c1, cantidad_contada_2: c2 })
         });
         const data = await res.json();
         if (data.success) {
@@ -3983,13 +3989,15 @@ async function guardarTodasCorrecciones() {
         const c1Input = document.getElementById(`corr-c1-${id}`);
         const c2Input = document.getElementById(`corr-c2-${id}`);
         if (!c1Input) continue;
+        const sisInput2 = document.getElementById(`corr-sis-${id}`);
         const c1 = c1Input.value !== '' ? parseFloat(c1Input.value) : null;
         const c2 = c2Input.value !== '' ? parseFloat(c2Input.value) : null;
+        const sis2 = sisInput2 && sisInput2.value !== '' ? parseFloat(sisInput2.value) : null;
         try {
             await fetch('/api/admin/corregir-conteo', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: parseInt(id), cantidad_contada: c1, cantidad_contada_2: c2 })
+                body: JSON.stringify({ id: parseInt(id), cantidad: sis2, cantidad_contada: c1, cantidad_contada_2: c2 })
             });
             guardados++;
         } catch(e) {}

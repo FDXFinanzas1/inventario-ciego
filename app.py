@@ -483,6 +483,7 @@ def corregir_conteo():
     id_producto = data.get('id')
     cantidad_contada = data.get('cantidad_contada')
     cantidad_contada_2 = data.get('cantidad_contada_2')
+    cantidad_sistema = data.get('cantidad')
 
     if id_producto is None:
         return jsonify({'error': 'id es requerido'}), 400
@@ -493,9 +494,11 @@ def corregir_conteo():
         cur = conn.cursor()
         cur.execute("""
             UPDATE inventario_diario.inventario_ciego_conteos
-            SET cantidad_contada = %s, cantidad_contada_2 = %s
+            SET cantidad = COALESCE(%s, cantidad),
+                cantidad_contada = %s,
+                cantidad_contada_2 = %s
             WHERE id = %s
-        """, (cantidad_contada, cantidad_contada_2, id_producto))
+        """, (cantidad_sistema, cantidad_contada, cantidad_contada_2, id_producto))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
