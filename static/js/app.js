@@ -2088,6 +2088,7 @@ let _histPivotModo = 'cantidad'; // 'cantidad' | 'valor'
 let _histPivotCache = null;
 let _histFiltroProducto = '';
 let _histFiltroPersona = '';
+let _histModoDescuento = 'neto'; // 'neto' | 'ajustado'
 
 function _setHistModo(modo) {
     _histPivotModo = modo;
@@ -2101,6 +2102,11 @@ function _setHistFiltro(q) {
 
 function _setHistFiltroPersona(p) {
     _histFiltroPersona = p;
+    if (_histPivotCache) _renderHistPivot(_histPivotCache);
+}
+
+function _setHistModoDescuento(m) {
+    _histModoDescuento = m;
     if (_histPivotCache) _renderHistPivot(_histPivotCache);
 }
 
@@ -2243,7 +2249,10 @@ function _renderHistPivot(data) {
         if (_histFiltroPersona) {
             const dp = prod.descuentosPorPersona && prod.descuentosPorPersona[_histFiltroPersona];
             if (dp) {
-                descCell = `<td style="text-align:right;padding:8px 10px;font-weight:700;color:#F43F5E;white-space:nowrap;">-$${dp.descuento.toFixed(2)}<br><span style="font-size:10px;font-weight:400;color:#94A3B8;">${dp.cantidad} ${escapeHtml(prod.unidad)}</span></td>`;
+                const esAjustado = _histModoDescuento === 'ajustado';
+                const monto = esAjustado ? dp.desc_ajustado : dp.desc_neto;
+                const cant  = esAjustado ? dp.cant_ajustada : dp.cant_neta;
+                descCell = `<td style="text-align:right;padding:8px 10px;font-weight:700;color:#F43F5E;white-space:nowrap;">-$${monto.toFixed(2)}<br><span style="font-size:10px;font-weight:400;color:#94A3B8;">${cant.toFixed(2)} ${escapeHtml(prod.unidad)}</span></td>`;
             } else {
                 descCell = `<td style="text-align:center;color:#CBD5E1;">—</td>`;
             }
@@ -2317,7 +2326,13 @@ function _renderHistPivot(data) {
                 <th class="bpiv-uni">Unid.</th>
                 ${fechas.map(f => `<th class="bpiv-fecha">${fmtF(f)}</th>`).join('')}
                 <th class="bpiv-tot">Total Dif.</th>
-                ${_histFiltroPersona ? `<th style="background:#F43F5E;color:white;text-align:right;padding:10px 12px;white-space:nowrap;font-size:11px;">Descuento<br>${escapeHtml(_histFiltroPersona)}</th>` : ''}
+                ${_histFiltroPersona ? `<th style="background:#F43F5E;color:white;text-align:right;padding:8px 12px;white-space:nowrap;font-size:11px;min-width:140px;">
+                    <div style="margin-bottom:5px;">Descuento · ${escapeHtml(_histFiltroPersona)}</div>
+                    <div style="display:flex;gap:3px;justify-content:flex-end;">
+                        <button onclick="_setHistModoDescuento('neto')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='neto'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='neto'?'#F43F5E':'white'};">Valor Neto</button>
+                        <button onclick="_setHistModoDescuento('ajustado')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='ajustado'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='ajustado'?'#F43F5E':'white'};">Valor Ajustado</button>
+                    </div>
+                </th>` : ''}
             </tr>
         </thead>
         <tbody>${rows}
@@ -2325,7 +2340,7 @@ function _renderHistPivot(data) {
                 <td colspan="3">TOTAL DIFERENCIA</td>
                 ${totFechasCells}
                 <td>${totGenTxt}</td>
-                ${_histFiltroPersona ? `<td style="text-align:right;padding:8px 10px;font-weight:700;color:#F43F5E;">-$${prods.reduce((s,p)=>{ const dp=p.descuentosPorPersona&&p.descuentosPorPersona[_histFiltroPersona]; return s+(dp?dp.descuento:0);},0).toFixed(2)}</td>` : ''}
+                ${_histFiltroPersona ? `<td style="text-align:right;padding:8px 10px;font-weight:700;color:#F43F5E;">-$${prods.reduce((s,p)=>{ const dp=p.descuentosPorPersona&&p.descuentosPorPersona[_histFiltroPersona]; return s+(dp?(_histModoDescuento==='ajustado'?dp.desc_ajustado:dp.desc_neto):0);},0).toFixed(2)}</td>` : ''}
             </tr>
         </tbody>
     </table>

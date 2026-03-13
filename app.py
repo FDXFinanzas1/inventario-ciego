@@ -648,7 +648,8 @@ def historico_pivot():
         # Obtener personas asignadas con cantidades y costos para el periodo/bodega
         cur.execute("""
             SELECT c.codigo, a.persona,
-                   SUM(ABS(a.cantidad)) AS cantidad_asignada,
+                   SUM(ABS(a.cantidad)) AS cantidad_neta,
+                   SUM(a.cantidad)      AS cantidad_ajustada,
                    MAX(c.costo_unitario) AS costo_unitario
             FROM inventario_diario.asignacion_diferencias a
             JOIN inventario_diario.inventario_ciego_conteos c ON a.conteo_id = c.id
@@ -659,17 +660,20 @@ def historico_pivot():
         asig_rows = cur.fetchall()
         release_db(conn)
 
-        # Mapa codigo -> {persona: {cantidad, descuento}}
+        # Mapa codigo -> {persona: {cant_neta, desc_neto, cant_ajustada, desc_ajustado}}
         personas_por_codigo = {}
         for ar in asig_rows:
             cod = ar['codigo']
             if cod not in personas_por_codigo:
                 personas_por_codigo[cod] = {}
             costo = float(ar['costo_unitario'] or 0)
-            cant = float(ar['cantidad_asignada'] or 0)
+            cant_neta = float(ar['cantidad_neta'] or 0)          # SUM(ABS) siempre positivo
+            cant_ajust = float(ar['cantidad_ajustada'] or 0)     # SUM real, puede ser +/-
             personas_por_codigo[cod][ar['persona']] = {
-                'cantidad': cant,
-                'descuento': round(cant * costo, 4)
+                'cant_neta':       cant_neta,
+                'desc_neto':       round(cant_neta * costo, 4),          # Valor Neto
+                'cant_ajustada':   abs(cant_ajust),                       # ABS del neto
+                'desc_ajustado':   round(abs(cant_ajust) * costo, 4)     # Valor Ajustado
             }
 
         productos = {}
