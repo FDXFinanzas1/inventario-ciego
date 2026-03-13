@@ -2223,11 +2223,9 @@ function _renderHistPivot(data) {
                 celdas += `<td class="hpiv-empty">—</td>`;
             } else {
                 const val = fmtDif(v.diferencia, v.costo_unitario);
-                // Cualquier diferencia es pérdida: suma el valor absoluto como negativo
-                const perdida = val === 0 ? 0 : -Math.abs(val);
-                totPorFecha[f] += perdida;
-                totProd += perdida;
-                totGeneral += perdida;
+                totPorFecha[f] += val;
+                totProd += val;
+                totGeneral += val;
                 if (val !== 0) tieneDif = true;
                 const cls = val < 0 ? 'hpiv-neg' : val > 0 ? 'hpiv-pos' : 'hpiv-cero';
                 const txt = esValor
@@ -2238,7 +2236,7 @@ function _renderHistPivot(data) {
         }
         const rowCls = tieneDif ? 'hpiv-row-dif' : '';
         const totTxt = esValor ? (totProd === 0 ? '✓' : `$${totProd.toFixed(2)}`) : (totProd === 0 ? '✓' : totProd.toFixed(2));
-        const totCls = totProd < 0 ? 'hpiv-neg' : 'hpiv-cero';
+        const totCls = totProd < 0 ? 'hpiv-neg' : totProd > 0 ? 'hpiv-pos' : 'hpiv-cero';
         rows += `<tr class="${rowCls}">
             <td><code class="hpiv-codigo">${escapeHtml(prod.codigo)}</code></td>
             <td class="hpiv-nombre">${escapeHtml(prod.nombre)}</td>
@@ -2248,10 +2246,10 @@ function _renderHistPivot(data) {
         </tr>`;
     }
 
-    // Fila total — siempre negativo (pérdida total de descuadre)
+    // Fila total
     const totFechasCells = fechas.map(f => {
         const v = totPorFecha[f];
-        const cls = v < 0 ? 'hpiv-neg' : '';
+        const cls = v < 0 ? 'hpiv-neg' : v > 0 ? 'hpiv-pos' : '';
         const txt = esValor ? (v === 0 ? '' : `$${v.toFixed(2)}`) : (v === 0 ? '' : v.toFixed(2));
         return `<td class="${cls}" style="font-weight:700;">${txt}</td>`;
     }).join('');
