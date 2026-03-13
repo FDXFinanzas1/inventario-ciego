@@ -2336,8 +2336,8 @@ function _renderHistPivot(data) {
                 ${_histFiltroPersona ? `<th style="background:#F43F5E;color:white;text-align:right;padding:8px 12px;white-space:nowrap;font-size:11px;min-width:140px;">
                     <div style="margin-bottom:5px;">Descuento · ${escapeHtml(_histFiltroPersona)}</div>
                     <div style="display:flex;gap:3px;justify-content:flex-end;">
-                        <button onclick="_setHistModoDescuento('neto')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='neto'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='neto'?'#F43F5E':'white'};">Valor Neto</button>
-                        <button onclick="_setHistModoDescuento('ajustado')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='ajustado'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='ajustado'?'#F43F5E':'white'};">Valor Ajustado</button>
+                        <button onclick="_setHistModoDescuento('neto')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='neto'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='neto'?'#F43F5E':'white'};">Valor Ajustado</button>
+                        <button onclick="_setHistModoDescuento('ajustado')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='ajustado'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='ajustado'?'#F43F5E':'white'};">Valor Neto</button>
                     </div>
                 </th>` : ''}
             </tr>
