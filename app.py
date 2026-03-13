@@ -648,7 +648,7 @@ def historico_pivot():
         # Obtener personas asignadas con cantidades y costos para el periodo/bodega
         cur.execute("""
             SELECT c.codigo, a.persona,
-                   SUM(a.cantidad) AS cantidad_asignada,
+                   SUM(ABS(a.cantidad)) AS cantidad_asignada,
                    MAX(c.costo_unitario) AS costo_unitario
             FROM inventario_diario.asignacion_diferencias a
             JOIN inventario_diario.inventario_ciego_conteos c ON a.conteo_id = c.id
