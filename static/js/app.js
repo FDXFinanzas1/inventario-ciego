@@ -2089,7 +2089,7 @@ let _histPivotCache = null;
 let _histFiltroProducto = '';
 let _histFiltroProductoRaw = '';
 let _histFiltroPersona = '';
-let _histModoDescuento = 'neto'; // 'neto' | 'ajustado'
+let _histModoDescuento = ''; // '' | 'neto' | 'ajustado'
 let _histFiltroTimer = null;
 
 function _setHistModo(modo) {
@@ -2226,8 +2226,10 @@ function _renderHistPivot(data) {
     let totGeneral = 0;
 
     let rows = '';
+    let totGeneralAbsSum = 0;
     for (const prod of prods) {
         let totProd = 0;
+        let totProdAbsSum = 0;
         let tieneDif = false;
         let celdas = '';
         for (const f of fechas) {
@@ -2238,6 +2240,7 @@ function _renderHistPivot(data) {
                 const val = fmtDif(v.diferencia, v.costo_unitario);
                 totPorFecha[f] += val;
                 totProd += val;
+                totProdAbsSum += Math.abs(val);
                 totGeneral += val;
                 if (val !== 0) tieneDif = true;
                 const cls = val < 0 ? 'hpiv-neg' : val > 0 ? 'hpiv-pos' : 'hpiv-cero';
@@ -2247,23 +2250,21 @@ function _renderHistPivot(data) {
                 celdas += `<td class="hpiv-val ${cls}">${txt}</td>`;
             }
         }
-        const rowCls = tieneDif ? 'hpiv-row-dif' : '';
-        const totTxt = esValor ? (totProd === 0 ? '✓' : `$${totProd.toFixed(2)}`) : (totProd === 0 ? '✓' : totProd.toFixed(2));
-        const totCls = totProd < 0 ? 'hpiv-neg' : totProd > 0 ? 'hpiv-pos' : 'hpiv-cero';
 
-        // Columna descuento de la persona seleccionada
-        let descCell = '';
-        if (_histFiltroPersona) {
-            const dp = prod.descuentosPorPersona && prod.descuentosPorPersona[_histFiltroPersona];
-            if (dp) {
-                const esAjustado = _histModoDescuento === 'ajustado';
-                const monto = esAjustado ? dp.desc_ajustado : dp.desc_neto;
-                const cant  = esAjustado ? dp.cant_ajustada : dp.cant_neta;
-                descCell = `<td style="text-align:right;padding:8px 10px;font-weight:700;color:#F43F5E;white-space:nowrap;">-$${monto.toFixed(2)}<br><span style="font-size:10px;font-weight:400;color:#94A3B8;">${cant.toFixed(2)} ${escapeHtml(prod.unidad)}</span></td>`;
-            } else {
-                descCell = `<td style="text-align:center;color:#CBD5E1;">—</td>`;
-            }
+        // Total Dif. según modo descuento (aplica a cantidad Y valor)
+        let totProdShow = totProd;
+        if (_histModoDescuento === 'ajustado') {
+            totProdShow = -totProdAbsSum;           // SUM(ABS) — cada diferencia suma al descuento
+        } else if (_histModoDescuento === 'neto') {
+            totProdShow = -Math.abs(totProd);       // ABS(SUM) — neta primero, luego descuenta
         }
+        totGeneralAbsSum += totProdAbsSum;
+
+        const rowCls = tieneDif ? 'hpiv-row-dif' : '';
+        const totTxt = esValor
+            ? (totProdShow === 0 ? '✓' : `$${totProdShow.toFixed(2)}`)
+            : (totProdShow === 0 ? '✓' : totProdShow.toFixed(2));
+        const totCls = totProdShow < 0 ? 'hpiv-neg' : totProdShow > 0 ? 'hpiv-pos' : 'hpiv-cero';
 
         rows += `<tr class="${rowCls}">
             <td><code class="hpiv-codigo">${escapeHtml(prod.codigo)}</code></td>
@@ -2271,7 +2272,6 @@ function _renderHistPivot(data) {
             <td class="hpiv-unid">${escapeHtml(prod.unidad)}</td>
             ${celdas}
             <td class="hpiv-rowtot ${totCls}">${totTxt}</td>
-            ${descCell}
         </tr>`;
     }
 
@@ -2282,7 +2282,15 @@ function _renderHistPivot(data) {
         const txt = esValor ? (v === 0 ? '' : `$${v.toFixed(2)}`) : (v === 0 ? '' : v.toFixed(2));
         return `<td class="${cls}" style="font-weight:700;">${txt}</td>`;
     }).join('');
-    const totGenTxt = esValor ? `$${totGeneral.toFixed(2)}` : totGeneral.toFixed(2);
+    let totGeneralShow = totGeneral;
+    if (_histModoDescuento === 'ajustado') {
+        totGeneralShow = -totGeneralAbsSum;
+    } else if (_histModoDescuento === 'neto') {
+        totGeneralShow = -Math.abs(totGeneral);
+    }
+    const totGenTxt = esValor
+        ? `$${totGeneralShow.toFixed(2)}`
+        : totGeneralShow.toFixed(2);
 
     const conDif = prods.filter(p => Object.values(p.porFecha).some(v => v.diferencia !== null && v.diferencia !== 0)).length;
 
@@ -2322,6 +2330,17 @@ function _renderHistPivot(data) {
                     <i class="fas fa-dollar-sign"></i> Valor
                 </button>
             </div>
+            <div class="baja-pivot-toggle">
+                <button class="baja-toggle-btn ${_histModoDescuento==='' ? 'active' : ''}" onclick="_setHistModoDescuento('')" title="Muestra diferencias reales con signo (+/-)">
+                    <i class="fas fa-arrows-alt-h"></i> Normal
+                </button>
+                <button class="baja-toggle-btn ${_histModoDescuento==='neto' ? 'active' : ''}" onclick="_setHistModoDescuento('neto')" title="ABS(SUM): neta primero, luego descuenta">
+                    Valor Neto
+                </button>
+                <button class="baja-toggle-btn ${_histModoDescuento==='ajustado' ? 'active' : ''}" onclick="_setHistModoDescuento('ajustado')" title="SUM(ABS): cada diferencia siempre suma al descuento">
+                    Valor Ajustado
+                </button>
+            </div>
         </div>
     </div>
     <div style="overflow-x:auto;">
@@ -2333,13 +2352,6 @@ function _renderHistPivot(data) {
                 <th class="bpiv-uni">Unid.</th>
                 ${fechas.map(f => `<th class="bpiv-fecha">${fmtF(f)}</th>`).join('')}
                 <th class="bpiv-tot">Total Dif.</th>
-                ${_histFiltroPersona ? `<th style="background:#F43F5E;color:white;text-align:right;padding:8px 12px;white-space:nowrap;font-size:11px;min-width:140px;">
-                    <div style="margin-bottom:5px;">Descuento · ${escapeHtml(_histFiltroPersona)}</div>
-                    <div style="display:flex;gap:3px;justify-content:flex-end;">
-                        <button onclick="_setHistModoDescuento('neto')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='neto'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='neto'?'#F43F5E':'white'};">Valor Ajustado</button>
-                        <button onclick="_setHistModoDescuento('ajustado')" style="padding:2px 8px;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:${_histModoDescuento==='ajustado'?'white':'rgba(255,255,255,0.25)'};color:${_histModoDescuento==='ajustado'?'#F43F5E':'white'};">Valor Neto</button>
-                    </div>
-                </th>` : ''}
             </tr>
         </thead>
         <tbody>${rows}
@@ -2347,7 +2359,6 @@ function _renderHistPivot(data) {
                 <td colspan="3">TOTAL DIFERENCIA</td>
                 ${totFechasCells}
                 <td>${totGenTxt}</td>
-                ${_histFiltroPersona ? `<td style="text-align:right;padding:8px 10px;font-weight:700;color:#F43F5E;">-$${prods.reduce((s,p)=>{ const dp=p.descuentosPorPersona&&p.descuentosPorPersona[_histFiltroPersona]; return s+(dp?(_histModoDescuento==='ajustado'?dp.desc_ajustado:dp.desc_neto):0);},0).toFixed(2)}</td>` : ''}
             </tr>
         </tbody>
     </table>
