@@ -633,18 +633,37 @@ def historico_pivot():
         cur = conn.cursor()
         cur.execute("""
             SELECT
-                codigo, nombre, unidad,
-                fecha,
-                cantidad AS stock,
-                COALESCE(cantidad_contada_2, cantidad_contada) AS contado,
-                COALESCE(cantidad_contada_2, cantidad_contada) - cantidad AS diferencia,
-                costo_unitario
-            FROM inventario_diario.inventario_ciego_conteos
-            WHERE fecha >= %s AND fecha <= %s AND local = %s
-            ORDER BY codigo, fecha
+                c.id, c.codigo, c.nombre, c.unidad,
+                c.fecha,
+                c.cantidad AS stock,
+                COALESCE(c.cantidad_contada_2, c.cantidad_contada) AS contado,
+                COALESCE(c.cantidad_contada_2, c.cantidad_contada) - c.cantidad AS diferencia,
+                c.costo_unitario
+            FROM inventario_diario.inventario_ciego_conteos c
+            WHERE c.fecha >= %s AND c.fecha <= %s AND c.local = %s
+            ORDER BY c.codigo, c.fecha
         """, (fecha_desde, fecha_hasta, local))
         rows = cur.fetchall()
+
+        # Obtener personas asignadas para el periodo/bodega
+        cur.execute("""
+            SELECT DISTINCT c.codigo, a.persona
+            FROM inventario_diario.asignacion_diferencias a
+            JOIN inventario_diario.inventario_ciego_conteos c ON a.conteo_id = c.id
+            WHERE c.fecha >= %s AND c.fecha <= %s AND c.local = %s
+              AND a.persona IS NOT NULL AND a.persona <> ''
+        """, (fecha_desde, fecha_hasta, local))
+        asig_rows = cur.fetchall()
         release_db(conn)
+
+        # Mapa codigo -> set de personas
+        personas_por_codigo = {}
+        for ar in asig_rows:
+            cod = ar['codigo']
+            if cod not in personas_por_codigo:
+                personas_por_codigo[cod] = set()
+            personas_por_codigo[cod].add(ar['persona'])
+
         productos = {}
         fechas = set()
         for r in rows:
@@ -656,7 +675,8 @@ def historico_pivot():
                     'codigo': codigo,
                     'nombre': r['nombre'],
                     'unidad': r['unidad'],
-                    'porFecha': {}
+                    'porFecha': {},
+                    'personas': sorted(personas_por_codigo.get(codigo, []))
                 }
             productos[codigo]['porFecha'][fecha] = {
                 'stock': float(r['stock'] or 0),
@@ -664,9 +684,14 @@ def historico_pivot():
                 'diferencia': float(r['diferencia']) if r['diferencia'] is not None else None,
                 'costo_unitario': float(r['costo_unitario'] or 0)
             }
+
+        # Lista de todas las personas únicas del periodo
+        todas_personas = sorted({p for ps in personas_por_codigo.values() for p in ps})
+
         return jsonify({
             'fechas': sorted(fechas),
-            'productos': list(productos.values())
+            'productos': list(productos.values()),
+            'personas': todas_personas
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -2087,6 +2087,7 @@ document.addEventListener('keydown', (e) => {
 let _histPivotModo = 'cantidad'; // 'cantidad' | 'valor'
 let _histPivotCache = null;
 let _histFiltroProducto = '';
+let _histFiltroPersona = '';
 
 function _setHistModo(modo) {
     _histPivotModo = modo;
@@ -2095,6 +2096,11 @@ function _setHistModo(modo) {
 
 function _setHistFiltro(q) {
     _histFiltroProducto = q.toLowerCase().trim();
+    if (_histPivotCache) _renderHistPivot(_histPivotCache);
+}
+
+function _setHistFiltroPersona(p) {
+    _histFiltroPersona = p;
     if (_histPivotCache) _renderHistPivot(_histPivotCache);
 }
 
@@ -2113,6 +2119,7 @@ async function buscarHistorico() {
 
     try {
         _histFiltroProducto = '';
+        _histFiltroPersona = '';
         if (bodega) {
             // ---- Vista PIVOTE por bodega ----
             const url = `${CONFIG.API_URL}/api/historico/pivot?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}&bodega=${bodega}`;
@@ -2179,12 +2186,17 @@ function _renderHistPivot(data) {
         return d;
     };
 
-    // Filtrar por producto si hay búsqueda
-    const productosFiltrados = _histFiltroProducto
-        ? productos.filter(p =>
+    // Filtrar por producto y/o persona
+    let productosFiltrados = productos;
+    if (_histFiltroProducto) {
+        productosFiltrados = productosFiltrados.filter(p =>
             p.codigo.toLowerCase().includes(_histFiltroProducto) ||
-            p.nombre.toLowerCase().includes(_histFiltroProducto))
-        : productos;
+            p.nombre.toLowerCase().includes(_histFiltroProducto));
+    }
+    if (_histFiltroPersona) {
+        productosFiltrados = productosFiltrados.filter(p =>
+            p.personas && p.personas.includes(_histFiltroPersona));
+    }
 
     // Ordenar: primero productos con al menos una diferencia
     const prods = [...productosFiltrados].sort((a, b) => {
@@ -2211,10 +2223,11 @@ function _renderHistPivot(data) {
                 celdas += `<td class="hpiv-empty">—</td>`;
             } else {
                 const val = fmtDif(v.diferencia, v.costo_unitario);
-                const abs = Math.abs(val);
-                totPorFecha[f] += val;
-                totProd += val;
-                totGeneral += val;
+                // Cualquier diferencia es pérdida: suma el valor absoluto como negativo
+                const perdida = val === 0 ? 0 : -Math.abs(val);
+                totPorFecha[f] += perdida;
+                totProd += perdida;
+                totGeneral += perdida;
                 if (val !== 0) tieneDif = true;
                 const cls = val < 0 ? 'hpiv-neg' : val > 0 ? 'hpiv-pos' : 'hpiv-cero';
                 const txt = esValor
@@ -2225,7 +2238,7 @@ function _renderHistPivot(data) {
         }
         const rowCls = tieneDif ? 'hpiv-row-dif' : '';
         const totTxt = esValor ? (totProd === 0 ? '✓' : `$${totProd.toFixed(2)}`) : (totProd === 0 ? '✓' : totProd.toFixed(2));
-        const totCls = totProd < 0 ? 'hpiv-neg' : totProd > 0 ? 'hpiv-pos' : 'hpiv-cero';
+        const totCls = totProd < 0 ? 'hpiv-neg' : 'hpiv-cero';
         rows += `<tr class="${rowCls}">
             <td><code class="hpiv-codigo">${escapeHtml(prod.codigo)}</code></td>
             <td class="hpiv-nombre">${escapeHtml(prod.nombre)}</td>
@@ -2235,10 +2248,10 @@ function _renderHistPivot(data) {
         </tr>`;
     }
 
-    // Fila total
+    // Fila total — siempre negativo (pérdida total de descuadre)
     const totFechasCells = fechas.map(f => {
         const v = totPorFecha[f];
-        const cls = v < 0 ? 'hpiv-neg' : v > 0 ? 'hpiv-pos' : '';
+        const cls = v < 0 ? 'hpiv-neg' : '';
         const txt = esValor ? (v === 0 ? '' : `$${v.toFixed(2)}`) : (v === 0 ? '' : v.toFixed(2));
         return `<td class="${cls}" style="font-weight:700;">${txt}</td>`;
     }).join('');
@@ -2246,19 +2259,34 @@ function _renderHistPivot(data) {
 
     const conDif = prods.filter(p => Object.values(p.porFecha).some(v => v.diferencia !== null && v.diferencia !== 0)).length;
 
+    const personasDisponibles = data.personas || [];
+    const hayFiltro = _histFiltroProducto || _histFiltroPersona;
+    const personaOpts = personasDisponibles.map(p =>
+        `<option value="${escapeHtml(p)}" ${_histFiltroPersona === p ? 'selected' : ''}>${escapeHtml(p)}</option>`
+    ).join('');
+
     container.innerHTML = `
     <div style="grid-column:1/-1;">
     <div class="baja-pivot-toolbar" style="flex-wrap:wrap;gap:10px;">
-        <span class="baja-pivot-info">${prods.length}${_histFiltroProducto ? ' (filtrado)' : ''} de ${productos.length} productos · ${fechas.length} fecha(s) · <span style="color:#D97706;font-weight:600;">${conDif} con diferencia</span></span>
+        <span class="baja-pivot-info">${prods.length}${hayFiltro ? ' (filtrado)' : ''} de ${productos.length} productos · ${fechas.length} fecha(s) · <span style="color:#D97706;font-weight:600;">${conDif} con diferencia</span></span>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <div style="position:relative;display:flex;align-items:center;">
                 <i class="fas fa-search" style="position:absolute;left:10px;color:#94A3B8;font-size:12px;pointer-events:none;"></i>
                 <input type="text" id="hist-buscar-producto"
-                    placeholder="Buscar producto o código..."
+                    placeholder="Buscar producto..."
                     value="${escapeHtml(_histFiltroProducto)}"
                     oninput="_setHistFiltro(this.value)"
-                    style="height:32px;padding:0 10px 0 30px;border:1px solid rgba(203,213,225,0.7);border-radius:8px;font-size:13px;font-family:inherit;background:#F8FAFC;color:#123450;outline:none;width:200px;">
+                    style="height:32px;padding:0 10px 0 30px;border:1px solid rgba(203,213,225,0.7);border-radius:8px;font-size:13px;font-family:inherit;background:#F8FAFC;color:#123450;outline:none;width:170px;">
             </div>
+            ${personasDisponibles.length ? `
+            <div style="position:relative;display:flex;align-items:center;">
+                <i class="fas fa-user" style="position:absolute;left:10px;color:#94A3B8;font-size:12px;pointer-events:none;"></i>
+                <select onchange="_setHistFiltroPersona(this.value)"
+                    style="height:32px;padding:0 10px 0 30px;border:1px solid rgba(203,213,225,0.7);border-radius:8px;font-size:13px;font-family:inherit;background:#F8FAFC;color:#123450;outline:none;cursor:pointer;min-width:160px;appearance:none;">
+                    <option value="">Todas las personas</option>
+                    ${personaOpts}
+                </select>
+            </div>` : ''}
             <div class="baja-pivot-toggle">
                 <button class="baja-toggle-btn ${!esValor ? 'active' : ''}" onclick="_setHistModo('cantidad')">
                     <i class="fas fa-cubes"></i> Cantidad
