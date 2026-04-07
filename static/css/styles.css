@@ -5111,16 +5111,23 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     margin-right: 4px;
     color: #1E3A5F;
 }
-.cuadrar-field select {
+.cuadrar-field select,
+.cuadrar-field input[type="date"] {
     height: 42px;
     padding: 0 12px;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
     background: #fff;
     font-size: 14px;
+    font-family: inherit;
     color: #1e293b;
     cursor: pointer;
     transition: border-color 0.15s, box-shadow 0.15s;
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+}
+.cuadrar-field select {
     appearance: none;
     -webkit-appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5'><polyline points='6 9 12 15 18 9'/></svg>");
@@ -5128,10 +5135,21 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     background-position: right 12px center;
     padding-right: 34px;
 }
-.cuadrar-field select:hover {
+.cuadrar-field input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.55;
+    padding: 4px;
+    transition: opacity 0.15s;
+}
+.cuadrar-field input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+.cuadrar-field select:hover,
+.cuadrar-field input[type="date"]:hover {
     border-color: #94a3b8;
 }
-.cuadrar-field select:focus {
+.cuadrar-field select:focus,
+.cuadrar-field input[type="date"]:focus {
     outline: none;
     border-color: #1E3A5F;
     box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
