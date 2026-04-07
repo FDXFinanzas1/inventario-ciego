@@ -3071,7 +3071,7 @@ def cruce_op_fechas():
         cur.execute(f"""
             SELECT fecha, COUNT(*) AS productos
             FROM {tablas[bodega]}
-            WHERE fecha >= CURRENT_DATE - INTERVAL '90 days'
+            WHERE fecha IS NOT NULL
             GROUP BY fecha ORDER BY fecha DESC
         """)
         rows = cur.fetchall()
