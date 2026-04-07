@@ -13,7 +13,10 @@ const CONFIG = {
         'portugal': { password: '4963', nombre: 'Portugal', rol: 'empleado', bodega: 'portugal' },
         'santocachonreal': { password: '5074', nombre: 'Santo Cachon Real', rol: 'empleado', bodega: 'santo_cachon_real' },
         'santocachonportugal': { password: '6185', nombre: 'Santo Cachon Portugal', rol: 'empleado', bodega: 'santo_cachon_portugal' },
-        'simonbolon': { password: '7296', nombre: 'Simon Bolon', rol: 'empleado', bodega: 'simon_bolon' }
+        'simonbolon': { password: '7296', nombre: 'Simon Bolon', rol: 'empleado', bodega: 'simon_bolon' },
+        'bodegaprincipal': { password: '8307', nombre: 'Bodega Principal', rol: 'empleado', bodega: 'bodega_principal' },
+        'materiaprima': { password: '9418', nombre: 'Materia Prima', rol: 'empleado', bodega: 'materia_prima' },
+        'planta': { password: '1529', nombre: 'Planta de Produccion', rol: 'empleado', bodega: 'planta' }
     },
 
     // Bodegas
@@ -23,6 +26,9 @@ const CONFIG = {
         { id: 'portugal', nombre: 'Portugal' },
         { id: 'santo_cachon_real', nombre: 'Santo Cachon Real' },
         { id: 'santo_cachon_portugal', nombre: 'Santo Cachon Portugal' },
-        { id: 'simon_bolon', nombre: 'Simon Bolon' }
+        { id: 'simon_bolon', nombre: 'Simon Bolon' },
+        { id: 'bodega_principal', nombre: 'Bodega Principal' },
+        { id: 'materia_prima', nombre: 'Materia Prima' },
+        { id: 'planta', nombre: 'Planta de Produccion' }
     ]
 };

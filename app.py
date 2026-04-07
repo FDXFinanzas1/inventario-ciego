@@ -248,7 +248,10 @@ BODEGAS_NOMBRES = {
     'portugal': 'Portugal',
     'santo_cachon_real': 'Santo Cachon Real',
     'santo_cachon_portugal': 'Santo Cachon Portugal',
-    'simon_bolon': 'Simon Bolon'
+    'simon_bolon': 'Simon Bolon',
+    'bodega_principal': 'Bodega Principal',
+    'materia_prima': 'Materia Prima',
+    'planta': 'Planta de Produccion'
 }
 
 # Mapeo de usuario a bodega asignada (None = acceso a todas)
@@ -261,7 +264,10 @@ USUARIO_BODEGA = {
     'portugal': 'portugal',
     'santocachonreal': 'santo_cachon_real',
     'santocachonportugal': 'santo_cachon_portugal',
-    'simonbolon': 'simon_bolon'
+    'simonbolon': 'simon_bolon',
+    'bodegaprincipal': 'bodega_principal',
+    'materiaprima': 'materia_prima',
+    'planta': 'planta'
 }
 
 # ==================== RUTAS ESTATICAS ====================
@@ -369,7 +375,10 @@ def get_bodegas():
         {'id': 'portugal', 'nombre': 'Portugal'},
         {'id': 'santo_cachon_real', 'nombre': 'Santo Cachon Real'},
         {'id': 'santo_cachon_portugal', 'nombre': 'Santo Cachon Portugal'},
-        {'id': 'simon_bolon', 'nombre': 'Simon Bolon'}
+        {'id': 'simon_bolon', 'nombre': 'Simon Bolon'},
+        {'id': 'bodega_principal', 'nombre': 'Bodega Principal'},
+        {'id': 'materia_prima', 'nombre': 'Materia Prima'},
+        {'id': 'planta', 'nombre': 'Planta de Produccion'}
     ]
     return jsonify(bodegas)
 
