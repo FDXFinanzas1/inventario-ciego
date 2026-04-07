@@ -2740,20 +2740,25 @@ function renderCruceEjecuciones() {
         const estadoIcon = e.estado === 'completado' ? 'fa-check-circle' :
                            e.estado === 'error' ? 'fa-times-circle' : 'fa-clock';
         return `
-            <div class="cruce-ejec-card" onclick="verCruceDetalle(${e.id})">
-                <div class="cruce-ejec-info">
-                    <div class="cruce-ejec-bodega">${e.bodega_nombre}</div>
-                    <div class="cruce-ejec-fecha">${e.fecha_toma}</div>
-                    <div class="cruce-ejec-estado ${estadoClass}">
-                        <i class="fas ${estadoIcon}"></i> ${e.estado}
+            <div class="cruce-ejec-card" style="position:relative;">
+                <div onclick="verCruceDetalle(${e.id})" style="cursor:pointer;">
+                    <div class="cruce-ejec-info">
+                        <div class="cruce-ejec-bodega">${e.bodega_nombre}</div>
+                        <div class="cruce-ejec-fecha">${e.fecha_toma}</div>
+                        <div class="cruce-ejec-estado ${estadoClass}">
+                            <i class="fas ${estadoIcon}"></i> ${e.estado}
+                        </div>
                     </div>
+                    <div class="cruce-ejec-stats">
+                        <div class="cruce-stat"><span class="cruce-stat-val">${e.total_productos_toma || 0}</span><span class="cruce-stat-lbl">Toma</span></div>
+                        <div class="cruce-stat"><span class="cruce-stat-val">${e.total_cruzados || 0}</span><span class="cruce-stat-lbl">Cruzados</span></div>
+                        <div class="cruce-stat cruce-stat-dif"><span class="cruce-stat-val">${e.total_con_diferencia || 0}</span><span class="cruce-stat-lbl">Diferencias</span></div>
+                    </div>
+                    ${e.error_msg ? `<div class="cruce-ejec-error">${e.error_msg}</div>` : ''}
                 </div>
-                <div class="cruce-ejec-stats">
-                    <div class="cruce-stat"><span class="cruce-stat-val">${e.total_productos_toma || 0}</span><span class="cruce-stat-lbl">Toma</span></div>
-                    <div class="cruce-stat"><span class="cruce-stat-val">${e.total_cruzados || 0}</span><span class="cruce-stat-lbl">Cruzados</span></div>
-                    <div class="cruce-stat cruce-stat-dif"><span class="cruce-stat-val">${e.total_con_diferencia || 0}</span><span class="cruce-stat-lbl">Diferencias</span></div>
-                </div>
-                ${e.error_msg ? `<div class="cruce-ejec-error">${e.error_msg}</div>` : ''}
+                <button class="btn-cruce-eliminar" title="Eliminar esta ejecucion" onclick="event.stopPropagation(); cruceEliminar(${e.id}, '${e.bodega_nombre}', '${e.fecha_toma}')">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         `;
     }).join('');
@@ -5068,4 +5073,15 @@ function cuadrarPollEstado(ejecId) {
             console.error('poll error:', e);
         }
     }, 5000);
+}
+
+async function cruceEliminar(ejecId, bodega, fecha) {
+    if (!confirm(`Eliminar la ejecucion de "${bodega}" del ${fecha}?`)) return;
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/cruce-op/eliminar/${ejecId}`, {method: 'DELETE'});
+        if (!r.ok) throw new Error('Error del servidor');
+        cargarCruceOperativo();
+    } catch (e) {
+        alert('Error eliminando: ' + e.message);
+    }
 }

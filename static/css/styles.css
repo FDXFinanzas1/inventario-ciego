@@ -5240,3 +5240,27 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     .cuadrar-field { width: 100%; }
     .btn-cuadrar { width: 100%; justify-content: center; }
 }
+
+.btn-cruce-eliminar {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    font-size: 13px;
+}
+.btn-cruce-eliminar:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+    transform: scale(1.05);
+}

@@ -2803,7 +2803,9 @@ WORKER_TOKEN = os.environ.get('CRUCE_WORKER_TOKEN', 'worker-foodix-2026-7K3xR9pL
 @app.route('/api/cruce-op/solicitar', methods=['POST'])
 def cruce_op_solicitar():
     """Llamado desde el panel cuando el usuario presiona CUADRAR.
-    Crea una tarea pendiente que el worker tomara."""
+    Crea una tarea pendiente que el worker tomara.
+    Si ya existe una en estado terminal (completado/error), la resetea.
+    Si ya hay una pendiente o en proceso, devuelve esa misma."""
     data = request.json or {}
     bodega = data.get('bodega')
     fecha_toma = data.get('fecha_toma')
@@ -2818,16 +2820,34 @@ def cruce_op_solicitar():
     try:
         conn = get_db()
         cur = conn.cursor()
-        # Si ya hay una tarea pendiente o en proceso para misma bodega+fecha, devolver esa
+        # Ver si ya existe alguna ejecucion para esta bodega+fecha
         cur.execute("""
             SELECT id, estado FROM inventario_diario.cruce_operativo_ejecuciones
-            WHERE bodega = %s AND fecha_toma = %s AND estado IN ('pendiente', 'en_proceso')
-            ORDER BY solicitado_at DESC LIMIT 1
+            WHERE bodega = %s AND fecha_toma = %s
+            ORDER BY COALESCE(solicitado_at, timestamp_deteccion) DESC LIMIT 1
         """, (bodega, fecha_toma))
         existente = cur.fetchone()
-        if existente:
+
+        if existente and existente['estado'] in ('pendiente', 'en_proceso'):
+            # Ya se esta procesando, devolver la misma
             return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
 
+        if existente:
+            # Existe pero esta en estado terminal (completado/error): resetear
+            cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (existente['id'],))
+            cur.execute("""
+                UPDATE inventario_diario.cruce_operativo_ejecuciones
+                SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
+                    worker_lock=NULL, error_msg=NULL,
+                    timestamp_descarga=NULL, timestamp_cruce=NULL,
+                    total_productos_toma=NULL, total_productos_contifico=NULL,
+                    total_cruzados=NULL, total_con_diferencia=NULL, valor_total_dif=NULL
+                WHERE id = %s
+            """, (usuario, existente['id']))
+            conn.commit()
+            return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
+
+        # No existe: crear nueva
         cur.execute("""
             INSERT INTO inventario_diario.cruce_operativo_ejecuciones
             (bodega, fecha_toma, estado, solicitado_por, solicitado_at)
@@ -2839,6 +2859,27 @@ def cruce_op_solicitar():
         return jsonify({'id': new_id, 'estado': 'pendiente'})
     except Exception as e:
         print(f"Error en /api/cruce-op/solicitar: {e}")
+        if conn: conn.rollback()
+        return jsonify({'error': 'Error interno del servidor', 'detalle': str(e)[:200]}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
+@app.route('/api/cruce-op/eliminar/<int:ejec_id>', methods=['DELETE'])
+def cruce_op_eliminar(ejec_id):
+    """Elimina una ejecucion y su detalle. Llamado desde el panel."""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (ejec_id,))
+        cur.execute("DELETE FROM inventario_diario.cruce_operativo_ejecuciones WHERE id = %s", (ejec_id,))
+        conn.commit()
+        return jsonify({'ok': True, 'eliminados': cur.rowcount})
+    except Exception as e:
+        print(f"Error en /api/cruce-op/eliminar: {e}")
+        if conn: conn.rollback()
         return jsonify({'error': 'Error interno del servidor'}), 500
     finally:
         if conn:
