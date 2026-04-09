@@ -1658,8 +1658,40 @@ def _obtener_personas():
         return _cargar_personas_airtable()
     except Exception as e:
         print(f'Error cargando personas de Airtable: {e}')
-        # Devolver cache viejo si existe
         return _personas_cache['datos'] if _personas_cache['datos'] else []
+
+
+_personas_correo_cache = {'datos': [], 'timestamp': 0}
+
+def _obtener_personas_con_correo():
+    """Obtiene personas activas con nombre y correo desde AirTable."""
+    import urllib.request, json as json_lib
+    ahora = _time.time()
+    if _personas_correo_cache['datos'] and (ahora - _personas_correo_cache['timestamp']) < PERSONAS_CACHE_TTL:
+        return _personas_correo_cache['datos']
+    todos = []
+    offset = None
+    while True:
+        url = f'https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?pageSize=100'
+        url += '&fields%5B%5D=nombre&fields%5B%5D=estado&fields%5B%5D=correo'
+        if offset:
+            url += f'&offset={offset}'
+        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {_get_airtable_token()}'})
+        data = json_lib.loads(urllib.request.urlopen(req, timeout=10).read())
+        for r in data.get('records', []):
+            f = r.get('fields', {})
+            if f.get('estado') == 'Activo':
+                nombre = f.get('nombre', '')
+                correo = f.get('correo', '')
+                if nombre:
+                    todos.append({'nombre': nombre, 'correo': correo or ''})
+        offset = data.get('offset')
+        if not offset:
+            break
+    todos.sort(key=lambda x: x['nombre'])
+    _personas_correo_cache['datos'] = todos
+    _personas_correo_cache['timestamp'] = _time.time()
+    return todos
 
 
 @app.route('/api/personas', methods=['GET'])
@@ -3212,9 +3244,9 @@ def _require_admin(data):
 
 @app.route('/api/admin/personas', methods=['GET'])
 def admin_listar_personas():
-    """Devuelve lista de personas activas desde AirTable para el selector de nombre."""
+    """Devuelve lista de personas activas desde AirTable con nombre y correo."""
     try:
-        personas = _obtener_personas()
+        personas = _obtener_personas_con_correo()
         return jsonify(personas)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

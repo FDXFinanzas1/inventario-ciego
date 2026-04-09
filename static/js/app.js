@@ -5134,19 +5134,35 @@ const BODEGAS_NOMBRES = {
 };
 let _usuariosCache = [];
 let _personasLoaded = false;
+let _personasData = [];
 
 async function _cargarPersonasDatalist() {
     if (_personasLoaded) return;
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/admin/personas`);
         if (!res.ok) return;
-        const personas = await res.json();
+        _personasData = await res.json();
         const dl = document.getElementById('uform-personas-list');
         if (dl) {
-            dl.innerHTML = personas.map(p => `<option value="${escapeHtml(p)}">`).join('');
+            dl.innerHTML = _personasData.map(p => `<option value="${escapeHtml(p.nombre)}">`).join('');
             _personasLoaded = true;
         }
+        // Listener para auto-llenar email al seleccionar nombre
+        const inputNombre = document.getElementById('uform-nombre');
+        if (inputNombre && !inputNombre._listenerAdded) {
+            inputNombre.addEventListener('change', _autoLlenarEmail);
+            inputNombre.addEventListener('input', _autoLlenarEmail);
+            inputNombre._listenerAdded = true;
+        }
     } catch (e) { console.log('Error cargando personas:', e); }
+}
+
+function _autoLlenarEmail() {
+    const nombre = document.getElementById('uform-nombre').value.trim();
+    const persona = _personasData.find(p => p.nombre === nombre);
+    if (persona && persona.correo) {
+        document.getElementById('uform-email').value = persona.correo;
+    }
 }
 
 async function usuariosCargar() {
