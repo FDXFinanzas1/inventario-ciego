@@ -296,6 +296,33 @@ def index():
     html = html.replace('</head>', inject + '</head>')
     return html
 
+@app.route('/establecer-clave')
+def pagina_establecer_clave():
+    """Pagina publica donde el usuario establece su contrasena."""
+    token = request.args.get('token', '')
+    if not token:
+        return PAGINA_TOKEN_INVALIDO, 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""SELECT username, nombre, invite_token_expires FROM inventario_diario.usuarios
+                       WHERE invite_token = %s AND activo = TRUE""", (token,))
+        user = cur.fetchone()
+        if not user:
+            return PAGINA_TOKEN_INVALIDO, 404
+        if user['invite_token_expires'] and user['invite_token_expires'] < datetime.utcnow():
+            return PAGINA_TOKEN_INVALIDO, 410
+        html = PAGINA_ESTABLECER_CLAVE.replace('{{ nombre }}', user['nombre']).replace('{{ username }}', user['username']).replace('{{ token }}', token)
+        return html
+    except Exception as e:
+        print(f"Error en /establecer-clave: {e}")
+        return PAGINA_TOKEN_INVALIDO, 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
 @app.route('/<path:path>')
 def static_files(path):
     return send_from_directory('static', path)
@@ -3501,35 +3528,6 @@ PAGINA_TOKEN_INVALIDO = """
 </body>
 </html>
 """
-
-
-@app.route('/establecer-clave')
-def pagina_establecer_clave():
-    """Pagina publica donde el usuario establece su contrasena."""
-    token = request.args.get('token', '')
-    if not token:
-        return PAGINA_TOKEN_INVALIDO, 400
-
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""SELECT username, nombre, invite_token_expires FROM inventario_diario.usuarios
-                       WHERE invite_token = %s AND activo = TRUE""", (token,))
-        user = cur.fetchone()
-        if not user:
-            return PAGINA_TOKEN_INVALIDO, 404
-        if user['invite_token_expires'] and user['invite_token_expires'] < datetime.utcnow():
-            return PAGINA_TOKEN_INVALIDO, 410
-
-        html = PAGINA_ESTABLECER_CLAVE.replace('{{ nombre }}', user['nombre']).replace('{{ username }}', user['username']).replace('{{ token }}', token)
-        return html
-    except Exception as e:
-        print(f"Error en /establecer-clave: {e}")
-        return PAGINA_TOKEN_INVALIDO, 500
-    finally:
-        if conn:
-            release_db(conn)
 
 
 @app.route('/api/establecer-clave', methods=['POST'])
