@@ -852,8 +852,9 @@
                                 <input type="text" id="uform-username" class="input-merma" placeholder="nombre de usuario">
                             </div>
                             <div class="form-group">
-                                <label>Nombre completo</label>
-                                <input type="text" id="uform-nombre" class="input-merma" placeholder="Nombre visible">
+                                <label>Nombre <small style="font-weight:400;text-transform:none;">(de AirTable o escribir)</small></label>
+                                <input type="text" id="uform-nombre" class="input-merma" list="uform-personas-list" placeholder="Buscar o escribir nombre..." autocomplete="off">
+                                <datalist id="uform-personas-list"></datalist>
                             </div>
                             <div class="form-group">
                                 <label>Contrasena</label>

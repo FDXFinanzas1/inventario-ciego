@@ -3126,6 +3126,16 @@ def _require_admin(data):
         raise
 
 
+@app.route('/api/admin/personas', methods=['GET'])
+def admin_listar_personas():
+    """Devuelve lista de personas activas desde AirTable para el selector de nombre."""
+    try:
+        personas = _obtener_personas()
+        return jsonify(personas)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/admin/usuarios', methods=['GET'])
 def admin_listar_usuarios():
     conn = None
@@ -3197,16 +3207,31 @@ def admin_editar_usuario(uid):
         return err, code
     try:
         cur = conn.cursor()
+        username = data.get('username', '').strip().lower()
         nombre = data.get('nombre', '').strip()
         password = data.get('password', '').strip()
         rol = data.get('rol', 'empleado')
         activo = data.get('activo', True)
         bodegas = data.get('bodegas', [])
 
-        if password:
+        # Verificar que el nuevo username no exista en otro usuario
+        if username:
+            cur.execute("SELECT id FROM inventario_diario.usuarios WHERE username = %s AND id != %s", (username, uid))
+            if cur.fetchone():
+                return jsonify({'error': f'El usuario "{username}" ya existe'}), 409
+
+        if password and username:
+            cur.execute("""UPDATE inventario_diario.usuarios
+                           SET username = %s, nombre = %s, password = %s, rol = %s, activo = %s
+                           WHERE id = %s""", (username, nombre, password, rol, activo, uid))
+        elif password:
             cur.execute("""UPDATE inventario_diario.usuarios
                            SET nombre = %s, password = %s, rol = %s, activo = %s
                            WHERE id = %s""", (nombre, password, rol, activo, uid))
+        elif username:
+            cur.execute("""UPDATE inventario_diario.usuarios
+                           SET username = %s, nombre = %s, rol = %s, activo = %s
+                           WHERE id = %s""", (username, nombre, rol, activo, uid))
         else:
             cur.execute("""UPDATE inventario_diario.usuarios
                            SET nombre = %s, rol = %s, activo = %s

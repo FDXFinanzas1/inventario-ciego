@@ -5133,6 +5133,21 @@ const BODEGAS_NOMBRES = {
     'materia_prima': 'Materia Prima', 'planta': 'Planta Produccion'
 };
 let _usuariosCache = [];
+let _personasLoaded = false;
+
+async function _cargarPersonasDatalist() {
+    if (_personasLoaded) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/personas`);
+        if (!res.ok) return;
+        const personas = await res.json();
+        const dl = document.getElementById('uform-personas-list');
+        if (dl) {
+            dl.innerHTML = personas.map(p => `<option value="${escapeHtml(p)}">`).join('');
+            _personasLoaded = true;
+        }
+    } catch (e) { console.log('Error cargando personas:', e); }
+}
 
 async function usuariosCargar() {
     try {
@@ -5169,6 +5184,7 @@ function usuariosRenderTabla() {
 }
 
 function usuariosMostrarFormNuevo() {
+    _cargarPersonasDatalist();
     document.getElementById('usuarios-form').classList.remove('hidden');
     document.getElementById('usuarios-form-titulo').textContent = 'Nuevo Usuario';
     document.getElementById('uform-id').value = '';
@@ -5185,11 +5201,12 @@ function usuariosMostrarFormNuevo() {
 function usuariosEditar(id) {
     const u = _usuariosCache.find(x => x.id === id);
     if (!u) return;
+    _cargarPersonasDatalist();
     document.getElementById('usuarios-form').classList.remove('hidden');
     document.getElementById('usuarios-form-titulo').textContent = `Editar: ${u.username}`;
     document.getElementById('uform-id').value = u.id;
     document.getElementById('uform-username').value = u.username;
-    document.getElementById('uform-username').disabled = true;
+    document.getElementById('uform-username').disabled = false;
     document.getElementById('uform-nombre').value = u.nombre;
     document.getElementById('uform-password').value = '';
     document.getElementById('uform-password').placeholder = 'Dejar vacio para no cambiar';
