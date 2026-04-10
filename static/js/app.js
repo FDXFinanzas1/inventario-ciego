@@ -1000,6 +1000,7 @@ function renderProductosInventario() {
 }
 
 async function guardarConteoDirecto(input) {
+    if (!_puede('conteo', 'editar')) { showToast('No tienes permiso para contar', 'error'); return; }
     const id = parseInt(input.dataset.id);
     const codigo = input.dataset.codigo;
     const conteoNum = parseInt(input.dataset.conteo) || 1;
@@ -1053,6 +1054,7 @@ async function guardarConteoDirecto(input) {
 // ==================== GUARDAR OBSERVACION ====================
 
 async function guardarTodasObservaciones() {
+    if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso para editar observaciones', 'error'); return; }
     const inputs = document.querySelectorAll('.input-observacion');
     if (inputs.length === 0) return;
 
@@ -1102,6 +1104,7 @@ async function guardarTodasObservaciones() {
 }
 
 async function guardarObservacion(input) {
+    if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso', 'error'); return; }
     const id = parseInt(input.dataset.id);
     const observaciones = input.value.trim();
 
@@ -1929,6 +1932,7 @@ async function guardarTodosLosConteos() {
 }
 
 async function guardarConteoEtapa() {
+    if (!_puede('conteo', 'editar')) { showToast('No tienes permiso para contar', 'error'); return; }
     // Primero guardar todos los inputs pendientes (importante para celulares)
     await guardarTodosLosConteos();
 
@@ -3435,6 +3439,7 @@ function _eliminarItemBaja(idx) {
 }
 
 function registrarBaja() {
+    if (!_puede('bajas', 'editar')) { showToast('No tienes permiso para registrar bajas', 'error'); return; }
     const fecha = document.getElementById('baja-fecha').value;
     const local = document.getElementById('baja-bodega').value;
     const motivo = document.getElementById('baja-motivo').value.trim();
@@ -3463,6 +3468,7 @@ function registrarBaja() {
 }
 
 function eliminarBajaGrupo(baja_grupo) {
+    if (!_puede('bajas', 'eliminar')) { showToast('No tienes permiso para eliminar bajas', 'error'); return; }
     if (!confirm('¿Eliminar esta baja completa? Se eliminarán los productos y las asignaciones.')) return;
     fetch(`${CONFIG.API_URL}/api/bajas/grupo/${baja_grupo}`, {method: 'DELETE'})
         .then(r => r.json())
@@ -4206,6 +4212,7 @@ function corrMarcarCambio(id) {
 }
 
 async function guardarCorreccionFila(id) {
+    if (!_puede('correccion', 'editar')) { showToast('No tienes permiso para corregir conteos', 'error'); return; }
     const sisInput = document.getElementById(`corr-sis-${id}`);
     const c1Input  = document.getElementById(`corr-c1-${id}`);
     const c2Input  = document.getElementById(`corr-c2-${id}`);
@@ -4943,6 +4950,7 @@ async function semanalGuardarTodo() {
 }
 
 async function semanalCerrar() {
+    if (!_puede('semanal', 'editar')) { showToast('No tienes permiso para cerrar semanas', 'error'); return; }
     if (!_semanalSemanaActual) return;
     if (!confirm(`Cerrar la semana del ${_semanalFormatFechaLarga(_semanalSemanaActual.fecha_inicio)} al ${_semanalFormatFechaLarga(_semanalSemanaActual.fecha_fin)}?\n\nUna vez cerrada no se podran editar las asignaciones.`)) {
         return;
@@ -4967,6 +4975,7 @@ async function semanalCerrar() {
 }
 
 async function semanalReabrir() {
+    if (!_puede('semanal', 'eliminar')) { showToast('No tienes permiso para reabrir semanas', 'error'); return; }
     if (!_semanalSemanaActual) return;
     if (!confirm('Reabrir esta semana? Las asignaciones podran editarse nuevamente.')) return;
 
@@ -5075,6 +5084,7 @@ function cuadrarActualizarCorteDefault() {
 }
 
 async function cuadrarSolicitar() {
+    if (!_puede('cruce', 'editar')) { showToast('No tienes permiso para ejecutar cruces', 'error'); return; }
     const bodega = document.getElementById('cuadrar-bodega').value;
     const fecha = document.getElementById('cuadrar-fecha').value;
     const fechaCorte = document.getElementById('cuadrar-fecha-corte').value || fecha;
@@ -5179,6 +5189,7 @@ function cuadrarPollEstado(ejecId) {
 }
 
 async function cruceEliminar(ejecId, bodega, fecha) {
+    if (!_puede('cruce', 'eliminar')) { showToast('No tienes permiso para eliminar cruces', 'error'); return; }
     if (!confirm(`Eliminar la ejecucion de "${bodega}" del ${fecha}?`)) return;
     try {
         const r = await fetch(`${CONFIG.API_URL}/api/cruce-op/eliminar/${ejecId}`, {method: 'DELETE'});
@@ -5317,6 +5328,7 @@ function usuariosCancelarForm() {
 }
 
 async function usuariosGuardar() {
+    if (!_puede('usuarios', 'editar')) { showToast('No tienes permiso para gestionar usuarios', 'error'); return; }
     const id = document.getElementById('uform-id').value;
     const username = document.getElementById('uform-username').value.trim().toLowerCase();
     const nombre = document.getElementById('uform-nombre').value.trim();
@@ -5358,6 +5370,7 @@ async function usuariosGuardar() {
 }
 
 async function usuariosEliminar(id, username) {
+    if (!_puede('usuarios', 'eliminar')) { showToast('No tienes permiso para eliminar usuarios', 'error'); return; }
     if (!confirm(`Eliminar usuario "${username}"? Esta accion no se puede deshacer.`)) return;
     let adminPass = localStorage.getItem('admin_pass');
     if (!adminPass) {
