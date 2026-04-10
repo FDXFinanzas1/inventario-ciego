@@ -75,7 +75,11 @@ async function cargarDashboard() {
         return;
     }
 
-    const producto = document.getElementById('dash-producto') ? document.getElementById('dash-producto').value.trim() : '';
+    const productoSel = document.getElementById('dash-producto');
+    const producto = productoSel ? productoSel.value : '';
+
+    // Cargar lista de productos disponibles
+    _dashCargarProductos(fechaDesde, fechaHasta, bodega);
 
     try {
         const bodegaParam = bodega ? `&bodega=${bodega}` : '';
@@ -5604,6 +5608,24 @@ async function rolGuardar(rol) {
 }
 
 // Helper global: verificar si el usuario puede hacer una accion en un modulo
+let _dashProductosCargados = '';
+async function _dashCargarProductos(fechaDesde, fechaHasta, bodega) {
+    const sel = document.getElementById('dash-producto');
+    if (!sel) return;
+    const key = `${fechaDesde}|${fechaHasta}|${bodega}`;
+    if (_dashProductosCargados === key) return; // ya cargado para estos filtros
+    const valorActual = sel.value;
+    try {
+        const bodParam = bodega ? `&bodega=${bodega}` : '';
+        const res = await fetch(`${CONFIG.API_URL}/api/reportes/productos-disponibles?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodParam}`);
+        if (!res.ok) return;
+        const prods = await res.json();
+        sel.innerHTML = '<option value="">Todos los productos</option>' +
+            prods.map(p => `<option value="${escapeHtml(p.codigo)}" ${p.codigo === valorActual ? 'selected' : ''}>${escapeHtml(p.codigo)} - ${escapeHtml(p.nombre)}</option>`).join('');
+        _dashProductosCargados = key;
+    } catch (e) { console.log('Error cargando productos dash:', e); }
+}
+
 async function _refrescarPermisos() {
     if (!state.user) return;
     try {

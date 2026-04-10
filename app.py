@@ -1102,6 +1102,33 @@ def reporte_tendencias():
             release_db(conn)
 
 
+@app.route('/api/reportes/productos-disponibles', methods=['GET'])
+def productos_disponibles():
+    """Devuelve productos distintos para un rango de fechas y bodega."""
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    bodega = request.args.get('bodega')
+    if not fecha_desde or not fecha_hasta:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        query = "SELECT DISTINCT codigo, nombre FROM inventario_diario.inventario_ciego_conteos WHERE fecha >= %s AND fecha <= %s"
+        params = [fecha_desde, fecha_hasta]
+        if bodega:
+            query += " AND local = %s"
+            params.append(bodega)
+        query += " ORDER BY nombre"
+        cur.execute(query, params)
+        return jsonify([{'codigo': r['codigo'], 'nombre': r['nombre']} for r in cur.fetchall()])
+    except Exception as e:
+        return jsonify([])
+    finally:
+        if conn:
+            release_db(conn)
+
+
 @app.route('/api/reportes/dashboard', methods=['GET'])
 def reporte_dashboard():
     fecha_desde = request.args.get('fecha_desde')
@@ -1124,9 +1151,8 @@ def reporte_dashboard():
             filtro_extra += " AND local = %s"
             params.append(bodega)
         if producto:
-            filtro_extra += " AND (codigo ILIKE %s OR nombre ILIKE %s)"
-            params.append(f'%{producto}%')
-            params.append(f'%{producto}%')
+            filtro_extra += " AND codigo = %s"
+            params.append(producto)
 
         # Resumen por bodega
         query = """
