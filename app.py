@@ -243,35 +243,24 @@ def init_db():
                 ADD COLUMN IF NOT EXISTS modificado_por VARCHAR(50),
                 ADD COLUMN IF NOT EXISTS modificado_at TIMESTAMP
         """)
-        # ---- Tabla de permisos por modulo ----
+        # ---- Tabla de permisos por ROL ----
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.usuario_modulos (
+            CREATE TABLE IF NOT EXISTS inventario_diario.rol_modulos (
                 id SERIAL PRIMARY KEY,
-                usuario_id INTEGER NOT NULL REFERENCES inventario_diario.usuarios(id) ON DELETE CASCADE,
+                rol VARCHAR(20) NOT NULL,
                 modulo VARCHAR(30) NOT NULL,
-                UNIQUE(usuario_id, modulo)
+                UNIQUE(rol, modulo)
             )
         """)
-        # Seed: usuarios sin modulos asignados reciben modulos por defecto
-        cur.execute("""
-            INSERT INTO inventario_diario.usuario_modulos (usuario_id, modulo)
-            SELECT u.id, m.modulo
-            FROM inventario_diario.usuarios u
-            CROSS JOIN (VALUES ('conteo'),('observaciones'),('historico'),('reportes'),('dashboard')) AS m(modulo)
-            WHERE u.rol NOT IN ('admin')
-            AND NOT EXISTS (SELECT 1 FROM inventario_diario.usuario_modulos um WHERE um.usuario_id = u.id)
-            ON CONFLICT DO NOTHING
-        """)
-        cur.execute("""
-            INSERT INTO inventario_diario.usuario_modulos (usuario_id, modulo)
-            SELECT u.id, m.modulo
-            FROM inventario_diario.usuarios u
-            CROSS JOIN (VALUES ('conteo'),('observaciones'),('historico'),('reportes'),('dashboard'),
-                               ('cruce'),('bajas'),('semanal'),('correccion'),('panel'),('usuarios')) AS m(modulo)
-            WHERE u.rol = 'admin'
-            AND NOT EXISTS (SELECT 1 FROM inventario_diario.usuario_modulos um WHERE um.usuario_id = u.id)
-            ON CONFLICT DO NOTHING
-        """)
+        # Seed defaults si la tabla esta vacia
+        cur.execute("SELECT COUNT(*) as cnt FROM inventario_diario.rol_modulos")
+        if cur.fetchone()['cnt'] == 0:
+            for mod in ['conteo','observaciones','historico','dashboard']:
+                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo) VALUES ('empleado', %s) ON CONFLICT DO NOTHING", (mod,))
+            for mod in ['conteo','observaciones','historico','dashboard','cruce','bajas','semanal','correccion']:
+                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo) VALUES ('supervisor', %s) ON CONFLICT DO NOTHING", (mod,))
+            for mod in ['conteo','observaciones','historico','dashboard','cruce','bajas','semanal','correccion','usuarios']:
+                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo) VALUES ('admin', %s) ON CONFLICT DO NOTHING", (mod,))
         conn.commit()
         print('init_db: tablas OK')
     except Exception as e:
@@ -399,18 +388,12 @@ def login():
             # Compatibilidad: si tiene 1 sola bodega de ventas, enviar como string
             bodegas_ventas = [b for b in bodegas_user if b not in ('bodega_principal', 'materia_prima', 'planta')]
             bodega_asignada = bodegas_ventas[0] if len(bodegas_ventas) == 1 else None
-            # Cargar modulos permitidos
-            ALL_MODULOS = ['conteo','observaciones','historico','reportes','dashboard','cruce','bajas','semanal','correccion','panel','usuarios']
-            if user['rol'] == 'admin':
-                modulos_user = ALL_MODULOS
-            else:
-                cur.execute("""
-                    SELECT um.modulo FROM inventario_diario.usuario_modulos um
-                    JOIN inventario_diario.usuarios u ON u.id = um.usuario_id
-                    WHERE u.username = %s
-                    ORDER BY um.modulo
-                """, (user['username'],))
-                modulos_user = [r['modulo'] for r in cur.fetchall()]
+            # Cargar modulos permitidos segun el ROL
+            cur.execute("""
+                SELECT modulo FROM inventario_diario.rol_modulos
+                WHERE rol = %s ORDER BY modulo
+            """, (user['rol'],))
+            modulos_user = [r['modulo'] for r in cur.fetchall()]
             return jsonify({
                 'success': True,
                 'user': {
@@ -3360,11 +3343,9 @@ def admin_listar_usuarios():
         cur = conn.cursor()
         cur.execute("""
             SELECT u.id, u.username, u.nombre, u.rol, u.activo, u.created_at, u.email,
-                   COALESCE(array_agg(DISTINCT ub.bodega ORDER BY ub.bodega) FILTER (WHERE ub.bodega IS NOT NULL), '{}') AS bodegas,
-                   COALESCE(array_agg(DISTINCT um.modulo ORDER BY um.modulo) FILTER (WHERE um.modulo IS NOT NULL), '{}') AS modulos
+                   COALESCE(array_agg(ub.bodega ORDER BY ub.bodega) FILTER (WHERE ub.bodega IS NOT NULL), '{}') AS bodegas
             FROM inventario_diario.usuarios u
             LEFT JOIN inventario_diario.usuario_bodegas ub ON ub.usuario_id = u.id
-            LEFT JOIN inventario_diario.usuario_modulos um ON um.usuario_id = u.id
             GROUP BY u.id, u.username, u.nombre, u.rol, u.activo, u.created_at, u.email
             ORDER BY u.id
         """)
@@ -3418,11 +3399,6 @@ def admin_crear_usuario():
         for bod in bodegas:
             cur.execute("""INSERT INTO inventario_diario.usuario_bodegas (usuario_id, bodega)
                            VALUES (%s, %s) ON CONFLICT DO NOTHING""", (new_id, bod))
-
-        modulos = data.get('modulos', [])
-        for mod in modulos:
-            cur.execute("""INSERT INTO inventario_diario.usuario_modulos (usuario_id, modulo)
-                           VALUES (%s, %s) ON CONFLICT DO NOTHING""", (new_id, mod))
 
         conn.commit()
 
@@ -3483,12 +3459,6 @@ def admin_editar_usuario(uid):
             cur.execute("""INSERT INTO inventario_diario.usuario_bodegas (usuario_id, bodega)
                            VALUES (%s, %s) ON CONFLICT DO NOTHING""", (uid, bod))
 
-        cur.execute("DELETE FROM inventario_diario.usuario_modulos WHERE usuario_id = %s", (uid,))
-        modulos = data.get('modulos', [])
-        for mod in modulos:
-            cur.execute("""INSERT INTO inventario_diario.usuario_modulos (usuario_id, modulo)
-                           VALUES (%s, %s) ON CONFLICT DO NOTHING""", (uid, mod))
-
         conn.commit()
         return jsonify({'success': True, 'message': 'Usuario actualizado'})
     except Exception as e:
@@ -3514,6 +3484,51 @@ def admin_eliminar_usuario(uid):
         cur.execute("DELETE FROM inventario_diario.usuarios WHERE id = %s", (uid,))
         conn.commit()
         return jsonify({'success': True, 'message': 'Usuario eliminado'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        release_db(conn)
+
+
+@app.route('/api/admin/roles', methods=['GET'])
+def admin_listar_roles():
+    """Devuelve los modulos asignados a cada rol."""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT rol, modulo FROM inventario_diario.rol_modulos ORDER BY rol, modulo")
+        rows = cur.fetchall()
+        result = {}
+        for r in rows:
+            result.setdefault(r['rol'], []).append(r['modulo'])
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
+@app.route('/api/admin/roles', methods=['PUT'])
+def admin_guardar_roles():
+    """Guarda los modulos de un rol. Body: { admin_user, admin_pass, rol, modulos: [...] }"""
+    data = request.json
+    conn, err, code = _require_admin(data)
+    if err:
+        return err, code
+    try:
+        cur = conn.cursor()
+        rol = data.get('rol', '').strip().lower()
+        modulos = data.get('modulos', [])
+        if rol not in ('empleado', 'supervisor', 'admin'):
+            return jsonify({'error': 'Rol invalido'}), 400
+        cur.execute("DELETE FROM inventario_diario.rol_modulos WHERE rol = %s", (rol,))
+        for mod in modulos:
+            cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo) VALUES (%s, %s) ON CONFLICT DO NOTHING", (rol, mod))
+        conn.commit()
+        return jsonify({'success': True, 'message': f'Permisos de {rol} actualizados'})
     except Exception as e:
         conn.rollback()
         return jsonify({'error': str(e)}), 500

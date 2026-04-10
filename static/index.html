@@ -936,25 +936,6 @@
                                 <button class="btn-sm btn-secondary" onclick="usuariosSelOperativas()">Solo Operativas</button>
                             </div>
                         </div>
-                        <div class="usuarios-bodegas-section">
-                            <label><i class="fas fa-th-large"></i> Acceso a Modulos</label>
-                            <div class="usuarios-bodegas-grid" id="uform-modulos">
-                                <label class="cbx-bodega"><input type="checkbox" value="conteo"> Conteo</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="observaciones"> Observaciones</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="historico"> Historico</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="dashboard"> Dashboard</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="cruce"> Cruce Operativo</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="bajas"> Bajas</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="semanal"> Semanal</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="correccion"> Corregir Conteos</label>
-                                <label class="cbx-bodega"><input type="checkbox" value="usuarios"> Admin Usuarios</label>
-                            </div>
-                            <div class="usuarios-bodegas-btns">
-                                <button class="btn-sm btn-secondary" onclick="modulosSelTodos()">Todos</button>
-                                <button class="btn-sm btn-secondary" onclick="modulosSelNinguno()">Ninguno</button>
-                                <button class="btn-sm btn-secondary" onclick="modulosSelBasicos()">Basicos</button>
-                            </div>
-                        </div>
                         <div class="usuarios-form-actions">
                             <button class="btn-primary" onclick="usuariosGuardar()">
                                 <i class="fas fa-save"></i> Guardar
@@ -975,12 +956,25 @@
                                         <th>Rol</th>
                                         <th>Estado</th>
                                         <th>Bodegas</th>
-                                        <th>Modulos</th>
                                         <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="usuarios-tbody"></tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- Configuracion de permisos por rol -->
+                    <div class="panel-section" style="margin-top:16px;">
+                        <div class="panel-section-header">
+                            <span class="panel-section-icon panel-icon-blue"><i class="fas fa-shield-alt"></i></span>
+                            <div>
+                                <h3>Permisos por Rol</h3>
+                                <p style="font-size:12px;color:#64748B;margin:0;">Define que modulos puede ver cada rol</p>
+                            </div>
+                        </div>
+                        <div id="roles-config" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;padding:16px;">
+                            <!-- Se llena con JS -->
                         </div>
                     </div>
                 </div>

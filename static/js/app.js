@@ -612,9 +612,10 @@ function cambiarVista(viewName) {
         semanalInit();
     }
 
-    // Auto-cargar usuarios al entrar
+    // Auto-cargar usuarios y roles al entrar
     if (viewName === 'usuarios') {
         usuariosCargar();
+        rolesCargar();
     }
 
     // Auto-cargar dashboard al entrar
@@ -5235,32 +5236,30 @@ async function usuariosCargar() {
 }
 
 const MODULOS_NOMBRES = {
-    'conteo': 'Conteo', 'observaciones': 'Observ.', 'historico': 'Historico',
-    'reportes': 'Reportes', 'dashboard': 'Dashboard', 'cruce': 'Cruce Op.',
-    'bajas': 'Bajas', 'semanal': 'Semanal', 'correccion': 'Corregir',
-    'panel': 'Panel', 'usuarios': 'Usuarios'
+    'conteo': 'Conteo', 'observaciones': 'Observaciones', 'historico': 'Historico',
+    'dashboard': 'Dashboard', 'cruce': 'Cruce Operativo',
+    'bajas': 'Bajas', 'semanal': 'Semanal', 'correccion': 'Corregir Conteos',
+    'usuarios': 'Admin Usuarios'
 };
+const MODULOS_LISTA = ['conteo','observaciones','historico','dashboard','cruce','bajas','semanal','correccion','usuarios'];
 
 function usuariosRenderTabla() {
     const tbody = document.getElementById('usuarios-tbody');
     if (!tbody) return;
     if (!_usuariosCache.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748B;">Sin usuarios</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748B;">Sin usuarios</td></tr>';
         return;
     }
     tbody.innerHTML = _usuariosCache.map(u => {
         const rolClass = u.rol === 'admin' ? 'badge-admin' : u.rol === 'supervisor' ? 'badge-supervisor' : 'badge-empleado';
         const estadoClass = u.activo ? 'badge-activo' : 'badge-inactivo';
         const bodegas = (u.bodegas || []).map(b => `<span class="badge-bodega">${BODEGAS_NOMBRES[b] || b}</span>`).join(' ');
-        const modulos = u.rol === 'admin' ? '<span style="color:#22C55E;font-weight:600;">Todos</span>' :
-            (u.modulos || []).map(m => `<span class="badge-bodega">${MODULOS_NOMBRES[m] || m}</span>`).join(' ') || '<span style="color:#475569;">Ninguno</span>';
         return `<tr>
             <td><strong>${escapeHtml(u.username)}</strong></td>
             <td>${escapeHtml(u.nombre)}</td>
             <td><span class="badge ${rolClass}">${u.rol}</span></td>
             <td><span class="badge ${estadoClass}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
             <td>${bodegas || '<span style="color:#475569;">Sin acceso</span>'}</td>
-            <td>${modulos}</td>
             <td class="usuarios-acciones">
                 <button class="btn-editar-user" onclick="usuariosEditar(${u.id})" title="Editar"><i class="fas fa-pen"></i></button>
                 ${u.email ? `<button class="btn-reenviar-user" onclick="usuariosReenviar(${u.id}, '${escapeHtml(u.email)}')" title="Reenviar invitacion"><i class="fas fa-envelope"></i></button>` : ''}
@@ -5285,7 +5284,6 @@ function usuariosMostrarFormNuevo() {
     document.getElementById('uform-activo').value = 'true';
     document.getElementById('uform-enviar-invitacion').checked = false;
     usuariosSelNinguna();
-    modulosSelBasicos();
 }
 
 function usuariosEditar(id) {
@@ -5307,9 +5305,6 @@ function usuariosEditar(id) {
     document.querySelectorAll('#uform-bodegas input[type="checkbox"]').forEach(cb => {
         cb.checked = (u.bodegas || []).includes(cb.value);
     });
-    document.querySelectorAll('#uform-modulos input[type="checkbox"]').forEach(cb => {
-        cb.checked = (u.modulos || []).includes(cb.value);
-    });
     document.getElementById('usuarios-form').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -5326,8 +5321,6 @@ async function usuariosGuardar() {
     const activo = document.getElementById('uform-activo').value === 'true';
     const bodegas = [];
     document.querySelectorAll('#uform-bodegas input[type="checkbox"]:checked').forEach(cb => bodegas.push(cb.value));
-    const modulos = [];
-    document.querySelectorAll('#uform-modulos input[type="checkbox"]:checked').forEach(cb => modulos.push(cb.value));
 
     const email = document.getElementById('uform-email').value.trim();
     const enviar_invitacion = document.getElementById('uform-enviar-invitacion').checked;
@@ -5343,7 +5336,7 @@ async function usuariosGuardar() {
         localStorage.setItem('admin_pass', adminPass);
     }
 
-    const body = { username, nombre, password, rol, activo, bodegas, modulos, email, enviar_invitacion, admin_user: state.user.username, admin_pass: adminPass };
+    const body = { username, nombre, password, rol, activo, bodegas, email, enviar_invitacion, admin_user: state.user.username, admin_pass: adminPass };
     try {
         const url = id ? `${CONFIG.API_URL}/api/admin/usuarios/${id}` : `${CONFIG.API_URL}/api/admin/usuarios`;
         const method = id ? 'PUT' : 'POST';
@@ -5409,13 +5402,65 @@ function usuariosSelOperativas() {
     document.querySelectorAll('#uform-bodegas input[type="checkbox"]').forEach(cb => cb.checked = o.includes(cb.value));
 }
 
-function modulosSelTodos() {
-    document.querySelectorAll('#uform-modulos input[type="checkbox"]').forEach(cb => cb.checked = true);
+// ==================== CONFIGURACION PERMISOS POR ROL ====================
+
+async function rolesCargar() {
+    const container = document.getElementById('roles-config');
+    if (!container) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/roles`);
+        if (!res.ok) return;
+        const rolesData = await res.json();
+        const roles = ['empleado', 'supervisor', 'admin'];
+        const rolIcons = { empleado: 'fa-user', supervisor: 'fa-user-tie', admin: 'fa-user-shield' };
+        const rolColors = { empleado: '#3B82F6', supervisor: '#D97706', admin: '#059669' };
+
+        container.innerHTML = roles.map(rol => {
+            const mods = rolesData[rol] || [];
+            const checks = MODULOS_LISTA.map(m =>
+                `<label class="cbx-bodega" style="font-size:12px;">
+                    <input type="checkbox" value="${m}" ${mods.includes(m) ? 'checked' : ''}> ${MODULOS_NOMBRES[m] || m}
+                </label>`
+            ).join('');
+            return `<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                    <i class="fas ${rolIcons[rol]}" style="color:${rolColors[rol]};font-size:18px;"></i>
+                    <strong style="color:#123450;text-transform:capitalize;font-size:15px;">${rol}</strong>
+                </div>
+                <div class="usuarios-bodegas-grid" id="rol-mods-${rol}" style="gap:6px;">
+                    ${checks}
+                </div>
+                <button class="btn-sm btn-primary" onclick="rolGuardar('${rol}')" style="margin-top:12px;width:100%;">
+                    <i class="fas fa-save"></i> Guardar ${rol}
+                </button>
+            </div>`;
+        }).join('');
+    } catch (e) { console.log('Error cargando roles:', e); }
 }
-function modulosSelNinguno() {
-    document.querySelectorAll('#uform-modulos input[type="checkbox"]').forEach(cb => cb.checked = false);
-}
-function modulosSelBasicos() {
-    const basicos = ['conteo','observaciones','historico','dashboard'];
-    document.querySelectorAll('#uform-modulos input[type="checkbox"]').forEach(cb => cb.checked = basicos.includes(cb.value));
+
+async function rolGuardar(rol) {
+    const modulos = [];
+    document.querySelectorAll(`#rol-mods-${rol} input[type="checkbox"]:checked`).forEach(cb => modulos.push(cb.value));
+
+    let adminPass = localStorage.getItem('admin_pass');
+    if (!adminPass) {
+        adminPass = prompt('Contrasena de admin:');
+        if (!adminPass) return;
+        localStorage.setItem('admin_pass', adminPass);
+    }
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/roles`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rol, modulos, admin_user: state.user.username, admin_pass: adminPass })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            showToast(data.message, 'success');
+        } else {
+            if (res.status === 403) localStorage.removeItem('admin_pass');
+            showToast(data.error || 'Error', 'error');
+        }
+    } catch (e) { showToast('Error de conexion', 'error'); }
 }
