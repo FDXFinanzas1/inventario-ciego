@@ -2369,23 +2369,23 @@ main {
 }
 
 .dashboard-stat-card .stat-icon.icon-productos {
-    background: #EFF6FF;
-    color: #2563EB;
+    background: rgba(18, 52, 80, 0.1);
+    color: #123450;
 }
 
 .dashboard-stat-card .stat-icon.icon-contados {
-    background: #ECFDF5;
-    color: #059669;
+    background: rgba(26, 188, 156, 0.1);
+    color: #1abc9c;
 }
 
 .dashboard-stat-card .stat-icon.icon-diferencias {
-    background: #FEF2F2;
-    color: #B91C1C;
+    background: rgba(18, 52, 80, 0.08);
+    color: #1a4a6e;
 }
 
 .dashboard-stat-card .stat-icon.icon-desviacion {
-    background: #FEF3C7;
-    color: #D97706;
+    background: rgba(26, 188, 156, 0.08);
+    color: #16a085;
 }
 
 .dashboard-stat-card .stat-info {

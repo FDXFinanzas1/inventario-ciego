@@ -3,30 +3,44 @@
 // Rastrear instancias de graficos para destruirlos antes de recrear
 let chartInstances = {};
 
-// Paleta de 6 colores corporativos (1 por bodega)
+// Paleta FOODIX — derivada del primary #123450
 const CHART_COLORS = [
-    '#1E3A5F',  // Azul corporativo
-    '#B91C1C',  // Rojo corporativo
-    '#059669',  // Verde
-    '#D97706',  // Naranja
-    '#7C3AED',  // Purpura
-    '#0891B2'   // Cyan
+    '#123450',  // Primary
+    '#1a4a6e',  // Primary light
+    '#1e6091',  // Azul medio
+    '#2980b9',  // Azul cielo
+    '#3498db',  // Azul claro
+    '#1abc9c',  // Verde azulado
+    '#16a085',  // Verde oscuro
+    '#2c3e50',  // Gris azulado
+    '#34495e',  // Gris medio
 ];
 
 const CHART_COLORS_ALPHA = [
-    'rgba(30, 58, 95, 0.7)',
-    'rgba(185, 28, 28, 0.7)',
-    'rgba(5, 150, 105, 0.7)',
-    'rgba(217, 119, 6, 0.7)',
-    'rgba(124, 58, 237, 0.7)',
-    'rgba(8, 145, 178, 0.7)'
+    'rgba(18, 52, 80, 0.75)',
+    'rgba(26, 74, 110, 0.75)',
+    'rgba(30, 96, 145, 0.75)',
+    'rgba(41, 128, 185, 0.75)',
+    'rgba(52, 152, 219, 0.75)',
+    'rgba(26, 188, 156, 0.75)',
+    'rgba(22, 160, 133, 0.75)',
+    'rgba(44, 62, 80, 0.75)',
+    'rgba(52, 73, 94, 0.75)',
 ];
+
+// Colores semanticos para faltantes/sobrantes (dentro de la paleta)
+const COLOR_FALTANTE = '#123450';
+const COLOR_FALTANTE_ALPHA = 'rgba(18, 52, 80, 0.8)';
+const COLOR_SOBRANTE = '#1abc9c';
+const COLOR_SOBRANTE_ALPHA = 'rgba(26, 188, 156, 0.8)';
 
 function configureChartDefaults() {
     if (typeof Chart === 'undefined') return;
-    Chart.defaults.font.family = "'Poppins', sans-serif";
+    Chart.defaults.font.family = "'Inter', 'Poppins', sans-serif";
     Chart.defaults.font.size = 12;
-    Chart.defaults.plugins.tooltip.backgroundColor = '#0F172A';
+    Chart.defaults.color = '#64748B';
+    Chart.defaults.plugins.tooltip.backgroundColor = '#123450';
+    Chart.defaults.plugins.tooltip.titleFont = { weight: '600' };
     Chart.defaults.plugins.tooltip.cornerRadius = 8;
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.legend.labels.usePointStyle = true;
@@ -129,14 +143,14 @@ function renderDashboardStats(datos) {
         <div class="dashboard-stat-card">
             <div class="stat-icon icon-diferencias"><i class="fas fa-arrow-down"></i></div>
             <div class="stat-info">
-                <div class="stat-valor" style="color:#B91C1C;">${_fmtMoney(totales.faltantes)}</div>
+                <div class="stat-valor" style="color:#123450;">${_fmtMoney(totales.faltantes)}</div>
                 <div class="stat-label">Valor Faltantes</div>
             </div>
         </div>
         <div class="dashboard-stat-card">
             <div class="stat-icon icon-desviacion"><i class="fas fa-arrow-up"></i></div>
             <div class="stat-info">
-                <div class="stat-valor" style="color:#059669;">${_fmtMoney(totales.sobrantes)}</div>
+                <div class="stat-valor" style="color:#1abc9c;">${_fmtMoney(totales.sobrantes)}</div>
                 <div class="stat-label">Valor Sobrantes</div>
             </div>
         </div>
@@ -149,12 +163,25 @@ function renderDashboardValorResumen(datos) {
     const totalFalt = datos.reduce((s, d) => s + (d.valor_faltantes || 0), 0);
     const totalSob = datos.reduce((s, d) => s + (d.valor_sobrantes || 0), 0);
     const neto = totalSob - totalFalt;
-    const netoColor = neto < 0 ? '#B91C1C' : '#059669';
+    const esPerdida = neto < 0;
     container.innerHTML = `
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-            <div style="font-weight:600;color:#123450;font-size:15px;"><i class="fas fa-balance-scale"></i> Descuadre Neto</div>
-            <div style="font-size:22px;font-weight:700;color:${netoColor};">${_fmtMoney(Math.abs(neto))} ${neto < 0 ? 'PERDIDA' : 'SOBRANTE'}</div>
-            <div style="font-size:12px;color:#64748B;">${datos.length} bodega(s) | Faltantes: ${_fmtMoney(totalFalt)} | Sobrantes: ${_fmtMoney(totalSob)}</div>
+        <div style="background:linear-gradient(135deg, #123450 0%, #1a4a6e 100%);border-radius:12px;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;color:#fff;">
+            <div>
+                <div style="font-size:12px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;">Descuadre Neto</div>
+                <div style="font-size:28px;font-weight:700;margin-top:4px;">${_fmtMoney(Math.abs(neto))}</div>
+                <div style="font-size:12px;opacity:0.8;margin-top:2px;">${esPerdida ? 'Perdida neta' : 'Sobrante neto'} en ${datos.length} bodega(s)</div>
+            </div>
+            <div style="display:flex;gap:24px;">
+                <div style="text-align:center;">
+                    <div style="font-size:11px;opacity:0.6;text-transform:uppercase;">Faltantes</div>
+                    <div style="font-size:18px;font-weight:600;margin-top:2px;">${_fmtMoney(totalFalt)}</div>
+                </div>
+                <div style="width:1px;background:rgba(255,255,255,0.2);"></div>
+                <div style="text-align:center;">
+                    <div style="font-size:11px;opacity:0.6;text-transform:uppercase;">Sobrantes</div>
+                    <div style="font-size:18px;font-weight:600;margin-top:2px;">${_fmtMoney(totalSob)}</div>
+                </div>
+            </div>
         </div>
     `;
 }
@@ -173,16 +200,18 @@ function renderChartDiferenciasBodega(datos) {
                 {
                     label: 'Faltantes ($)',
                     data: datos.map(d => d.valor_faltantes || 0),
-                    backgroundColor: 'rgba(185, 28, 28, 0.7)',
-                    borderColor: '#B91C1C',
-                    borderWidth: 2
+                    backgroundColor: COLOR_FALTANTE_ALPHA,
+                    borderColor: COLOR_FALTANTE,
+                    borderWidth: 1,
+                    borderRadius: 4
                 },
                 {
                     label: 'Sobrantes ($)',
                     data: datos.map(d => d.valor_sobrantes || 0),
-                    backgroundColor: 'rgba(5, 150, 105, 0.7)',
-                    borderColor: '#059669',
-                    borderWidth: 2
+                    backgroundColor: COLOR_SOBRANTE_ALPHA,
+                    borderColor: COLOR_SOBRANTE,
+                    borderWidth: 1,
+                    borderRadius: 4
                 }
             ]
         },
@@ -191,12 +220,12 @@ function renderChartDiferenciasBodega(datos) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'top' },
+                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 } },
                 tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: $${ctx.parsed.x.toFixed(2)}` } }
             },
             scales: {
-                x: { beginAtZero: true, grid: { color: '#F1F5F9' }, ticks: { callback: v => '$' + v } },
-                y: { grid: { display: false } }
+                x: { beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { callback: v => '$' + v, color: '#94A3B8' } },
+                y: { grid: { display: false }, ticks: { color: '#123450', font: { weight: '500' } } }
             }
         }
     });
@@ -216,16 +245,18 @@ function renderChartCumplimiento(datos) {
                 {
                     label: 'Exactos',
                     data: datos.map(d => d.exactos),
-                    backgroundColor: 'rgba(5, 150, 105, 0.7)',
-                    borderColor: '#059669',
-                    borderWidth: 1
+                    backgroundColor: COLOR_SOBRANTE_ALPHA,
+                    borderColor: COLOR_SOBRANTE,
+                    borderWidth: 1,
+                    borderRadius: { topLeft: 4, topRight: 4 }
                 },
                 {
                     label: 'Con diferencia',
                     data: datos.map(d => d.con_diferencia),
-                    backgroundColor: 'rgba(185, 28, 28, 0.7)',
-                    borderColor: '#B91C1C',
-                    borderWidth: 1
+                    backgroundColor: COLOR_FALTANTE_ALPHA,
+                    borderColor: COLOR_FALTANTE,
+                    borderWidth: 1,
+                    borderRadius: { topLeft: 4, topRight: 4 }
                 }
             ]
         },
@@ -233,15 +264,15 @@ function renderChartCumplimiento(datos) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'top' },
+                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 } },
                 tooltip: { callbacks: { afterBody: (items) => {
                     const idx = items[0].dataIndex;
                     return `Cumplimiento: ${datos[idx].porcentaje}%`;
                 }}}
             },
             scales: {
-                x: { stacked: true, grid: { display: false } },
-                y: { stacked: true, beginAtZero: true, grid: { color: '#F1F5F9' } }
+                x: { stacked: true, grid: { display: false }, ticks: { color: '#123450', font: { weight: '500' } } },
+                y: { stacked: true, beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8' } }
             }
         }
     });
@@ -261,16 +292,18 @@ function renderChartFaltantesSobrantes(datos) {
                 {
                     label: 'Faltantes',
                     data: datos.map(d => d.total_faltantes),
-                    backgroundColor: 'rgba(185, 28, 28, 0.7)',
-                    borderColor: '#B91C1C',
-                    borderWidth: 2
+                    backgroundColor: COLOR_FALTANTE_ALPHA,
+                    borderColor: COLOR_FALTANTE,
+                    borderWidth: 1,
+                    borderRadius: 4
                 },
                 {
                     label: 'Sobrantes',
                     data: datos.map(d => d.total_sobrantes),
-                    backgroundColor: 'rgba(5, 150, 105, 0.7)',
-                    borderColor: '#059669',
-                    borderWidth: 2
+                    backgroundColor: COLOR_SOBRANTE_ALPHA,
+                    borderColor: COLOR_SOBRANTE,
+                    borderWidth: 1,
+                    borderRadius: 4
                 }
             ]
         },
@@ -278,11 +311,11 @@ function renderChartFaltantesSobrantes(datos) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'top' }
+                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 } }
             },
             scales: {
-                x: { grid: { display: false } },
-                y: { beginAtZero: true, grid: { color: '#F1F5F9' } }
+                x: { grid: { display: false }, ticks: { color: '#123450', font: { weight: '500' } } },
+                y: { beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8' } }
             }
         }
     });
@@ -296,14 +329,14 @@ function renderTopDescuadre(items) {
         return;
     }
     tbody.innerHTML = items.map(p => {
-        const difColor = p.diferencia < 0 ? 'color:#B91C1C;font-weight:600;' : 'color:#059669;font-weight:600;';
+        const difColor = p.diferencia < 0 ? 'color:#123450;font-weight:600;' : 'color:#1abc9c;font-weight:600;';
         return `<tr>
             <td>${escapeHtml(p.codigo)}</td>
             <td>${escapeHtml(p.nombre)}</td>
             <td>${escapeHtml(p.local_nombre)}</td>
             <td style="${difColor}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(2)}</td>
             <td>$${p.costo_unitario.toFixed(2)}</td>
-            <td style="font-weight:700;color:#B91C1C;">$${p.valor_descuadre.toFixed(2)}</td>
+            <td style="font-weight:700;color:#123450;">$${p.valor_descuadre.toFixed(2)}</td>
         </tr>`;
     }).join('');
 }
@@ -346,11 +379,11 @@ function renderChartTendenciaTemporal(datos) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'top' }
+                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', padding: 16 } }
             },
             scales: {
-                x: { grid: { color: '#F1F5F9' } },
-                y: { beginAtZero: true, grid: { color: '#F1F5F9' }, title: { display: true, text: 'Productos con diferencia' } }
+                x: { grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8', maxRotation: 45 } },
+                y: { beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8' }, title: { display: true, text: 'Productos con diferencia', color: '#64748B', font: { size: 11 } } }
             }
         }
     });
