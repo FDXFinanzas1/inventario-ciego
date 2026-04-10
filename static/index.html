@@ -307,7 +307,23 @@
                     <div class="dashboard-charts-grid">
                         <div class="chart-card">
                             <div class="chart-card-header">
-                                <i class="fas fa-dollar-sign"></i> Valor Descuadre por Bodega ($)
+                                <i class="fas fa-bullseye"></i> Exactitud del Inventario
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="chart-exactitud"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <i class="fas fa-exclamation-circle"></i> Productos que mas Fallan
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="chart-productos-fallan"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <i class="fas fa-dollar-sign"></i> Descuadre en Valor ($)
                             </div>
                             <div class="chart-card-body">
                                 <canvas id="chart-diferencias-bodega"></canvas>
@@ -315,15 +331,7 @@
                         </div>
                         <div class="chart-card">
                             <div class="chart-card-header">
-                                <i class="fas fa-chart-pie"></i> Cumplimiento por Bodega
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-distribucion"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-balance-scale"></i> Faltantes vs Sobrantes por Bodega
+                                <i class="fas fa-balance-scale"></i> Faltantes vs Sobrantes
                             </div>
                             <div class="chart-card-body">
                                 <canvas id="chart-faltantes-sobrantes"></canvas>

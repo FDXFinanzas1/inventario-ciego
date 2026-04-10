@@ -88,8 +88,9 @@ async function cargarDashboard() {
 
             renderDashboardStats(datosDash.bodegas);
             renderDashboardValorResumen(datosDash.bodegas);
+            renderChartExactitud(datosDash.bodegas);
+            renderChartProductosFallan(datosDash.top_descuadre);
             renderChartDiferenciasBodega(datosDash.bodegas);
-            renderChartCumplimiento(datosDash.cumplimiento);
             renderChartFaltantesSobrantes(datosDash.bodegas);
             renderChartTendenciaTemporal(datosTend);
             renderTopDescuadre(datosDash.top_descuadre);
@@ -186,96 +187,154 @@ function renderDashboardValorResumen(datos) {
     `;
 }
 
+function renderChartExactitud(datos) {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('exactitud');
+    const ctx = document.getElementById('chart-exactitud');
+    if (!ctx || !datos || datos.length === 0) return;
+
+    const totalExactos = datos.reduce((s, d) => s + d.total_contados - d.total_con_diferencia, 0);
+    const totalConDif = datos.reduce((s, d) => s + d.total_con_diferencia, 0);
+    const pct = (totalExactos + totalConDif) > 0 ? Math.round(totalExactos / (totalExactos + totalConDif) * 100) : 0;
+
+    chartInstances['exactitud'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Exactos', 'Con diferencia'],
+            datasets: [{
+                data: [totalExactos, totalConDif],
+                backgroundColor: [COLOR_SOBRANTE, COLOR_FALTANTE],
+                borderWidth: 0,
+                hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12, color: '#123450' } },
+                tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed} productos` } }
+            }
+        },
+        plugins: [{
+            id: 'centerText',
+            afterDraw(chart) {
+                const { ctx: c, chartArea: { width, height, top, left } } = chart;
+                c.save();
+                c.font = '700 28px Inter, sans-serif';
+                c.fillStyle = '#123450';
+                c.textAlign = 'center';
+                c.textBaseline = 'middle';
+                c.fillText(`${pct}%`, left + width / 2, top + height / 2 - 8);
+                c.font = '400 11px Inter, sans-serif';
+                c.fillStyle = '#64748B';
+                c.fillText('Exactitud', left + width / 2, top + height / 2 + 14);
+                c.restore();
+            }
+        }]
+    });
+}
+
+function renderChartProductosFallan(topItems) {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('productos-fallan');
+    const ctx = document.getElementById('chart-productos-fallan');
+    if (!ctx || !topItems || topItems.length === 0) return;
+
+    const top8 = topItems.slice(0, 8);
+    const labels = top8.map(p => p.nombre.length > 20 ? p.nombre.substring(0, 18) + '...' : p.nombre);
+    const valores = top8.map(p => p.valor_descuadre);
+
+    chartInstances['productos-fallan'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: valores,
+                backgroundColor: CHART_COLORS.slice(0, top8.length),
+                borderWidth: 2,
+                borderColor: '#fff',
+                hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '50%',
+            plugins: {
+                legend: { position: 'right', labels: { font: { size: 10 }, padding: 8, usePointStyle: true, pointStyle: 'circle', color: '#123450' } },
+                tooltip: { callbacks: { label: c => `${c.label}: $${c.parsed.toFixed(2)}` } }
+            }
+        }
+    });
+}
+
 function renderChartDiferenciasBodega(datos) {
     if (typeof Chart === 'undefined') return;
     destroyChart('diferencias-bodega');
     const ctx = document.getElementById('chart-diferencias-bodega');
     if (!ctx || !datos || datos.length === 0) return;
 
-    chartInstances['diferencias-bodega'] = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: datos.map(d => d.local_nombre),
-            datasets: [
-                {
-                    label: 'Faltantes ($)',
-                    data: datos.map(d => d.valor_faltantes || 0),
-                    backgroundColor: COLOR_FALTANTE_ALPHA,
-                    borderColor: COLOR_FALTANTE,
-                    borderWidth: 1,
-                    borderRadius: 4
-                },
-                {
-                    label: 'Sobrantes ($)',
-                    data: datos.map(d => d.valor_sobrantes || 0),
-                    backgroundColor: COLOR_SOBRANTE_ALPHA,
-                    borderColor: COLOR_SOBRANTE,
-                    borderWidth: 1,
-                    borderRadius: 4
-                }
-            ]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 } },
-                tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: $${ctx.parsed.x.toFixed(2)}` } }
-            },
-            scales: {
-                x: { beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { callback: v => '$' + v, color: '#94A3B8' } },
-                y: { grid: { display: false }, ticks: { color: '#123450', font: { weight: '500' } } }
-            }
-        }
-    });
-}
+    const totalFalt = datos.reduce((s, d) => s + (d.valor_faltantes || 0), 0);
+    const totalSob = datos.reduce((s, d) => s + (d.valor_sobrantes || 0), 0);
 
-function renderChartCumplimiento(datos) {
-    if (typeof Chart === 'undefined') return;
-    destroyChart('distribucion');
-    const ctx = document.getElementById('chart-distribucion');
-    if (!ctx || !datos || datos.length === 0) return;
-
-    chartInstances['distribucion'] = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: datos.map(d => d.local_nombre),
-            datasets: [
-                {
-                    label: 'Exactos',
-                    data: datos.map(d => d.exactos),
-                    backgroundColor: COLOR_SOBRANTE_ALPHA,
-                    borderColor: COLOR_SOBRANTE,
-                    borderWidth: 1,
-                    borderRadius: { topLeft: 4, topRight: 4 }
-                },
-                {
-                    label: 'Con diferencia',
-                    data: datos.map(d => d.con_diferencia),
-                    backgroundColor: COLOR_FALTANTE_ALPHA,
-                    borderColor: COLOR_FALTANTE,
-                    borderWidth: 1,
-                    borderRadius: { topLeft: 4, topRight: 4 }
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 } },
-                tooltip: { callbacks: { afterBody: (items) => {
-                    const idx = items[0].dataIndex;
-                    return `Cumplimiento: ${datos[idx].porcentaje}%`;
-                }}}
+    // Si es 1 bodega, mostrar doughnut faltantes vs sobrantes
+    if (datos.length === 1) {
+        chartInstances['diferencias-bodega'] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Faltantes', 'Sobrantes'],
+                datasets: [{
+                    data: [totalFalt, totalSob],
+                    backgroundColor: [COLOR_FALTANTE, COLOR_SOBRANTE],
+                    borderWidth: 0,
+                    hoverOffset: 6
+                }]
             },
-            scales: {
-                x: { stacked: true, grid: { display: false }, ticks: { color: '#123450', font: { weight: '500' } } },
-                y: { stacked: true, beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8' } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12, color: '#123450' } },
+                    tooltip: { callbacks: { label: c => `${c.label}: $${c.parsed.toFixed(2)}` } }
+                }
+            },
+            plugins: [{
+                id: 'centerMoney',
+                afterDraw(chart) {
+                    const { ctx: c, chartArea: { width, height, top, left } } = chart;
+                    c.save();
+                    c.font = '700 20px Inter, sans-serif';
+                    c.fillStyle = '#123450';
+                    c.textAlign = 'center';
+                    c.textBaseline = 'middle';
+                    c.fillText(`$${(totalFalt + totalSob).toFixed(0)}`, left + width / 2, top + height / 2 - 6);
+                    c.font = '400 10px Inter, sans-serif';
+                    c.fillStyle = '#64748B';
+                    c.fillText('Descuadre total', left + width / 2, top + height / 2 + 12);
+                    c.restore();
+                }
+            }]
+        });
+    } else {
+        chartInstances['diferencias-bodega'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: datos.map(d => d.local_nombre),
+                datasets: [
+                    { label: 'Faltantes ($)', data: datos.map(d => d.valor_faltantes || 0), backgroundColor: COLOR_FALTANTE_ALPHA, borderColor: COLOR_FALTANTE, borderWidth: 1, borderRadius: 4 },
+                    { label: 'Sobrantes ($)', data: datos.map(d => d.valor_sobrantes || 0), backgroundColor: COLOR_SOBRANTE_ALPHA, borderColor: COLOR_SOBRANTE, borderWidth: 1, borderRadius: 4 }
+                ]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: $${c.parsed.x.toFixed(2)}` } } },
+                scales: { x: { beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { callback: v => '$' + v, color: '#94A3B8' } }, y: { grid: { display: false }, ticks: { color: '#123450', font: { weight: '500' } } } }
             }
-        }
-    });
+        });
+    }
 }
 
 function renderChartFaltantesSobrantes(datos) {
@@ -284,40 +343,47 @@ function renderChartFaltantesSobrantes(datos) {
     const ctx = document.getElementById('chart-faltantes-sobrantes');
     if (!ctx || !datos || datos.length === 0) return;
 
+    const totalFalt = datos.reduce((s, d) => s + d.total_faltantes, 0);
+    const totalSob = datos.reduce((s, d) => s + d.total_sobrantes, 0);
+    const totalExactos = datos.reduce((s, d) => s + d.total_contados - d.total_con_diferencia, 0);
+
     chartInstances['faltantes-sobrantes'] = new Chart(ctx, {
-        type: 'bar',
+        type: 'doughnut',
         data: {
-            labels: datos.map(d => d.local_nombre),
-            datasets: [
-                {
-                    label: 'Faltantes',
-                    data: datos.map(d => d.total_faltantes),
-                    backgroundColor: COLOR_FALTANTE_ALPHA,
-                    borderColor: COLOR_FALTANTE,
-                    borderWidth: 1,
-                    borderRadius: 4
-                },
-                {
-                    label: 'Sobrantes',
-                    data: datos.map(d => d.total_sobrantes),
-                    backgroundColor: COLOR_SOBRANTE_ALPHA,
-                    borderColor: COLOR_SOBRANTE,
-                    borderWidth: 1,
-                    borderRadius: 4
-                }
-            ]
+            labels: ['Faltantes', 'Sobrantes', 'Exactos'],
+            datasets: [{
+                data: [totalFalt, totalSob, totalExactos],
+                backgroundColor: [COLOR_FALTANTE, COLOR_SOBRANTE, '#E2E8F0'],
+                borderWidth: 2,
+                borderColor: '#fff',
+                hoverOffset: 6
+            }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            cutout: '60%',
             plugins: {
-                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 } }
-            },
-            scales: {
-                x: { grid: { display: false }, ticks: { color: '#123450', font: { weight: '500' } } },
-                y: { beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8' } }
+                legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12, color: '#123450' } },
+                tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed} productos` } }
             }
-        }
+        },
+        plugins: [{
+            id: 'centerCount',
+            afterDraw(chart) {
+                const { ctx: c, chartArea: { width, height, top, left } } = chart;
+                c.save();
+                c.font = '700 24px Inter, sans-serif';
+                c.fillStyle = '#123450';
+                c.textAlign = 'center';
+                c.textBaseline = 'middle';
+                c.fillText(`${totalFalt + totalSob}`, left + width / 2, top + height / 2 - 6);
+                c.font = '400 10px Inter, sans-serif';
+                c.fillStyle = '#64748B';
+                c.fillText('Con diferencia', left + width / 2, top + height / 2 + 12);
+                c.restore();
+            }
+        }]
     });
 }
 
