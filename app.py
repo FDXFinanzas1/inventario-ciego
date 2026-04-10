@@ -1107,6 +1107,7 @@ def reporte_dashboard():
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
     bodega = request.args.get('bodega')
+    producto = request.args.get('producto', '').strip()
 
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
@@ -1115,6 +1116,17 @@ def reporte_dashboard():
     try:
         conn = get_db()
         cur = conn.cursor()
+
+        # Filtros comunes
+        filtro_extra = ""
+        params = [fecha_desde, fecha_hasta]
+        if bodega:
+            filtro_extra += " AND local = %s"
+            params.append(bodega)
+        if producto:
+            filtro_extra += " AND (codigo ILIKE %s OR nombre ILIKE %s)"
+            params.append(f'%{producto}%')
+            params.append(f'%{producto}%')
 
         # Resumen por bodega
         query = """
@@ -1144,12 +1156,7 @@ def reporte_dashboard():
                     THEN ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) * COALESCE(costo_unitario, 0) END), 0) as valor_sobrantes
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
-        """
-        params = [fecha_desde, fecha_hasta]
-        if bodega:
-            query += " AND local = %s"
-            params.append(bodega)
-        query += " GROUP BY local ORDER BY local"
+        """ + filtro_extra + " GROUP BY local ORDER BY local"
         cur.execute(query, params)
 
         resultados = cur.fetchall()
@@ -1179,11 +1186,8 @@ def reporte_dashboard():
             WHERE fecha >= %s AND fecha <= %s
               AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
               AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
-        """
-        params_top = [fecha_desde, fecha_hasta]
-        if bodega:
-            query_top += " AND local = %s"
-            params_top.append(bodega)
+        """ + filtro_extra
+        params_top = list(params)
         query_top += " ORDER BY ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) * COALESCE(costo_unitario, 0) DESC LIMIT 10"
         cur.execute(query_top, params_top)
         top_descuadre = []

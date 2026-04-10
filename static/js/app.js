@@ -75,10 +75,13 @@ async function cargarDashboard() {
         return;
     }
 
+    const producto = document.getElementById('dash-producto') ? document.getElementById('dash-producto').value.trim() : '';
+
     try {
         const bodegaParam = bodega ? `&bodega=${bodega}` : '';
+        const prodParam = producto ? `&producto=${encodeURIComponent(producto)}` : '';
         const [resDash, resTend] = await Promise.all([
-            fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}`),
+            fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`),
             fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?dias=30${bodegaParam}`)
         ]);
 
