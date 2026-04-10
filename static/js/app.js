@@ -840,6 +840,8 @@ function renderProductosInventario() {
     const container = document.getElementById('productos-list');
     const totalSpan = document.getElementById('productos-total');
     const btnGuardar = document.getElementById('btn-guardar-conteo');
+    const puedeContar = _puede('conteo', 'editar');
+    if (btnGuardar) btnGuardar.style.display = puedeContar ? '' : 'none';
 
     if (state.productos.length === 0) {
         renderProductosVacio();
@@ -924,6 +926,7 @@ function renderProductosInventario() {
                                            data-codigo="${prod.codigo}"
                                            data-conteo="1"
                                            data-unidad="${prod.unidad || ''}"
+                                           ${!puedeContar ? 'disabled' : ''}
                                            onchange="guardarConteoDirecto(this)"
                                            onblur="guardarConteoDirecto(this)"
                                            onkeypress="${esUnidadEntera(prod.unidad) ? 'bloquearDecimales(event);' : ''} if(event.key==='Enter') this.blur()">
@@ -944,6 +947,7 @@ function renderProductosInventario() {
                                                data-codigo="${prod.codigo}"
                                                data-conteo="2"
                                                data-unidad="${prod.unidad || ''}"
+                                               ${!puedeContar ? 'disabled' : ''}
                                                onchange="guardarConteoDirecto(this)"
                                                onblur="guardarConteoDirecto(this)"
                                                onkeypress="${esUnidadEntera(prod.unidad) ? 'bloquearDecimales(event);' : ''} if(event.key==='Enter') this.blur()">
@@ -5416,20 +5420,32 @@ async function rolesCargar() {
         const rolColors = { empleado: '#3B82F6', supervisor: '#D97706', admin: '#059669' };
 
         container.innerHTML = roles.map(rol => {
-            const mods = rolesData[rol] || [];
-            const checks = MODULOS_LISTA.map(m =>
-                `<label class="cbx-bodega" style="font-size:12px;">
-                    <input type="checkbox" value="${m}" ${mods.includes(m) ? 'checked' : ''}> ${MODULOS_NOMBRES[m] || m}
-                </label>`
-            ).join('');
+            const mods = rolesData[rol] || {};
+            const rows = MODULOS_LISTA.map(m => {
+                const p = mods[m] || { ver: false, editar: false, eliminar: false };
+                return `<tr>
+                    <td style="font-size:12px;padding:4px 8px;font-weight:500;">${MODULOS_NOMBRES[m] || m}</td>
+                    <td style="text-align:center;padding:4px;"><input type="checkbox" data-mod="${m}" data-perm="ver" ${p.ver ? 'checked' : ''}></td>
+                    <td style="text-align:center;padding:4px;"><input type="checkbox" data-mod="${m}" data-perm="editar" ${p.editar ? 'checked' : ''}></td>
+                    <td style="text-align:center;padding:4px;"><input type="checkbox" data-mod="${m}" data-perm="eliminar" ${p.eliminar ? 'checked' : ''}></td>
+                </tr>`;
+            }).join('');
             return `<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
                     <i class="fas ${rolIcons[rol]}" style="color:${rolColors[rol]};font-size:18px;"></i>
                     <strong style="color:#123450;text-transform:capitalize;font-size:15px;">${rol}</strong>
                 </div>
-                <div class="usuarios-bodegas-grid" id="rol-mods-${rol}" style="gap:6px;">
-                    ${checks}
-                </div>
+                <table id="rol-perms-${rol}" style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #E2E8F0;">
+                            <th style="text-align:left;padding:4px 8px;font-size:11px;color:#64748B;">Modulo</th>
+                            <th style="text-align:center;padding:4px;font-size:11px;color:#64748B;">Ver</th>
+                            <th style="text-align:center;padding:4px;font-size:11px;color:#64748B;">Editar</th>
+                            <th style="text-align:center;padding:4px;font-size:11px;color:#64748B;">Eliminar</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
                 <button class="btn-sm btn-primary" onclick="rolGuardar('${rol}')" style="margin-top:12px;width:100%;">
                     <i class="fas fa-save"></i> Guardar ${rol}
                 </button>
@@ -5439,8 +5455,13 @@ async function rolesCargar() {
 }
 
 async function rolGuardar(rol) {
-    const modulos = [];
-    document.querySelectorAll(`#rol-mods-${rol} input[type="checkbox"]:checked`).forEach(cb => modulos.push(cb.value));
+    const modulos = {};
+    document.querySelectorAll(`#rol-perms-${rol} input[type="checkbox"]`).forEach(cb => {
+        const mod = cb.dataset.mod;
+        const perm = cb.dataset.perm;
+        if (!modulos[mod]) modulos[mod] = { ver: false, editar: false, eliminar: false };
+        modulos[mod][perm] = cb.checked;
+    });
 
     let adminPass = localStorage.getItem('admin_pass');
     if (!adminPass) {
@@ -5463,4 +5484,13 @@ async function rolGuardar(rol) {
             showToast(data.error || 'Error', 'error');
         }
     } catch (e) { showToast('Error de conexion', 'error'); }
+}
+
+// Helper global: verificar si el usuario puede hacer una accion en un modulo
+function _puede(modulo, accion) {
+    if (!state.user) return false;
+    if (state.user.rol === 'admin') return true;
+    const perms = state.user.permisos;
+    if (!perms || !perms[modulo]) return false;
+    return perms[modulo][accion] === true;
 }
