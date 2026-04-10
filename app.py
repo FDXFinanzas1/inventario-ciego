@@ -235,6 +235,14 @@ def init_db():
                 monto NUMERIC(12,2) DEFAULT 0
             )
         """)
+        # ---- Columnas de auditoria: quien contó y quien modificó ----
+        cur.execute("""
+            ALTER TABLE inventario_diario.inventario_ciego_conteos
+                ADD COLUMN IF NOT EXISTS contado_por VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS contado2_por VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS modificado_por VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS modificado_at TIMESTAMP
+        """)
         # ---- Tabla de permisos por modulo ----
         cur.execute("""
             CREATE TABLE IF NOT EXISTS inventario_diario.usuario_modulos (
@@ -537,6 +545,7 @@ def guardar_conteo():
     id_producto = data.get('id')
     cantidad = data.get('cantidad_contada')
     conteo = data.get('conteo', 1)
+    usuario = data.get('usuario', '')
 
     conn = None
     try:
@@ -546,15 +555,15 @@ def guardar_conteo():
         if conteo == 2:
             cur.execute("""
                 UPDATE inventario_diario.inventario_ciego_conteos
-                SET cantidad_contada_2 = %s
+                SET cantidad_contada_2 = %s, contado2_por = %s
                 WHERE id = %s
-            """, (cantidad, id_producto))
+            """, (cantidad, usuario or None, id_producto))
         else:
             cur.execute("""
                 UPDATE inventario_diario.inventario_ciego_conteos
-                SET cantidad_contada = %s
+                SET cantidad_contada = %s, contado_por = %s
                 WHERE id = %s
-            """, (cantidad, id_producto))
+            """, (cantidad, usuario or None, id_producto))
 
         conn.commit()
 
@@ -599,6 +608,7 @@ def corregir_conteo():
     cantidad_contada = data.get('cantidad_contada')
     cantidad_contada_2 = data.get('cantidad_contada_2')
     cantidad_sistema = data.get('cantidad')
+    usuario = data.get('usuario', '')
 
     if id_producto is None:
         return jsonify({'error': 'id es requerido'}), 400
@@ -611,9 +621,11 @@ def corregir_conteo():
             UPDATE inventario_diario.inventario_ciego_conteos
             SET cantidad = COALESCE(%s, cantidad),
                 cantidad_contada = %s,
-                cantidad_contada_2 = %s
+                cantidad_contada_2 = %s,
+                modificado_por = %s,
+                modificado_at = CURRENT_TIMESTAMP
             WHERE id = %s
-        """, (cantidad_sistema, cantidad_contada, cantidad_contada_2, id_producto))
+        """, (cantidad_sistema, cantidad_contada, cantidad_contada_2, usuario or None, id_producto))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:

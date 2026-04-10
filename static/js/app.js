@@ -1017,7 +1017,7 @@ async function guardarConteoDirecto(input) {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-conteo`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, cantidad_contada: cantidad, conteo: conteoNum })
+            body: JSON.stringify({ id, cantidad_contada: cantidad, conteo: conteoNum, usuario: state.user ? state.user.username : '' })
         });
 
         if (response.ok) {
@@ -1900,7 +1900,7 @@ async function guardarTodosLosConteos() {
                     fetch(`${CONFIG.API_URL}/api/inventario/guardar-conteo`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id, cantidad_contada: cantidad, conteo: conteoNum })
+                        body: JSON.stringify({ id, cantidad_contada: cantidad, conteo: conteoNum, usuario: state.user ? state.user.username : '' })
                     }).then(response => {
                         if (response.ok && prod) {
                             if (conteoNum === 2) {
@@ -2143,7 +2143,7 @@ async function guardarCantidad() {
             const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-conteo`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, cantidad_contada: cantidad })
+                body: JSON.stringify({ id, cantidad_contada: cantidad, usuario: state.user ? state.user.username : '' })
             });
 
             if (response.ok) {
@@ -4217,7 +4217,7 @@ async function guardarCorreccionFila(id) {
         const res = await fetch('/api/admin/corregir-conteo', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, cantidad: sis, cantidad_contada: c1, cantidad_contada_2: c2 })
+            body: JSON.stringify({ id, cantidad: sis, cantidad_contada: c1, cantidad_contada_2: c2, usuario: state.user ? state.user.username : '' })
         });
         const data = await res.json();
         if (data.success) {
@@ -4257,7 +4257,7 @@ async function guardarTodasCorrecciones() {
             const res = await fetch('/api/admin/corregir-conteo', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, cantidad: sis, cantidad_contada: c1, cantidad_contada_2: c2 })
+                body: JSON.stringify({ id, cantidad: sis, cantidad_contada: c1, cantidad_contada_2: c2, usuario: state.user ? state.user.username : '' })
             });
             const data = await res.json();
             if (data.success) {
