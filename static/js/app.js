@@ -2447,11 +2447,12 @@ function _renderHistPivot(data) {
         }
 
         // Total Dif. según modo descuento (aplica a cantidad Y valor)
-        let totProdShow = totProd;
-        if (_histModoDescuento === 'neto') {
-            totProdShow = totProdAbsSum;            // SUM(ABS) — todo descuadre suma (sobra 1 + falta 1 = 2)
-        } else if (_histModoDescuento === 'ajustado') {
+        let totProdShow;
+        if (_histModoDescuento === 'ajustado') {
             totProdShow = Math.abs(totProd);        // ABS(SUM) — se compensan (+1-1 = 0)
+        } else {
+            // Normal y Neto: suma de absolutos (todo descuadre cuenta)
+            totProdShow = totProdAbsSum;
         }
         totGeneralAbsSum += totProdAbsSum;
 
@@ -2477,11 +2478,12 @@ function _renderHistPivot(data) {
         const txt = esValor ? (v === 0 ? '' : `$${v.toFixed(2)}`) : (v === 0 ? '' : v.toFixed(2));
         return `<td class="${cls}" style="font-weight:700;">${txt}</td>`;
     }).join('');
-    let totGeneralShow = totGeneral;
-    if (_histModoDescuento === 'neto') {
-        totGeneralShow = totGeneralAbsSum;           // SUM(ABS)
-    } else if (_histModoDescuento === 'ajustado') {
+    let totGeneralShow;
+    if (_histModoDescuento === 'ajustado') {
         totGeneralShow = Math.abs(totGeneral);       // ABS(SUM)
+    } else {
+        // Normal y Neto: suma de absolutos
+        totGeneralShow = totGeneralAbsSum;
     }
     const totGenTxt = esValor
         ? `$${totGeneralShow.toFixed(2)}`
