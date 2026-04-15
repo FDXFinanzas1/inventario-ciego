@@ -723,6 +723,87 @@ def reporte_motivos():
         if conn:
             release_db(conn)
 
+@app.route('/api/reportes/motivos/detalle', methods=['GET'])
+def reporte_motivo_detalle():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    motivo = request.args.get('motivo', '')
+    bodega = request.args.get('bodega', '')
+
+    if not fecha_desde or not fecha_hasta or not motivo:
+        return jsonify({'error': 'fecha_desde, fecha_hasta y motivo requeridos'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Productos de conteos con ese motivo
+        query1 = """
+            SELECT nombre, local, COUNT(*) as veces,
+                   SUM(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad)) as diferencia_total
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha >= %s AND fecha <= %s AND motivo = %s
+        """
+        params1 = [fecha_desde, fecha_hasta, motivo]
+        if bodega:
+            query1 += " AND local = %s"
+            params1.append(bodega)
+        query1 += " GROUP BY nombre, local ORDER BY veces DESC, diferencia_total DESC"
+        cur.execute(query1, params1)
+        productos_conteo = cur.fetchall()
+
+        # Productos de observaciones manuales con ese motivo
+        query2 = """
+            SELECT nombre, local, COUNT(*) as veces,
+                   SUM(ABS(diferencia)) as diferencia_total
+            FROM inventario_diario.observaciones_manuales
+            WHERE fecha >= %s AND fecha <= %s AND motivo = %s
+        """
+        params2 = [fecha_desde, fecha_hasta, motivo]
+        if bodega:
+            query2 += " AND local = %s"
+            params2.append(bodega)
+        query2 += " GROUP BY nombre, local ORDER BY veces DESC"
+        cur.execute(query2, params2)
+        productos_manual = cur.fetchall()
+
+        # Combinar
+        combinado = {}
+        for p in productos_conteo:
+            key = p['nombre']
+            if key not in combinado:
+                combinado[key] = {'nombre': p['nombre'], 'veces': 0, 'diferencia_total': 0, 'bodegas': set()}
+            combinado[key]['veces'] += p['veces']
+            combinado[key]['diferencia_total'] += float(p['diferencia_total'] or 0)
+            combinado[key]['bodegas'].add(BODEGAS_NOMBRES.get(p['local'], p['local']))
+
+        for p in productos_manual:
+            key = p['nombre']
+            if key not in combinado:
+                combinado[key] = {'nombre': p['nombre'], 'veces': 0, 'diferencia_total': 0, 'bodegas': set()}
+            combinado[key]['veces'] += p['veces']
+            combinado[key]['diferencia_total'] += float(p['diferencia_total'] or 0)
+            combinado[key]['bodegas'].add(BODEGAS_NOMBRES.get(p['local'], p['local']))
+
+        resultado = []
+        for v in combinado.values():
+            resultado.append({
+                'nombre': v['nombre'],
+                'veces': v['veces'],
+                'diferencia_total': round(v['diferencia_total'], 3),
+                'bodegas': ', '.join(sorted(v['bodegas']))
+            })
+        resultado.sort(key=lambda x: x['veces'], reverse=True)
+
+        return jsonify(resultado)
+    except Exception as e:
+        print(f"Error en /api/reportes/motivos/detalle: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
 # ==================== OBSERVACIONES MANUALES ====================
 
 @app.route('/api/observaciones-manuales', methods=['GET'])

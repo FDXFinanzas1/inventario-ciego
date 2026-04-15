@@ -501,6 +501,8 @@ function renderChartMotivos(datos) {
         return;
     }
 
+    // Guardar datos completos para el onClick
+    const _motivosDatos = datos;
     const labels = datos.map(d => d.motivo.length > 35 ? d.motivo.substring(0, 33) + '...' : d.motivo);
     const valores = datos.map(d => d.cantidad);
 
@@ -521,11 +523,18 @@ function renderChartMotivos(datos) {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const motivo = _motivosDatos[idx].motivo;
+                    abrirDetalleMotivo(motivo);
+                }
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: c => `${c.parsed.x} ocurrencia${c.parsed.x !== 1 ? 's' : ''}`
+                        label: c => `${c.parsed.x} ocurrencia${c.parsed.x !== 1 ? 's' : ''} — click para ver detalle`
                     }
                 }
             },
@@ -538,11 +547,73 @@ function renderChartMotivos(datos) {
                 },
                 y: {
                     grid: { display: false },
-                    ticks: { color: '#123450', font: { size: 11, weight: '500' } }
+                    ticks: { color: '#123450', font: { size: 11, weight: '500' }, cursor: 'pointer' }
                 }
             }
         }
     });
+
+    // Cursor pointer al pasar sobre las barras
+    ctx.style.cursor = 'pointer';
+}
+
+async function abrirDetalleMotivo(motivo) {
+    const modal = document.getElementById('modal-motivo');
+    const titulo = document.getElementById('modal-motivo-titulo');
+    const body = document.getElementById('modal-motivo-body');
+
+    titulo.textContent = motivo;
+    body.innerHTML = '<div style="text-align:center;padding:20px;"><i class="fas fa-spinner fa-spin" style="font-size:24px;color:var(--primary);"></i><p style="margin-top:10px;color:#94A3B8;">Cargando detalle...</p></div>';
+    modal.classList.remove('hidden');
+
+    const fechaDesde = document.getElementById('dash-fecha-desde').value;
+    const fechaHasta = document.getElementById('dash-fecha-hasta').value;
+    const bodega = document.getElementById('dash-bodega')?.value || '';
+    const bodegaParam = bodega ? `&bodega=${bodega}` : '';
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/reportes/motivos/detalle?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}&motivo=${encodeURIComponent(motivo)}${bodegaParam}`);
+        if (!res.ok) throw new Error('Error');
+        const productos = await res.json();
+
+        if (productos.length === 0) {
+            body.innerHTML = '<p style="text-align:center;color:#94A3B8;padding:20px;">No se encontraron productos con este motivo</p>';
+            return;
+        }
+
+        const totalVeces = productos.reduce((s, p) => s + p.veces, 0);
+        body.innerHTML = `
+            <div style="margin-bottom:12px;font-size:13px;color:var(--text-medium);">
+                <strong>${totalVeces}</strong> ocurrencia${totalVeces !== 1 ? 's' : ''} en <strong>${productos.length}</strong> producto${productos.length !== 1 ? 's' : ''}
+            </div>
+            <table class="usuarios-tabla" style="margin:0;width:100%;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;">Producto</th>
+                        <th style="text-align:center;">Veces</th>
+                        <th style="text-align:center;">Dif. Total</th>
+                        <th style="text-align:left;">Bodegas</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${productos.map(p => `
+                        <tr>
+                            <td style="font-weight:500;">${p.nombre}</td>
+                            <td style="text-align:center;font-weight:700;color:var(--primary);">${p.veces}</td>
+                            <td style="text-align:center;color:${p.diferencia_total > 0 ? 'var(--accent)' : '#94A3B8'};">${p.diferencia_total}</td>
+                            <td style="font-size:11px;color:#64748B;">${p.bodegas}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch(e) {
+        body.innerHTML = '<p style="text-align:center;color:var(--accent);padding:20px;">Error al cargar detalle</p>';
+    }
+}
+
+function cerrarModalMotivo() {
+    document.getElementById('modal-motivo').classList.add('hidden');
 }
 
 // ==================== FIN DASHBOARD ====================

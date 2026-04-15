@@ -1018,6 +1018,21 @@
         </div>
     </div>
 
+    <!-- Modal detalle de motivo -->
+    <div id="modal-motivo" class="modal hidden" onclick="if(event.target===this)cerrarModalMotivo()">
+        <div class="modal-content" style="max-width:650px;">
+            <div class="modal-header">
+                <h3 id="modal-motivo-titulo">Detalle del Motivo</h3>
+                <button class="btn-close" onclick="cerrarModalMotivo()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-motivo-body" style="max-height:400px;overflow-y:auto;">
+                <p>Cargando...</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal para editar cantidad -->
     <div id="modal-cantidad" class="modal hidden">
         <div class="modal-content">
