@@ -1485,7 +1485,12 @@ function renderObservaciones() {
                         const corregido = m.corregido || false;
                         return `
                             <tr class="fila-manual">
-                                <td class="obs-nombre">${m.nombre}</td>
+                                <td class="obs-nombre">
+                                    ${m.nombre}
+                                    <button class="btn-eliminar-obs" onclick="eliminarObsManual(${m.id})" title="Eliminar">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </td>
                                 <td class="obs-dif ${difClass}">${dif !== 0 ? (dif > 0 ? '+' : '') + dif.toFixed(3) : '0.000'}</td>
                                 <td class="obs-motivo-cell">
                                     <select class="select-motivo" data-manual-id="${m.id}" onchange="guardarMotivoManual(this)">
@@ -1546,7 +1551,9 @@ function renderObservaciones() {
     obsContainer.innerHTML = html;
 }
 
+let _agregandoManual = false;
 async function agregarProductoManual() {
+    if (_agregandoManual) return;
     const selectProd = document.getElementById('obs-agregar-producto');
     const difInput = document.getElementById('obs-agregar-dif');
     const fecha = document.getElementById('obs-fecha').value;
@@ -1558,6 +1565,7 @@ async function agregarProductoManual() {
     const [codigo, nombre] = selectProd.value.split('||');
     const diferencia = difInput ? parseFloat(difInput.value) || 0 : 0;
 
+    _agregandoManual = true;
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales`, {
             method: 'POST',
@@ -1577,7 +1585,23 @@ async function agregarProductoManual() {
         }
     } catch (error) {
         showToast('Error de conexión', 'error');
+    } finally {
+        _agregandoManual = false;
     }
+}
+
+async function eliminarObsManual(id) {
+    if (!confirm('¿Eliminar este producto de la lista?')) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            _obsManuales = _obsManuales.filter(m => m.id !== id);
+            renderObservaciones();
+            showToast('Producto eliminado', 'success');
+        } else {
+            showToast('Error al eliminar', 'error');
+        }
+    } catch(e) { showToast('Error de conexión', 'error'); }
 }
 
 async function guardarMotivoManual(select) {
