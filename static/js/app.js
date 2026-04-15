@@ -98,7 +98,6 @@ async function cargarDashboard() {
             renderChartExactitud(datosDash.bodegas);
             renderChartProductosFallan(datosDash.top_descuadre);
             renderChartDiferenciasBodega(datosDash.bodegas);
-            renderChartFaltantesSobrantes(datosDash.bodegas);
             renderChartTendenciaTemporal(datosTend);
             renderTopDescuadre(datosDash.top_descuadre);
 
