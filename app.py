@@ -1452,29 +1452,27 @@ def reporte_dashboard():
                 'valor_sobrantes': float(r['valor_sobrantes'])
             })
 
-        # Top 10 productos con mayor descuadre en valor
+        # Top 10 productos con mayor descuadre en valor (agrupados por producto)
         query_top = """
-            SELECT codigo, nombre, local, unidad,
-                   COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
-                   COALESCE(costo_unitario, 0) as costo_unitario,
-                   ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) * COALESCE(costo_unitario, 0) as valor_descuadre
+            SELECT codigo, nombre, unidad,
+                   SUM(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad)) as diferencia_total,
+                   AVG(COALESCE(costo_unitario, 0)) as costo_unitario,
+                   SUM(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) * COALESCE(costo_unitario, 0)) as valor_descuadre
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
               AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
               AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
         """ + filtro_extra
         params_top = list(params)
-        query_top += " ORDER BY ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) * COALESCE(costo_unitario, 0) DESC LIMIT 10"
+        query_top += " GROUP BY codigo, nombre, unidad ORDER BY valor_descuadre DESC LIMIT 10"
         cur.execute(query_top, params_top)
         top_descuadre = []
         for r in cur.fetchall():
             top_descuadre.append({
                 'codigo': r['codigo'],
                 'nombre': r['nombre'],
-                'local': r['local'],
-                'local_nombre': BODEGAS_NOMBRES.get(r['local'], r['local']),
                 'unidad': r['unidad'],
-                'diferencia': float(r['diferencia']),
+                'diferencia': float(r['diferencia_total']),
                 'costo_unitario': float(r['costo_unitario']),
                 'valor_descuadre': float(r['valor_descuadre'])
             })
