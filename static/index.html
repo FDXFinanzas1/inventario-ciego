@@ -863,8 +863,12 @@
                             </select>
                         </div>
                         <div class="obs-filtro-grupo">
-                            <label for="sem-fecha-lunes">Semana del (Lunes)</label>
-                            <input type="date" id="sem-fecha-lunes" class="obs-filtro-input">
+                            <label for="sem-fecha-lunes">Seleccionar semana</label>
+                            <input type="date" id="sem-fecha-lunes" class="obs-filtro-input" onchange="semanalMostrarRango()">
+                        </div>
+                        <div class="obs-filtro-grupo" style="justify-content:flex-end;">
+                            <label>&nbsp;</label>
+                            <span id="sem-rango-preview" style="font-size:13px;font-weight:600;color:var(--primary);padding:8px 0;"></span>
                         </div>
                         <button id="btn-sem-cargar" class="btn-obs-cargar">
                             <i class="fas fa-search"></i> Cargar Semana

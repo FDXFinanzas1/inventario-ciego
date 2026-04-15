@@ -5495,6 +5495,7 @@ function semanalInit() {
     if (fechaInput && !fechaInput.value) {
         fechaInput.value = _semanalGetLunes(new Date());
     }
+    semanalMostrarRango();
 
     // Cargar pendientes
     semanalCargarPendientes();
@@ -5508,6 +5509,25 @@ function semanalInit() {
         document.getElementById('btn-sem-cerrar').addEventListener('click', semanalCerrar);
         document.getElementById('btn-sem-reabrir').addEventListener('click', semanalReabrir);
     }
+}
+
+function semanalMostrarRango() {
+    const fechaInput = document.getElementById('sem-fecha-lunes');
+    const preview = document.getElementById('sem-rango-preview');
+    if (!fechaInput || !preview || !fechaInput.value) { if (preview) preview.textContent = ''; return; }
+
+    const lunes = _semanalGetLunes(new Date(fechaInput.value + 'T12:00:00'));
+    fechaInput.value = lunes; // ajustar al lunes
+
+    const lunesDate = new Date(lunes + 'T12:00:00');
+    const domingoDate = new Date(lunesDate);
+    domingoDate.setDate(lunesDate.getDate() + 6);
+
+    const dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+    const fmtFecha = (d) => `${dias[d.getDay()]} ${d.getDate()} ${meses[d.getMonth()]}`;
+    preview.textContent = `${fmtFecha(lunesDate)} → ${fmtFecha(domingoDate)} ${domingoDate.getFullYear()}`;
 }
 
 function _semanalGetLunes(date) {
