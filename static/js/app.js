@@ -1458,13 +1458,14 @@ function renderObservaciones() {
     }
 
     // === TABLA 2: Observaciones manuales (productos agregados) ===
+    const productosOrdenados = [..._obsProductos].sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     html += `
         <div class="tabla-obs-container" style="margin-top:16px;">
-            <div class="obs-header" style="background:#DBEAFE;color:#1E40AF;border-color:#93C5FD;">
+            <div class="obs-header">
                 <i class="fas fa-plus-circle"></i>
                 Productos agregados manualmente (${_obsManuales.length})
             </div>
-            ${_obsManuales.length > 0 ? `
             <table class="tabla-observaciones">
                 <thead>
                     <tr>
@@ -1484,7 +1485,7 @@ function renderObservaciones() {
                         const corregido = m.corregido || false;
                         return `
                             <tr class="fila-manual">
-                                <td class="obs-nombre">${m.nombre} ${m.codigo ? '<small style="color:#94A3B8">(' + m.codigo + ')</small>' : ''}</td>
+                                <td class="obs-nombre">${m.nombre}</td>
                                 <td class="obs-dif ${difClass}">${dif !== 0 ? (dif > 0 ? '+' : '') + dif.toFixed(3) : '0.000'}</td>
                                 <td class="obs-motivo-cell">
                                     <select class="select-motivo" data-manual-id="${m.id}" onchange="guardarMotivoManual(this)">
@@ -1518,60 +1519,44 @@ function renderObservaciones() {
                             </tr>
                         `;
                     }).join('')}
+                    <tr class="fila-agregar">
+                        <td>
+                            <select id="obs-agregar-producto" class="select-motivo" style="background:white;">
+                                <option value="">-- Seleccionar producto --</option>
+                                ${productosOrdenados.map(p =>
+                                    `<option value="${p.codigo}||${p.nombre.replace(/"/g, '&quot;')}">${p.nombre}</option>`
+                                ).join('')}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="number" id="obs-agregar-dif" class="input-observacion" placeholder="Dif"
+                                   step="0.001" style="width:70px;text-align:center;">
+                        </td>
+                        <td colspan="2" style="text-align:center;">
+                            <button class="btn-obs-cargar" onclick="agregarProductoManual()" style="width:100%;">
+                                <i class="fas fa-plus"></i> Agregar producto
+                            </button>
+                        </td>
+                        <td></td>
+                    </tr>
                 </tbody>
-            </table>` : ''}
-            <div class="obs-agregar-wrapper" style="padding:10px 14px;">
-                <div class="obs-agregar-buscar">
-                    <i class="fas fa-plus-circle"></i>
-                    <input type="text" id="obs-agregar-input" placeholder="Buscar producto para agregar..."
-                           oninput="filtrarProductosAgregar(this.value)" autocomplete="off">
-                    <input type="number" id="obs-agregar-dif" placeholder="Dif" step="0.001"
-                           style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;">
-                </div>
-                <div id="obs-agregar-lista" class="obs-agregar-lista" style="display:none;"></div>
-            </div>
+            </table>
         </div>`;
 
     obsContainer.innerHTML = html;
 }
 
-function filtrarProductosAgregar(texto) {
-    const lista = document.getElementById('obs-agregar-lista');
-    if (!lista) return;
-
-    if (!texto || texto.length < 2) {
-        lista.style.display = 'none';
-        lista.innerHTML = '';
-        return;
-    }
-
-    const termino = texto.toLowerCase();
-    const resultados = _obsProductos.filter(p =>
-        p.nombre.toLowerCase().includes(termino) || p.codigo.toLowerCase().includes(termino)
-    ).slice(0, 10);
-
-    if (resultados.length === 0) {
-        lista.style.display = 'block';
-        lista.innerHTML = '<div class="obs-agregar-item obs-agregar-vacio">No se encontraron productos</div>';
-        return;
-    }
-
-    lista.style.display = 'block';
-    lista.innerHTML = resultados.map(p => `
-        <div class="obs-agregar-item" onclick="agregarProductoObs('${p.codigo}', '${p.nombre.replace(/'/g, "\\'")}')">
-            <span class="obs-agregar-codigo">${p.codigo}</span>
-            <span class="obs-agregar-nombre">${p.nombre}</span>
-        </div>
-    `).join('');
-}
-
-async function agregarProductoObs(codigo, nombre) {
+async function agregarProductoManual() {
+    const selectProd = document.getElementById('obs-agregar-producto');
+    const difInput = document.getElementById('obs-agregar-dif');
     const fecha = document.getElementById('obs-fecha').value;
     const bodega = document.getElementById('obs-bodega').value;
-    const difInput = document.getElementById('obs-agregar-dif');
-    const diferencia = difInput ? parseFloat(difInput.value) || 0 : 0;
 
+    if (!selectProd || !selectProd.value) { showToast('Selecciona un producto', 'error'); return; }
     if (!fecha || !bodega) { showToast('Selecciona fecha y bodega', 'error'); return; }
+
+    const [codigo, nombre] = selectProd.value.split('||');
+    const diferencia = difInput ? parseFloat(difInput.value) || 0 : 0;
 
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales`, {

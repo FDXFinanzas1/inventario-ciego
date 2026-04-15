@@ -862,8 +862,12 @@ main {
 }
 
 .tabla-observaciones .fila-manual {
-    background: #EFF6FF !important;
-    border-left: 3px solid #3B82F6;
+    background: #F8FAFC !important;
+}
+
+.tabla-observaciones .fila-agregar {
+    background: #F1F5F9 !important;
+    border-top: 2px dashed var(--border);
 }
 
 /* Agregar producto a observaciones */
@@ -957,7 +961,7 @@ main {
 /* Tabla de Observaciones separada */
 .tabla-obs-container {
     margin-top: 16px;
-    border: 1px solid var(--warning);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     overflow: hidden;
     background: var(--bg-white);
@@ -967,12 +971,12 @@ main {
     padding: 10px 16px;
     font-weight: 600;
     font-size: 13px;
-    background: #FEF3C7;
-    color: #92400E;
+    background: var(--primary);
+    color: white;
     display: flex;
     align-items: center;
     gap: 8px;
-    border-bottom: 1px solid var(--warning);
+    border-bottom: 1px solid var(--primary);
 }
 
 .obs-header i {
@@ -1054,13 +1058,13 @@ main {
     font-size: 13px;
     font-family: inherit;
     transition: all 0.2s;
-    background: #FFFBEB;
+    background: #F8FAFC;
 }
 
 .input-observacion:focus {
     outline: none;
-    border-color: var(--warning);
-    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.1);
     background: white;
 }
 
@@ -1094,7 +1098,7 @@ main {
     border-radius: var(--radius-sm);
     font-size: 12px;
     font-family: inherit;
-    background: #FFFBEB;
+    background: #F8FAFC;
     cursor: pointer;
     transition: all 0.2s;
     appearance: auto;
@@ -1103,8 +1107,8 @@ main {
 .select-motivo:focus,
 .select-observacion:focus {
     outline: none;
-    border-color: var(--warning);
-    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.1);
 }
 
 .select-motivo.guardado,
