@@ -5704,6 +5704,10 @@ async function semanalCargarSemanaById(id) {
     }
 }
 
+// Estado local del módulo semanal
+let _semanalProductosSeleccionados = [];
+let _semanalPersonasSeleccionadas = [];
+
 function semanalRenderDiferencias(data) {
     const container = document.getElementById('sem-diferencias');
     const listEl = document.getElementById('sem-productos-list');
@@ -5730,64 +5734,175 @@ function semanalRenderDiferencias(data) {
         totalValor += Math.abs(d) * c;
     });
 
-    let html = `
+    // Restaurar selecciones previas
+    const asignacion0 = diferencias[0]?.asignacion;
+    if (asignacion0 && asignacion0.personas && _semanalPersonasSeleccionadas.length === 0) {
+        _semanalPersonasSeleccionadas = asignacion0.personas.map(p => p.persona);
+    }
+
+    // Productos HTML (checkboxes)
+    const productosHtml = diferencias.map((prod, idx) => {
+        const diff = parseFloat(prod.diferencia) || 0;
+        const costo = parseFloat(prod.costo_unitario) || 0;
+        const valorTotal = Math.abs(diff) * costo;
+        const difClass = diff < 0 ? 'negativa' : 'positiva';
+        const difLabel = diff < 0 ? '▼' : '▲';
+        const unidad = prod.unidad || '';
+        const detalle = prod.detalle_diario || [];
+        const seleccionado = _semanalProductosSeleccionados.includes(prod.codigo) ||
+            (prod.asignacion && prod.asignacion.personas && prod.asignacion.personas.length > 0);
+
+        const desglose = detalle.map(dd => {
+            const d = parseFloat(dd.dif) || 0;
+            const cls = d < 0 ? 'sem-diff-negativo' : d > 0 ? 'sem-diff-positivo' : '';
+            const f = dd.fecha ? dd.fecha.split('-').slice(1).reverse().join('/') : '';
+            return `<span class="sem-dia-chip ${cls}">${f}:${d > 0?'+':''}${d.toFixed(1)}</span>`;
+        }).join(' ');
+
+        return `
+        <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-codigo="${escapeHtml(prod.codigo)}">
+            <input type="checkbox" ${seleccionado ? 'checked' : ''} ${esCerrada ? 'disabled' : ''}
+                   onchange="_semToggleProd(this, '${escapeHtml(prod.codigo)}')">
+            <div class="sec-prod-info">
+                <span class="sec-prod-nombre">${escapeHtml(prod.nombre)}</span>
+                <span class="sec-prod-dif ${difClass}">${difLabel} neto ${Math.abs(diff).toFixed(2)} ${unidad}</span>
+                <div class="sem-desglose-diario" style="margin-top:2px;">${desglose}</div>
+            </div>
+            <span class="sec-prod-valor">$${valorTotal.toFixed(2)}</span>
+        </label>`;
+    }).join('');
+
+    // Personas HTML
+    const personasHtml = _semanalPersonasSeleccionadas.length === 0
+        ? '<div class="sec-empty-inner"><i class="fas fa-user-plus"></i> Agrega personas</div>'
+        : _semanalPersonasSeleccionadas.map((nombre, i) => `
+            <div class="sec-persona-chip">
+                <i class="fas fa-user"></i>
+                <span>${escapeHtml(nombre)}</span>
+                ${!esCerrada ? `<button class="baja-item-del" onclick="_semQuitarPersona(${i})" title="Quitar"><i class="fas fa-times"></i></button>` : ''}
+            </div>`).join('');
+
+    // Info división
+    const selCount = diferencias.filter(p =>
+        _semanalProductosSeleccionados.includes(p.codigo) ||
+        (p.asignacion && p.asignacion.personas && p.asignacion.personas.length > 0)
+    ).length;
+    const valorSeleccionado = diferencias.filter(p =>
+        _semanalProductosSeleccionados.includes(p.codigo) ||
+        (p.asignacion && p.asignacion.personas && p.asignacion.personas.length > 0)
+    ).reduce((s, p) => s + Math.abs(parseFloat(p.diferencia) || 0) * (parseFloat(p.costo_unitario) || 0), 0);
+
+    const divisionInfo = _semanalPersonasSeleccionadas.length > 0 && selCount > 0 ? `
+        <div class="sec-division-info">
+            <i class="fas fa-divide"></i>
+            ${selCount} producto(s) ÷ ${_semanalPersonasSeleccionadas.length} persona(s)
+            · <strong>$${(valorSeleccionado / _semanalPersonasSeleccionadas.length).toFixed(2)}</strong> c/u
+        </div>` : '';
+
+    listEl.innerHTML = `
         <div class="sem-kpis">
             <div class="sem-kpi"><span class="sem-kpi-val">${diferencias.length}</span><span class="sem-kpi-label">Productos con diferencia neta</span></div>
             <div class="sem-kpi sem-kpi-neg"><span class="sem-kpi-val">$${totalFaltante.toFixed(2)}</span><span class="sem-kpi-label">Total Faltantes</span></div>
             <div class="sem-kpi sem-kpi-pos"><span class="sem-kpi-val">$${totalSobrante.toFixed(2)}</span><span class="sem-kpi-label">Total Sobrantes</span></div>
             <div class="sem-kpi"><span class="sem-kpi-val">$${totalValor.toFixed(2)}</span><span class="sem-kpi-label">Total a Descontar</span></div>
         </div>
-    `;
 
-    diferencias.forEach((prod, idx) => {
-        const diff = parseFloat(prod.diferencia) || 0;
-        const diffClass = diff < 0 ? 'sem-diff-negativo' : (diff > 0 ? 'sem-diff-positivo' : '');
-        const diffLabel = diff < 0 ? 'Faltante' : (diff > 0 ? 'Sobrante' : 'OK');
-        const costo = parseFloat(prod.costo_unitario) || 0;
-        const valorTotal = Math.abs(diff) * costo;
-        const diasContados = prod.dias_contados || 0;
-        const detalle = prod.detalle_diario || [];
-
-        // Desglose diario
-        const desgloseDiario = detalle.map(dd => {
-            const difDia = parseFloat(dd.dif) || 0;
-            const difClass = difDia < 0 ? 'sem-diff-negativo' : difDia > 0 ? 'sem-diff-positivo' : '';
-            const fechaCorta = dd.fecha ? dd.fecha.split('-').slice(1).reverse().join('/') : '';
-            return `<span class="sem-dia-chip ${difClass}" title="${dd.fecha}: Sistema ${dd.stock} → Conteo ${dd.contado}">${fechaCorta}: ${difDia > 0 ? '+' : ''}${difDia.toFixed(1)}</span>`;
-        }).join('');
-
-        // Existing assignments
-        const asignacion = prod.asignacion;
-        const personasAsig = asignacion && asignacion.personas ? asignacion.personas : [];
-
-        html += `
-            <div class="sem-producto-row" data-idx="${idx}" data-codigo="${escapeHtml(prod.codigo)}">
-                <div class="sem-prod-header">
-                    <div class="sem-prod-info">
-                        <span class="sem-prod-codigo">${escapeHtml(prod.codigo)}</span>
-                        <span class="sem-prod-nombre">${escapeHtml(prod.nombre)}</span>
-                        <span class="sem-prod-dias" title="${diasContados} días contados">${diasContados}d</span>
+        <div class="sec-card">
+            <div class="sec-card-header">
+                <span class="sec-nombre-input" style="pointer-events:none;">Asignación Semanal de Descuentos</span>
+            </div>
+            <div class="sec-two-col">
+                <div class="sec-col">
+                    <div class="sec-col-header">
+                        <span><i class="fas fa-box-open"></i> Productos con descuadre</span>
+                        <span class="sec-total-chip">$${totalValor.toFixed(2)}</span>
                     </div>
-                    <div class="sem-prod-numeros">
-                        <span class="sem-prod-diff ${diffClass}" title="Neto semanal (${diffLabel})">Neto: ${diff > 0 ? '+' : ''}${diff.toFixed(2)}</span>
-                        <span class="sem-prod-costo" title="Costo unit.">×$${costo.toFixed(4)}</span>
-                        <span class="sem-prod-valor ${diffClass}" title="Valor a descontar">= $${valorTotal.toFixed(2)}</span>
+                    <div class="sec-productos-lista">${productosHtml}</div>
+                </div>
+                <div class="sec-col">
+                    <div class="sec-col-header">
+                        <span><i class="fas fa-users"></i> Personas responsables</span>
+                        ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semAbrirPersona()"><i class="fas fa-plus"></i> Agregar</button>` : ''}
                     </div>
-                </div>
-                <div class="sem-desglose-diario">${desgloseDiario}</div>
-                <div class="sem-asig-container" data-idx="${idx}">
-                    ${personasAsig.length > 0 ? personasAsig.map((pa, pi) => _semanalPersonaRowHTML(idx, pi, pa.persona, pa.cantidad, costo, esCerrada)).join('') : _semanalPersonaRowHTML(idx, 0, '', '', costo, esCerrada)}
-                    ${!esCerrada ? `<button class="btn-secondary btn-sm sem-btn-add-persona" onclick="semanalAddPersonaRow(${idx})"><i class="fas fa-plus"></i> Persona</button>` : ''}
-                </div>
-                <div class="sem-asig-total" data-idx="${idx}">
-                    Asignado: <strong class="sem-asig-total-val">$${personasAsig.reduce((s, p) => s + (parseFloat(p.cantidad) || 0) * costo, 0).toFixed(2)}</strong>
-                    de <strong>$${valorTotal.toFixed(2)}</strong>
+                    <div class="sec-personas-lista chips">${personasHtml}</div>
+                    ${divisionInfo}
                 </div>
             </div>
-        `;
-    });
+        </div>
+    `;
+}
 
-    listEl.innerHTML = html;
+function _semToggleProd(checkbox, codigo) {
+    if (checkbox.checked) {
+        if (!_semanalProductosSeleccionados.includes(codigo)) _semanalProductosSeleccionados.push(codigo);
+    } else {
+        _semanalProductosSeleccionados = _semanalProductosSeleccionados.filter(c => c !== codigo);
+    }
+    const label = checkbox.closest('.sec-prod-item');
+    if (label) label.classList.toggle('selected', checkbox.checked);
+    // Re-render para actualizar división
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semAbrirPersona() {
+    const personas = state.personas || [];
+    if (personas.length === 0) {
+        showToast('No hay personas cargadas', 'error');
+        return;
+    }
+    const opciones = personas.map(p => {
+        const nombre = typeof p === 'string' ? p : p.nombre;
+        return nombre;
+    }).filter(n => !_semanalPersonasSeleccionadas.includes(n));
+
+    if (opciones.length === 0) {
+        showToast('Todas las personas ya están agregadas', 'info');
+        return;
+    }
+
+    // Crear mini-dropdown temporal
+    const btn = document.querySelector('.sec-col:last-child .btn-secondary');
+    if (!btn) return;
+    let dropdown = document.getElementById('sem-persona-dropdown');
+    if (dropdown) { dropdown.remove(); return; }
+
+    dropdown = document.createElement('div');
+    dropdown.id = 'sem-persona-dropdown';
+    dropdown.className = 'obs-agregar-lista';
+    dropdown.style.cssText = 'display:block;position:absolute;right:0;top:100%;z-index:50;max-height:200px;overflow-y:auto;min-width:200px;';
+    dropdown.innerHTML = opciones.map(n => `
+        <div class="obs-agregar-item" onclick="_semSeleccionarPersona('${n.replace(/'/g, "\\'")}')">
+            <i class="fas fa-user" style="color:var(--primary);"></i>
+            <span>${n}</span>
+        </div>
+    `).join('');
+
+    btn.parentElement.style.position = 'relative';
+    btn.parentElement.appendChild(dropdown);
+
+    // Cerrar al click fuera
+    setTimeout(() => {
+        document.addEventListener('click', function _cerrar(e) {
+            if (!dropdown.contains(e.target) && e.target !== btn) {
+                dropdown.remove();
+                document.removeEventListener('click', _cerrar);
+            }
+        });
+    }, 10);
+}
+
+function _semSeleccionarPersona(nombre) {
+    if (!_semanalPersonasSeleccionadas.includes(nombre)) {
+        _semanalPersonasSeleccionadas.push(nombre);
+    }
+    const dropdown = document.getElementById('sem-persona-dropdown');
+    if (dropdown) dropdown.remove();
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semQuitarPersona(idx) {
+    _semanalPersonasSeleccionadas.splice(idx, 1);
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
 }
 
 function _semanalPersonaRowHTML(prodIdx, personaIdx, persona, cantidad, costoUnit, readOnly) {
@@ -5870,40 +5985,40 @@ async function semanalGuardarTodo() {
         return;
     }
 
-    const asignaciones = [];
-    const productoRows = document.querySelectorAll('.sem-producto-row');
+    // Obtener productos seleccionados
+    const productosSeleccionados = _semanalDiferencias.filter(p =>
+        _semanalProductosSeleccionados.includes(p.codigo) ||
+        (p.asignacion && p.asignacion.personas && p.asignacion.personas.length > 0)
+    );
 
-    productoRows.forEach(prodRow => {
-        const idx = parseInt(prodRow.dataset.idx);
-        const prod = _semanalDiferencias[idx];
-        if (!prod) return;
-
-        const personaRows = prodRow.querySelectorAll('.sem-persona-row');
-        const personas = [];
-        personaRows.forEach(pr => {
-            const persona = pr.querySelector('.sem-persona-select').value;
-            const cantidad = parseFloat(pr.querySelector('.sem-persona-cant').value) || 0;
-            if (persona && cantidad !== 0) {
-                personas.push({ persona, cantidad });
-            }
-        });
-
-        if (personas.length > 0) {
-            asignaciones.push({
-                codigo: prod.codigo,
-                nombre: prod.nombre,
-                unidad: prod.unidad || '',
-                diferencia_semanal: parseFloat(prod.diferencia) || 0,
-                costo_unitario: parseFloat(prod.costo_unitario) || 0,
-                personas: personas
-            });
-        }
-    });
-
-    if (asignaciones.length === 0) {
-        showToast('No hay asignaciones para guardar', 'info');
+    if (productosSeleccionados.length === 0) {
+        showToast('Selecciona al menos un producto', 'error');
         return;
     }
+    if (_semanalPersonasSeleccionadas.length === 0) {
+        showToast('Agrega al menos una persona responsable', 'error');
+        return;
+    }
+
+    // Dividir equitativamente entre personas
+    const asignaciones = productosSeleccionados.map(prod => {
+        const difAbs = Math.abs(parseFloat(prod.diferencia) || 0);
+        const cantPorPersona = difAbs / _semanalPersonasSeleccionadas.length;
+        return {
+            codigo: prod.codigo,
+            nombre: prod.nombre,
+            unidad: prod.unidad || '',
+            diferencia_semanal: parseFloat(prod.diferencia) || 0,
+            costo_unitario: parseFloat(prod.costo_unitario) || 0,
+            personas: _semanalPersonasSeleccionadas.map(nombre => ({
+                persona: nombre,
+                cantidad: parseFloat(cantPorPersona.toFixed(4))
+            }))
+        };
+    });
+
+    const btn = document.getElementById('btn-sem-guardar-todo');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...'; }
 
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/semanas/${_semanalSemanaActual.id}/asignar`, {
@@ -5917,11 +6032,14 @@ async function semanalGuardarTodo() {
             return;
         }
         showToast('Asignaciones guardadas correctamente', 'success');
-        // Recargar
+        _semanalProductosSeleccionados = [];
+        _semanalPersonasSeleccionadas = [];
         semanalCargarSemanaById(_semanalSemanaActual.id);
     } catch (error) {
         console.error('Error guardando asignaciones:', error);
         showToast('Error al guardar asignaciones', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Guardar Asignaciones'; }
     }
 }
 
