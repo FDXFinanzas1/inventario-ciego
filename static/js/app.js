@@ -5815,14 +5815,21 @@ function semanalRenderDiferencias(data) {
                 <div class="sec-col">
                     <div class="sec-col-header">
                         <span><i class="fas fa-box-open"></i> Productos con descuadre</span>
-                        <span class="sec-total-chip">$${totalValor.toFixed(2)}</span>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semSeleccionarTodosProds()"><i class="fas fa-check-double"></i> Todos</button>` : ''}
+                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semDeseleccionarTodosProds()" style="opacity:0.7;"><i class="fas fa-times"></i> Ninguno</button>` : ''}
+                            <span class="sec-total-chip">$${totalValor.toFixed(2)}</span>
+                        </div>
                     </div>
                     <div class="sec-productos-lista">${productosHtml}</div>
                 </div>
                 <div class="sec-col">
                     <div class="sec-col-header">
                         <span><i class="fas fa-users"></i> Personas responsables</span>
-                        ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semAbrirPersona()"><i class="fas fa-plus"></i> Agregar</button>` : ''}
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semAgregarTodasPersonas()"><i class="fas fa-users"></i> Todos</button>` : ''}
+                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semAbrirPersona()"><i class="fas fa-plus"></i> Agregar</button>` : ''}
+                        </div>
                     </div>
                     <div class="sec-personas-lista chips">${personasHtml}</div>
                     ${divisionInfo}
@@ -5830,6 +5837,22 @@ function semanalRenderDiferencias(data) {
             </div>
         </div>
     `;
+}
+
+function _semSeleccionarTodosProds() {
+    _semanalProductosSeleccionados = _semanalDiferencias.map(p => p.codigo);
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semDeseleccionarTodosProds() {
+    _semanalProductosSeleccionados = [];
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semAgregarTodasPersonas() {
+    const personas = state.personas || [];
+    _semanalPersonasSeleccionadas = personas.map(p => typeof p === 'string' ? p : p.nombre);
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
 }
 
 function _semToggleProd(checkbox, codigo) {
