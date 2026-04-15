@@ -239,7 +239,9 @@ def init_db():
         cur.execute("""
             ALTER TABLE inventario_diario.inventario_ciego_conteos
                 ADD COLUMN IF NOT EXISTS contado_por VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS contado_at TIMESTAMP,
                 ADD COLUMN IF NOT EXISTS contado2_por VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS contado2_at TIMESTAMP,
                 ADD COLUMN IF NOT EXISTS modificado_por VARCHAR(50),
                 ADD COLUMN IF NOT EXISTS modificado_at TIMESTAMP
         """)
@@ -569,13 +571,13 @@ def guardar_conteo():
         if conteo == 2:
             cur.execute("""
                 UPDATE inventario_diario.inventario_ciego_conteos
-                SET cantidad_contada_2 = %s, contado2_por = %s
+                SET cantidad_contada_2 = %s, contado2_por = %s, contado2_at = NOW()
                 WHERE id = %s
             """, (cantidad, usuario or None, id_producto))
         else:
             cur.execute("""
                 UPDATE inventario_diario.inventario_ciego_conteos
-                SET cantidad_contada = %s, contado_por = %s
+                SET cantidad_contada = %s, contado_por = %s, contado_at = NOW()
                 WHERE id = %s
             """, (cantidad, usuario or None, id_producto))
 
