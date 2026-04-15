@@ -841,9 +841,10 @@ main {
     letter-spacing: 0.3px;
 }
 
-.tabla-observaciones .obs-col-producto { width: 40%; }
-.tabla-observaciones .obs-col-dif { width: 15%; text-align: center; }
-.tabla-observaciones .obs-col-obs { width: 45%; }
+.tabla-observaciones .obs-col-producto { width: 30%; }
+.tabla-observaciones .obs-col-dif { width: 10%; text-align: center; }
+.tabla-observaciones .obs-col-obs { width: 42%; }
+.tabla-observaciones .obs-col-corregido { width: 18%; text-align: center; }
 
 .tabla-observaciones tbody tr {
     border-bottom: 1px solid var(--border);
@@ -913,6 +914,118 @@ main {
 .input-observacion::placeholder {
     color: var(--text-light);
     font-style: italic;
+}
+
+/* Select de observaciones preestablecidas */
+.obs-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.select-observacion {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-family: inherit;
+    background: #FFFBEB;
+    cursor: pointer;
+    transition: all 0.2s;
+    appearance: auto;
+}
+
+.select-observacion:focus {
+    outline: none;
+    border-color: var(--warning);
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
+}
+
+.select-observacion.guardado {
+    border-color: var(--success);
+    background: #F0FDF4;
+}
+
+.select-observacion.error {
+    border-color: var(--accent);
+    background: #FEF2F2;
+}
+
+.obs-oculto {
+    display: none;
+}
+
+/* Columna y toggle Corregido */
+.obs-corregido-cell {
+    text-align: center;
+    padding: 5px 8px;
+}
+
+.toggle-corregido {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-corregido input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: #CBD5E1;
+    border-radius: 10px;
+    transition: background 0.3s;
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-corregido input:checked + .toggle-slider {
+    background: var(--success);
+}
+
+.toggle-corregido input:checked + .toggle-slider::after {
+    transform: translateX(16px);
+}
+
+.toggle-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-medium);
+}
+
+.badge-corregido {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.corregido-si {
+    background: #ECFDF5;
+    color: #059669;
+}
+
+.corregido-no {
+    background: #FEF2F2;
+    color: #B91C1C;
 }
 
 .obs-footer {
@@ -2704,13 +2817,37 @@ textarea:focus {
         font-size: 11px;
     }
 
-    .tabla-observaciones .obs-col-producto { width: 35%; }
-    .tabla-observaciones .obs-col-dif { width: 15%; }
-    .tabla-observaciones .obs-col-obs { width: 50%; }
+    .tabla-observaciones .obs-col-producto { width: 25%; }
+    .tabla-observaciones .obs-col-dif { width: 10%; }
+    .tabla-observaciones .obs-col-obs { width: 42%; }
+    .tabla-observaciones .obs-col-corregido { width: 23%; }
 
     .input-observacion {
         padding: 6px 6px;
         font-size: 12px;
+    }
+
+    .select-observacion {
+        padding: 5px 4px;
+        font-size: 11px;
+    }
+
+    .toggle-slider {
+        width: 30px;
+        height: 17px;
+    }
+
+    .toggle-slider::after {
+        width: 13px;
+        height: 13px;
+    }
+
+    .toggle-corregido input:checked + .toggle-slider::after {
+        transform: translateX(13px);
+    }
+
+    .toggle-label {
+        font-size: 11px;
     }
 
     .obs-footer {

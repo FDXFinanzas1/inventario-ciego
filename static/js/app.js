@@ -846,6 +846,7 @@ async function consultarInventario() {
                 cantidad_contada: p.cantidad_contada,
                 cantidad_contada_2: p.cantidad_contada_2,
                 observaciones: p.observaciones || '',
+                corregido: p.corregido || false,
                 costo_unitario: parseFloat(p.costo_unitario) || 0
             }));
 
@@ -1163,10 +1164,20 @@ async function guardarConteoDirecto(input) {
 
 // ==================== GUARDAR OBSERVACION ====================
 
+function _obtenerObservacionFila(row) {
+    const select = row.querySelector('.select-observacion');
+    const input = row.querySelector('.input-observacion');
+    if (select.value === '__otro__') {
+        return input.value.trim();
+    } else {
+        return select.value;
+    }
+}
+
 async function guardarTodasObservaciones() {
     if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso para editar observaciones', 'error'); return; }
-    const inputs = document.querySelectorAll('.input-observacion');
-    if (inputs.length === 0) return;
+    const filas = document.querySelectorAll('.tabla-observaciones tbody tr');
+    if (filas.length === 0) return;
 
     const btn = document.querySelector('.btn-guardar-obs');
     if (btn) {
@@ -1175,9 +1186,11 @@ async function guardarTodasObservaciones() {
     }
 
     let errores = 0;
-    for (const input of inputs) {
-        const id = parseInt(input.dataset.id);
-        const observaciones = input.value.trim();
+    for (const fila of filas) {
+        const select = fila.querySelector('.select-observacion');
+        if (!select) continue;
+        const id = parseInt(select.dataset.id);
+        const observaciones = _obtenerObservacionFila(fila);
 
         try {
             const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
@@ -1189,12 +1202,12 @@ async function guardarTodasObservaciones() {
             if (response.ok) {
                 const prod = state.productos.find(p => p.id === id);
                 if (prod) prod.observaciones = observaciones;
-                input.classList.add('guardado');
-                setTimeout(() => input.classList.remove('guardado'), 1500);
+                select.classList.add('guardado');
+                setTimeout(() => select.classList.remove('guardado'), 1500);
             } else {
                 errores++;
-                input.classList.add('error');
-                setTimeout(() => input.classList.remove('error'), 1500);
+                select.classList.add('error');
+                setTimeout(() => select.classList.remove('error'), 1500);
             }
         } catch (error) {
             errores++;
@@ -1245,6 +1258,21 @@ async function guardarObservacion(input) {
 
 // ==================== MODULO: OBSERVACIONES (pestaña separada) ====================
 
+const OBSERVACIONES_PREESTABLECIDAS = [
+    'Baja cargada fuera de tiempo',
+    'Bajas mal ejecutadas',
+    'Compra Extraordinaria',
+    'Error de sistema',
+    'Factura mal cargada',
+    'Facturación cargada fuera de tiempo',
+    'Mal conteo',
+    'Mal tipeo',
+    'Producción mal ejecutada',
+    'Producto sin justificación',
+    'Traslado entre tiendas Erróneo',
+    'Traslados mal ejecutado de bodega Principal'
+];
+
 function renderObservaciones() {
     const obsContainer = document.getElementById('observaciones-container');
     if (!obsContainer) return;
@@ -1273,6 +1301,12 @@ function renderObservaciones() {
         return;
     }
 
+    const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+
+    const opcionesSelect = OBSERVACIONES_PREESTABLECIDAS.map(op =>
+        `<option value="${op}">${op}</option>`
+    ).join('');
+
     obsContainer.innerHTML = `
         <div class="tabla-obs-container">
             <div class="obs-header">
@@ -1285,6 +1319,7 @@ function renderObservaciones() {
                         <th class="obs-col-producto">Producto</th>
                         <th class="obs-col-dif">Dif</th>
                         <th class="obs-col-obs">Observación</th>
+                        <th class="obs-col-corregido">Corregido</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1293,18 +1328,44 @@ function renderObservaciones() {
                         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
                         const diferencia = cantidadFinal - prod.cantidad_sistema;
                         const difClass = diferencia < 0 ? 'negativa' : 'positiva';
+                        const obsActual = (prod.observaciones || '').replace(/"/g, '&quot;');
+                        const esPreestablecida = OBSERVACIONES_PREESTABLECIDAS.includes(prod.observaciones || '');
+                        const corregido = prod.corregido || false;
+
                         return `
                             <tr>
                                 <td class="obs-nombre">${prod.nombre}</td>
                                 <td class="obs-dif ${difClass}">${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</td>
                                 <td class="obs-input-cell">
-                                    <input type="text"
-                                           class="input-observacion"
-                                           value="${(prod.observaciones || '').replace(/"/g, '&quot;')}"
-                                           placeholder="Escribir motivo..."
-                                           data-id="${prod.id}"
-                                           onchange="guardarObservacion(this)"
-                                           onkeypress="if(event.key==='Enter') this.blur()">
+                                    <div class="obs-input-wrapper">
+                                        <select class="select-observacion" data-id="${prod.id}" onchange="seleccionarObservacion(this)">
+                                            <option value="">-- Seleccionar motivo --</option>
+                                            ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
+                                                `<option value="${op}" ${prod.observaciones === op ? 'selected' : ''}>${op}</option>`
+                                            ).join('')}
+                                            <option value="__otro__" ${obsActual && !esPreestablecida ? 'selected' : ''}>Otro (escribir)</option>
+                                        </select>
+                                        <input type="text"
+                                               class="input-observacion ${esPreestablecida ? 'obs-oculto' : ''}"
+                                               value="${!esPreestablecida ? obsActual : ''}"
+                                               placeholder="Escribir motivo..."
+                                               data-id="${prod.id}"
+                                               onchange="guardarObservacion(this)"
+                                               onkeypress="if(event.key==='Enter') this.blur()"
+                                               style="${esPreestablecida || !obsActual ? 'display:none;' : ''}">
+                                    </div>
+                                </td>
+                                <td class="obs-corregido-cell">
+                                    ${esAdmin
+                                        ? `<label class="toggle-corregido">
+                                               <input type="checkbox" class="check-corregido" data-id="${prod.id}"
+                                                      ${corregido ? 'checked' : ''}
+                                                      onchange="toggleCorregido(this)">
+                                               <span class="toggle-slider"></span>
+                                               <span class="toggle-label">${corregido ? 'Sí' : 'No'}</span>
+                                           </label>`
+                                        : `<span class="badge-corregido ${corregido ? 'corregido-si' : 'corregido-no'}">${corregido ? 'Sí' : 'No'}</span>`
+                                    }
                                 </td>
                             </tr>
                         `;
@@ -1318,6 +1379,72 @@ function renderObservaciones() {
             </div>
         </div>
     `;
+}
+
+function seleccionarObservacion(select) {
+    const id = parseInt(select.dataset.id);
+    const valor = select.value;
+    const row = select.closest('tr');
+    const inputTexto = row.querySelector('.input-observacion');
+
+    if (valor === '__otro__') {
+        inputTexto.style.display = '';
+        inputTexto.focus();
+    } else {
+        inputTexto.style.display = 'none';
+        inputTexto.value = '';
+        // Guardar directamente la opción preestablecida
+        const prod = state.productos.find(p => p.id === id);
+        if (prod) prod.observaciones = valor;
+        guardarObservacionDirecta(id, valor);
+    }
+}
+
+async function guardarObservacionDirecta(id, observaciones) {
+    if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso', 'error'); return; }
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, observaciones })
+        });
+        if (response.ok) {
+            const prod = state.productos.find(p => p.id === id);
+            if (prod) prod.observaciones = observaciones;
+            showToast('Observación guardada', 'success');
+        } else {
+            showToast('Error al guardar', 'error');
+        }
+    } catch (error) {
+        showToast('Error de conexión', 'error');
+    }
+}
+
+async function toggleCorregido(checkbox) {
+    const id = parseInt(checkbox.dataset.id);
+    const corregido = checkbox.checked;
+    const label = checkbox.closest('.toggle-corregido').querySelector('.toggle-label');
+    const prod = state.productos.find(p => p.id === id);
+    const observaciones = prod ? prod.observaciones : '';
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, observaciones, corregido })
+        });
+        if (response.ok) {
+            if (prod) prod.corregido = corregido;
+            label.textContent = corregido ? 'Sí' : 'No';
+            showToast(corregido ? 'Marcado como corregido' : 'Marcado como no corregido', 'success');
+        } else {
+            checkbox.checked = !corregido;
+            showToast('Error al actualizar', 'error');
+        }
+    } catch (error) {
+        checkbox.checked = !corregido;
+        showToast('Error de conexión', 'error');
+    }
 }
 
 // ==================== MODULO: ASIGNACION DE DIFERENCIAS ====================
@@ -2629,11 +2756,13 @@ async function verDiferencias() {
                                     <th>Conteo 2</th>
                                     <th>Diferencia</th>
                                     <th>Observacion</th>
+                                    <th>Corregido</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${datos.map(p => {
                                     const difClass = p.diferencia < 0 ? 'negativa' : 'positiva';
+                                    const corregidoClass = p.corregido ? 'corregido-si' : 'corregido-no';
                                     return `
                                         <tr>
                                             ${mostrarTodas ? `<td><strong>${p.local_nombre || p.local}</strong></td>` : ''}
@@ -2645,6 +2774,7 @@ async function verDiferencias() {
                                             <td class="text-center">${p.conteo2 !== null ? p.conteo2 : '-'}</td>
                                             <td class="col-diferencia ${difClass}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
                                             <td class="col-obs">${p.observaciones || '-'}</td>
+                                            <td class="text-center"><span class="badge-corregido ${corregidoClass}">${p.corregido ? 'Sí' : 'No'}</span></td>
                                         </tr>
                                     `;
                                 }).join('')}

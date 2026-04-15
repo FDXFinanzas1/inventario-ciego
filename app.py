@@ -480,15 +480,18 @@ def consultar_inventario():
         conn = get_db()
         cur = conn.cursor()
 
-        # Asegurar que la columna observaciones existe
+        # Asegurar que las columnas observaciones y corregido existen
         cur.execute("""
             ALTER TABLE inventario_diario.inventario_ciego_conteos
-            ADD COLUMN IF NOT EXISTS observaciones TEXT
+            ADD COLUMN IF NOT EXISTS observaciones TEXT;
+            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ADD COLUMN IF NOT EXISTS corregido BOOLEAN DEFAULT FALSE;
         """)
         conn.commit()
 
         cur.execute("""
             SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2, observaciones,
+                   COALESCE(corregido, FALSE) as corregido,
                    COALESCE(costo_unitario, 0) as costo_unitario
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
@@ -588,16 +591,24 @@ def guardar_observacion():
     data = request.json
     id_producto = data.get('id')
     observaciones = data.get('observaciones', '')
+    corregido = data.get('corregido', None)
 
     conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("""
-            UPDATE inventario_diario.inventario_ciego_conteos
-            SET observaciones = %s
-            WHERE id = %s
-        """, (observaciones, id_producto))
+        if corregido is not None:
+            cur.execute("""
+                UPDATE inventario_diario.inventario_ciego_conteos
+                SET observaciones = %s, corregido = %s
+                WHERE id = %s
+            """, (observaciones, bool(corregido), id_producto))
+        else:
+            cur.execute("""
+                UPDATE inventario_diario.inventario_ciego_conteos
+                SET observaciones = %s
+                WHERE id = %s
+            """, (observaciones, id_producto))
         conn.commit()
 
         return jsonify({'success': True})
@@ -868,6 +879,7 @@ def reporte_diferencias():
                    cantidad_contada_2 as conteo2,
                    COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
                    observaciones,
+                   COALESCE(corregido, FALSE) as corregido,
                    local
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha = %s
@@ -896,7 +908,8 @@ def reporte_diferencias():
                 'conteo1': float(p['conteo1']) if p['conteo1'] is not None else None,
                 'conteo2': float(p['conteo2']) if p['conteo2'] is not None else None,
                 'diferencia': float(p['diferencia']) if p['diferencia'] is not None else 0,
-                'observaciones': p['observaciones'] or ''
+                'observaciones': p['observaciones'] or '',
+                'corregido': bool(p['corregido'])
             }
             if not bodega:
                 item['local'] = p['local']
@@ -932,7 +945,8 @@ def exportar_excel():
                    cantidad_contada as conteo1,
                    cantidad_contada_2 as conteo2,
                    COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
-                   observaciones
+                   observaciones,
+                   COALESCE(corregido, FALSE) as corregido
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
         """
@@ -974,7 +988,7 @@ def exportar_excel():
                 grupos[key] = []
             grupos[key].append(r)
 
-        headers = ['Codigo', 'Producto', 'Unidad', 'Sistema', 'Conteo 1', 'Conteo 2', 'Diferencia', 'Observaciones']
+        headers = ['Codigo', 'Producto', 'Unidad', 'Sistema', 'Conteo 1', 'Conteo 2', 'Diferencia', 'Observaciones', 'Corregido']
 
         for (fecha, local), items in grupos.items():
             sheet_name = f"{fecha}_{local}"[:31]
@@ -998,7 +1012,8 @@ def exportar_excel():
                     float(item['conteo1']) if item['conteo1'] is not None else '',
                     float(item['conteo2']) if item['conteo2'] is not None else '',
                     float(item['diferencia']) if item['diferencia'] is not None else '',
-                    item['observaciones'] or ''
+                    item['observaciones'] or '',
+                    'Sí' if item.get('corregido') else 'No'
                 ]
                 for col_idx, val in enumerate(vals, 1):
                     cell = ws.cell(row=row_idx, column=col_idx, value=val)
