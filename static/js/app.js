@@ -1556,11 +1556,6 @@ function renderObservaciones() {
                     }).join('')}
                 </tbody>
             </table>
-            <div class="obs-footer">
-                <button class="btn-guardar-obs" onclick="guardarTodasObservaciones()">
-                    <i class="fas fa-save"></i> Guardar Observaciones
-                </button>
-            </div>
         </div>`;
     } else {
         html += `<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay productos con diferencia en el conteo</p></div>`;
@@ -1663,6 +1658,11 @@ function renderObservaciones() {
                     </tr>
                 </tbody>
             </table>
+        </div>
+        <div class="obs-footer" style="margin-top:16px;">
+            <button class="btn-guardar-obs" onclick="guardarTodasObservaciones()">
+                <i class="fas fa-save"></i> Guardar Observaciones
+            </button>
         </div>`;
 
     obsContainer.innerHTML = html;
