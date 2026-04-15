@@ -65,7 +65,10 @@ function destroyChart(id) {
     }
 }
 
+let _dashCargando = false;
 async function cargarDashboard() {
+    if (_dashCargando) return;
+
     const fechaDesde = document.getElementById('dash-fecha-desde').value;
     const fechaHasta = document.getElementById('dash-fecha-hasta').value;
     const bodega = document.getElementById('dash-bodega') ? document.getElementById('dash-bodega').value : '';
@@ -77,6 +80,14 @@ async function cargarDashboard() {
 
     const productoSel = document.getElementById('dash-producto');
     const producto = productoSel ? productoSel.value : '';
+
+    // Mostrar estado de carga
+    _dashCargando = true;
+    const btn = document.getElementById('btn-cargar-dashboard');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cargando...';
+    }
 
     // Cargar lista de productos disponibles
     _dashCargarProductos(fechaDesde, fechaHasta, bodega);
@@ -107,12 +118,20 @@ async function cargarDashboard() {
                 const datosMotivos = resMotivos.ok ? await resMotivos.json() : [];
                 renderChartMotivos(datosMotivos);
             } catch(e) { console.log('Error cargando motivos:', e); }
+
+            showToast('Dashboard actualizado', 'success');
         } else {
             showToast('Error al cargar datos del dashboard', 'error');
         }
     } catch (error) {
         console.error('Error cargando dashboard:', error);
         showToast('Error de conexion al cargar dashboard', 'error');
+    } finally {
+        _dashCargando = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Actualizar';
+        }
     }
 }
 
