@@ -84,14 +84,16 @@ async function cargarDashboard() {
     try {
         const bodegaParam = bodega ? `&bodega=${bodega}` : '';
         const prodParam = producto ? `&producto=${encodeURIComponent(producto)}` : '';
-        const [resDash, resTend] = await Promise.all([
+        const [resDash, resTend, resMotivos] = await Promise.all([
             fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`),
-            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?dias=30${bodegaParam}`)
+            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?dias=30${bodegaParam}`),
+            fetch(`${CONFIG.API_URL}/api/reportes/motivos?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}`)
         ]);
 
         if (resDash.ok && resTend.ok) {
             const datosDash = await resDash.json();
             const datosTend = await resTend.json();
+            const datosMotivos = resMotivos.ok ? await resMotivos.json() : [];
 
             renderDashboardStats(datosDash.bodegas, datosDash.promedios);
             renderDashboardValorResumen(datosDash.bodegas);
@@ -100,6 +102,7 @@ async function cargarDashboard() {
             renderChartDiferenciasBodega(datosDash.bodegas);
             renderChartFaltantesSobrantes(datosDash.bodegas);
             renderChartTendenciaTemporal(datosTend);
+            renderChartMotivos(datosMotivos);
             renderTopDescuadre(datosDash.top_descuadre);
         } else {
             showToast('Error al cargar datos del dashboard', 'error');
@@ -459,6 +462,62 @@ function renderChartTendenciaTemporal(datos) {
             scales: {
                 x: { grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8', maxRotation: 45 } },
                 y: { beginAtZero: true, grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8' }, title: { display: true, text: 'Productos con diferencia', color: '#64748B', font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+function renderChartMotivos(datos) {
+    if (typeof Chart === 'undefined') return;
+    destroyChart('motivos');
+    const ctx = document.getElementById('chart-motivos');
+    if (!ctx || !datos || datos.length === 0) {
+        if (ctx) {
+            const parent = ctx.parentElement;
+            if (parent) parent.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94A3B8;font-size:13px;">No hay motivos registrados en este periodo</div>';
+        }
+        return;
+    }
+
+    const labels = datos.map(d => d.motivo.length > 35 ? d.motivo.substring(0, 33) + '...' : d.motivo);
+    const valores = datos.map(d => d.cantidad);
+
+    chartInstances['motivos'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Frecuencia',
+                data: valores,
+                backgroundColor: datos.map((_, i) => CHART_COLORS_ALPHA[i % CHART_COLORS_ALPHA.length]),
+                borderColor: datos.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+                borderWidth: 1.5,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: c => `${c.parsed.x} ocurrencia${c.parsed.x !== 1 ? 's' : ''}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: { color: '#F1F5F9', drawBorder: false },
+                    ticks: { color: '#94A3B8', stepSize: 1, precision: 0 },
+                    title: { display: true, text: 'Cantidad', color: '#64748B', font: { size: 11 } }
+                },
+                y: {
+                    grid: { display: false },
+                    ticks: { color: '#123450', font: { size: 11, weight: '500' } }
+                }
             }
         }
     });

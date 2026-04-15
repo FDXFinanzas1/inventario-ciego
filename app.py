@@ -632,6 +632,72 @@ def guardar_observacion():
         if conn:
             release_db(conn)
 
+# ==================== REPORTE MOTIVOS ====================
+
+@app.route('/api/reportes/motivos', methods=['GET'])
+def reporte_motivos():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    bodega = request.args.get('bodega', '')
+
+    if not fecha_desde or not fecha_hasta:
+        return jsonify({'error': 'fecha_desde y fecha_hasta requeridos'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Motivos de conteos
+        query1 = """
+            SELECT motivo, COUNT(*) as cantidad
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha >= %s AND fecha <= %s
+              AND motivo IS NOT NULL AND motivo != ''
+        """
+        params1 = [fecha_desde, fecha_hasta]
+        if bodega:
+            query1 += " AND local = %s"
+            params1.append(bodega)
+        query1 += " GROUP BY motivo"
+
+        cur.execute(query1, params1)
+        motivos_conteo = cur.fetchall()
+
+        # Motivos de observaciones manuales
+        query2 = """
+            SELECT motivo, COUNT(*) as cantidad
+            FROM inventario_diario.observaciones_manuales
+            WHERE fecha >= %s AND fecha <= %s
+              AND motivo IS NOT NULL AND motivo != ''
+        """
+        params2 = [fecha_desde, fecha_hasta]
+        if bodega:
+            query2 += " AND local = %s"
+            params2.append(bodega)
+        query2 += " GROUP BY motivo"
+
+        cur.execute(query2, params2)
+        motivos_manual = cur.fetchall()
+
+        # Combinar ambos
+        totales = {}
+        for m in motivos_conteo:
+            totales[m['motivo']] = totales.get(m['motivo'], 0) + m['cantidad']
+        for m in motivos_manual:
+            totales[m['motivo']] = totales.get(m['motivo'], 0) + m['cantidad']
+
+        resultado = [{'motivo': k, 'cantidad': v} for k, v in totales.items()]
+        resultado.sort(key=lambda x: x['cantidad'], reverse=True)
+
+        return jsonify(resultado)
+    except Exception as e:
+        print(f"Error en /api/reportes/motivos: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
 # ==================== OBSERVACIONES MANUALES ====================
 
 @app.route('/api/observaciones-manuales', methods=['GET'])
