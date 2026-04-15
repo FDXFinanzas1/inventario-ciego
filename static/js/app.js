@@ -1266,6 +1266,7 @@ const OBSERVACIONES_PREESTABLECIDAS = [
 
 // Estado local del módulo observaciones
 let _obsProductos = [];
+let _obsProductosAgregados = []; // IDs de productos agregados manualmente
 
 function initObservaciones() {
     const selectBodega = document.getElementById('obs-bodega');
@@ -1310,6 +1311,7 @@ async function cargarObservaciones() {
         if (!response.ok) throw new Error('Error al consultar');
         const data = await response.json();
 
+        _obsProductosAgregados = [];
         _obsProductos = (data.productos || []).map(p => ({
             id: p.id,
             codigo: p.codigo,
@@ -1343,6 +1345,7 @@ function renderObservaciones() {
         return;
     }
 
+    // Productos con diferencia actual
     const productosConDif = _obsProductos.filter(prod => {
         const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
@@ -1350,22 +1353,49 @@ function renderObservaciones() {
         return cantidadFinal - prod.cantidad_sistema !== 0;
     });
 
-    if (productosConDif.length === 0) {
+    // Productos sin diferencia pero que ya tienen motivo/observación/corregido (ya fueron gestionados)
+    const productosGestionados = _obsProductos.filter(prod => {
+        const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
+        const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+        if (cantidadFinal === null || cantidadFinal === undefined) return false;
+        const tieneDif = cantidadFinal - prod.cantidad_sistema !== 0;
+        if (tieneDif) return false; // ya está en productosConDif
+        return prod.motivo || prod.observaciones || prod.corregido;
+    });
+
+    // Productos agregados manualmente (sin diferencia, sin gestión previa)
+    const idsYaEnLista = new Set([...productosConDif.map(p => p.id), ...productosGestionados.map(p => p.id)]);
+    const productosAgregados = (_obsProductosAgregados || []).filter(id => !idsYaEnLista.has(id))
+        .map(id => _obsProductos.find(p => p.id === id)).filter(Boolean);
+
+    const todosProductos = [...productosConDif, ...productosGestionados, ...productosAgregados];
+
+    if (todosProductos.length === 0) {
         obsContainer.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-check-circle"></i>
                 <p>No hay productos con diferencia</p>
+            </div>
+            <div class="obs-agregar-wrapper">
+                <div class="obs-agregar-buscar">
+                    <i class="fas fa-plus-circle"></i>
+                    <input type="text" id="obs-agregar-input" placeholder="Buscar producto para agregar..."
+                           oninput="filtrarProductosAgregar(this.value)" autocomplete="off">
+                </div>
+                <div id="obs-agregar-lista" class="obs-agregar-lista" style="display:none;"></div>
             </div>`;
         return;
     }
 
     const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+    const cantConDif = productosConDif.length;
+    const cantCorregidos = productosGestionados.length + productosAgregados.length;
 
     obsContainer.innerHTML = `
         <div class="tabla-obs-container">
             <div class="obs-header">
                 <i class="fas fa-clipboard-list"></i>
-                Observaciones (${productosConDif.length} con diferencia)
+                Observaciones (${cantConDif} con diferencia${cantCorregidos > 0 ? ` + ${cantCorregidos} corregidos` : ''})
             </div>
             <table class="tabla-observaciones">
                 <thead>
@@ -1378,19 +1408,20 @@ function renderObservaciones() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${productosConDif.map(prod => {
+                    ${todosProductos.map(prod => {
                         const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
                         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
-                        const diferencia = cantidadFinal - prod.cantidad_sistema;
-                        const difClass = diferencia < 0 ? 'negativa' : 'positiva';
+                        const diferencia = (cantidadFinal !== null && cantidadFinal !== undefined) ? cantidadFinal - prod.cantidad_sistema : 0;
+                        const difClass = diferencia < 0 ? 'negativa' : diferencia > 0 ? 'positiva' : '';
+                        const esCorregido = diferencia === 0;
                         const obsActual = (prod.observaciones || '').replace(/"/g, '&quot;');
                         const motivoActual = prod.motivo || '';
                         const corregido = prod.corregido || false;
 
                         return `
-                            <tr>
+                            <tr class="${esCorregido ? 'fila-corregida' : ''}">
                                 <td class="obs-nombre">${prod.nombre}</td>
-                                <td class="obs-dif ${difClass}">${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</td>
+                                <td class="obs-dif ${difClass}">${diferencia !== 0 ? (diferencia > 0 ? '+' : '') + diferencia.toFixed(3) : '<span style="color:#94A3B8">0.000</span>'}</td>
                                 <td class="obs-motivo-cell">
                                     <select class="select-motivo" data-id="${prod.id}" onchange="guardarMotivo(this)">
                                         <option value="">-- Seleccionar --</option>
@@ -1431,7 +1462,62 @@ function renderObservaciones() {
                 </button>
             </div>
         </div>
+        <div class="obs-agregar-wrapper">
+            <div class="obs-agregar-buscar">
+                <i class="fas fa-plus-circle"></i>
+                <input type="text" id="obs-agregar-input" placeholder="Buscar producto para agregar..."
+                       oninput="filtrarProductosAgregar(this.value)" autocomplete="off">
+            </div>
+            <div id="obs-agregar-lista" class="obs-agregar-lista" style="display:none;"></div>
+        </div>
     `;
+}
+
+function filtrarProductosAgregar(texto) {
+    const lista = document.getElementById('obs-agregar-lista');
+    if (!lista) return;
+
+    if (!texto || texto.length < 2) {
+        lista.style.display = 'none';
+        lista.innerHTML = '';
+        return;
+    }
+
+    const termino = texto.toLowerCase();
+    // Obtener IDs ya visibles en la tabla
+    const idsEnTabla = new Set();
+    document.querySelectorAll('.select-motivo[data-id]').forEach(el => idsEnTabla.add(parseInt(el.dataset.id)));
+
+    const resultados = _obsProductos.filter(p =>
+        !idsEnTabla.has(p.id) &&
+        (p.nombre.toLowerCase().includes(termino) || p.codigo.toLowerCase().includes(termino))
+    ).slice(0, 8);
+
+    if (resultados.length === 0) {
+        lista.style.display = 'block';
+        lista.innerHTML = '<div class="obs-agregar-item obs-agregar-vacio">No se encontraron productos</div>';
+        return;
+    }
+
+    lista.style.display = 'block';
+    lista.innerHTML = resultados.map(p => `
+        <div class="obs-agregar-item" onclick="agregarProductoObs(${p.id})">
+            <span class="obs-agregar-codigo">${p.codigo}</span>
+            <span class="obs-agregar-nombre">${p.nombre}</span>
+        </div>
+    `).join('');
+}
+
+function agregarProductoObs(id) {
+    if (!_obsProductosAgregados.includes(id)) {
+        _obsProductosAgregados.push(id);
+    }
+    const input = document.getElementById('obs-agregar-input');
+    if (input) input.value = '';
+    const lista = document.getElementById('obs-agregar-lista');
+    if (lista) { lista.style.display = 'none'; lista.innerHTML = ''; }
+    renderObservaciones();
+    showToast('Producto agregado a la lista', 'success');
 }
 
 async function guardarMotivo(select) {
