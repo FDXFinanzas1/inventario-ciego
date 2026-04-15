@@ -796,6 +796,65 @@ main {
     background: #ECFDF5;
 }
 
+/* Filtros de Observaciones */
+.obs-filtros {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    padding: 12px 0;
+    flex-wrap: wrap;
+}
+
+.obs-filtro-grupo {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.obs-filtro-grupo label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.obs-filtro-input {
+    padding: 8px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: inherit;
+    background: white;
+    min-width: 180px;
+}
+
+.obs-filtro-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.1);
+}
+
+.btn-obs-cargar {
+    padding: 8px 20px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s;
+    height: 38px;
+}
+
+.btn-obs-cargar:hover {
+    background: var(--primary-dark, #152d4a);
+}
+
 /* Tabla de Observaciones separada */
 .tabla-obs-container {
     margin-top: 16px;

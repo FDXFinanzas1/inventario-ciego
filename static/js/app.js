@@ -692,9 +692,9 @@ function cambiarVista(viewName) {
         cuadrarCargarFechas();
     }
 
-    // Auto-renderizar observaciones al entrar
+    // Auto-inicializar observaciones al entrar
     if (viewName === 'observaciones') {
-        renderObservaciones();
+        initObservaciones();
     }
 
     // Auto-inicializar corrección al entrar
@@ -1078,8 +1078,7 @@ function renderProductosInventario() {
 
     container.innerHTML = tablaHtml;
 
-    // Actualizar observaciones en la pestaña separada
-    renderObservaciones();
+    // Observaciones ahora se cargan independientemente con fecha/bodega
 
     // Renderizar modulo de asignacion de diferencias (solo etapa 3)
     const asigContainer = document.getElementById('asignaciones-container');
@@ -1193,7 +1192,7 @@ async function guardarTodasObservaciones() {
             });
 
             if (response.ok) {
-                const prod = state.productos.find(p => p.id === id);
+                const prod = _obsProductos.find(p => p.id === id);
                 if (prod) { prod.motivo = motivo; prod.observaciones = observaciones; }
                 selectMotivo.classList.add('guardado');
                 if (inputObs) inputObs.classList.add('guardado');
@@ -1231,7 +1230,7 @@ async function guardarObservacion(input) {
         });
 
         if (response.ok) {
-            const prod = state.productos.find(p => p.id === id);
+            const prod = _obsProductos.find(p => p.id === id);
             if (prod) {
                 prod.observaciones = observaciones;
             }
@@ -1265,22 +1264,89 @@ const OBSERVACIONES_PREESTABLECIDAS = [
     'Traslados mal ejecutado de bodega Principal'
 ];
 
+// Estado local del módulo observaciones
+let _obsProductos = [];
+
+function initObservaciones() {
+    const selectBodega = document.getElementById('obs-bodega');
+    const inputFecha = document.getElementById('obs-fecha');
+    if (!selectBodega || !inputFecha) return;
+
+    // Llenar bodegas si está vacío
+    if (selectBodega.options.length <= 1) {
+        CONFIG.BODEGAS.forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.id;
+            opt.textContent = b.nombre;
+            selectBodega.appendChild(opt);
+        });
+    }
+
+    // Default: fecha de hoy
+    if (!inputFecha.value) {
+        inputFecha.value = new Date().toISOString().split('T')[0];
+    }
+
+    // Si ya hay fecha y bodega seleccionados, cargar automáticamente
+    if (inputFecha.value && selectBodega.value) {
+        cargarObservaciones();
+    }
+}
+
+async function cargarObservaciones() {
+    const fecha = document.getElementById('obs-fecha').value;
+    const bodega = document.getElementById('obs-bodega').value;
+    const obsContainer = document.getElementById('observaciones-container');
+
+    if (!fecha || !bodega) {
+        showToast('Selecciona fecha y bodega', 'error');
+        return;
+    }
+
+    obsContainer.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>`;
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/inventario/consultar?fecha=${fecha}&local=${bodega}`);
+        if (!response.ok) throw new Error('Error al consultar');
+        const data = await response.json();
+
+        _obsProductos = (data.productos || []).map(p => ({
+            id: p.id,
+            codigo: p.codigo,
+            nombre: p.nombre,
+            unidad: p.unidad,
+            cantidad_sistema: parseFloat(p.cantidad),
+            cantidad_contada: p.cantidad_contada,
+            cantidad_contada_2: p.cantidad_contada_2,
+            observaciones: p.observaciones || '',
+            motivo: p.motivo || '',
+            corregido: p.corregido || false
+        }));
+
+        renderObservaciones();
+    } catch (error) {
+        obsContainer.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error al cargar datos</p></div>`;
+        showToast('Error al cargar observaciones', 'error');
+    }
+}
+
 function renderObservaciones() {
     const obsContainer = document.getElementById('observaciones-container');
     if (!obsContainer) return;
 
-    if (state.etapaConteo !== 3 || !state.productos || state.productos.length === 0) {
+    if (!_obsProductos || _obsProductos.length === 0) {
         obsContainer.innerHTML = `
             <div class="empty-state">
-                <i class="fas fa-comment-alt"></i>
-                <p>Completa un conteo para ver las observaciones de productos con diferencia</p>
+                <i class="fas fa-box-open"></i>
+                <p>No hay datos para esta fecha y bodega</p>
             </div>`;
         return;
     }
 
-    const productosConDif = state.productos.filter(prod => {
+    const productosConDif = _obsProductos.filter(prod => {
         const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
+        if (cantidadFinal === null || cantidadFinal === undefined) return false;
         return cantidadFinal - prod.cantidad_sistema !== 0;
     });
 
@@ -1380,7 +1446,7 @@ async function guardarMotivo(select) {
             body: JSON.stringify({ id, motivo })
         });
         if (response.ok) {
-            const prod = state.productos.find(p => p.id === id);
+            const prod = _obsProductos.find(p => p.id === id);
             if (prod) prod.motivo = motivo;
             select.classList.add('guardado');
             setTimeout(() => select.classList.remove('guardado'), 1000);
@@ -1405,7 +1471,7 @@ async function toggleCorregido(checkbox) {
             body: JSON.stringify({ id, corregido })
         });
         if (response.ok) {
-            const prod = state.productos.find(p => p.id === id);
+            const prod = _obsProductos.find(p => p.id === id);
             if (prod) prod.corregido = corregido;
             label.textContent = corregido ? 'Sí' : 'No';
             showToast(corregido ? 'Marcado como corregido' : 'Marcado como no corregido', 'success');
