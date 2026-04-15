@@ -269,8 +269,8 @@ def init_db():
             # Subgerente: conteo, observaciones, historico, dashboard
             for mod in ['conteo','observaciones','historico','dashboard']:
                 cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('subgerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
-            # Supervisor: igual que subgerente
-            for mod in ['conteo','observaciones','historico','dashboard']:
+            # Supervisor: ve todos los locales, ve todo pero no edita usuarios
+            for mod in ['conteo','observaciones','historico','dashboard','cruce','bajas','semanal','correccion']:
                 cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('supervisor', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             # Gerente: todo lo del subgerente + semanal, cruce, bajas
             for mod in ['conteo','observaciones','historico','dashboard']:

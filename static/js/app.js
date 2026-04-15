@@ -996,7 +996,8 @@ function cambiarVista(viewName) {
             dashHasta.value = hoy.toISOString().split('T')[0];
         }
         // Filtrar bodegas del dashboard según permisos del usuario
-        const esAdminDash = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+        // Admin y Supervisor ven todos los locales
+        const esAdminDash = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
         if (!esAdminDash) {
             const userBodegas = state.user?.bodegas || [];
             const dashBodega = document.getElementById('dash-bodega');
@@ -1655,12 +1656,20 @@ function initObservaciones() {
 
     // Llenar bodegas si está vacío
     if (selectBodega.options.length <= 1) {
+        const esAdminObs = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
+        const userBodegas = state.user?.bodegas || [];
         CONFIG.BODEGAS.forEach(b => {
-            const opt = document.createElement('option');
-            opt.value = b.id;
-            opt.textContent = b.nombre;
-            selectBodega.appendChild(opt);
+            if (esAdminObs || userBodegas.includes(b.id)) {
+                const opt = document.createElement('option');
+                opt.value = b.id;
+                opt.textContent = b.nombre;
+                selectBodega.appendChild(opt);
+            }
         });
+        // Auto-seleccionar si tiene una sola bodega
+        if (!esAdminObs && userBodegas.length === 1) {
+            selectBodega.value = userBodegas[0];
+        }
     }
 
     // Default: fecha de hoy
@@ -5456,10 +5465,10 @@ let _semanalDiferencias = []; // diferencias de la semana actual
 
 function semanalInit() {
     const sel = document.getElementById('sem-bodega');
-    const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+    const esAdminOSupervisor = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
 
-    // Si no es admin, filtrar bodegas: solo mostrar las asignadas al usuario
-    if (sel && !esAdmin) {
+    // Si no es admin ni supervisor, filtrar bodegas: solo mostrar las asignadas al usuario
+    if (sel && !esAdminOSupervisor) {
         const userBodegas = state.user?.bodegas || [];
         const opciones = sel.querySelectorAll('option[value]');
         opciones.forEach(opt => {
