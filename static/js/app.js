@@ -5434,15 +5434,22 @@ let _semanalSemanaActual = null; // semana object actual cargada
 let _semanalDiferencias = []; // diferencias de la semana actual
 
 function semanalInit() {
-    // Poblar bodegas
     const sel = document.getElementById('sem-bodega');
-    if (sel && sel.options.length <= 1) {
-        CONFIG.BODEGAS.forEach(b => {
-            const opt = document.createElement('option');
-            opt.value = b.id;
-            opt.textContent = b.nombre;
-            sel.appendChild(opt);
+    const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+
+    // Si no es admin, filtrar bodegas: solo mostrar las asignadas al usuario
+    if (sel && !esAdmin) {
+        const userBodegas = state.user?.bodegas || [];
+        const opciones = sel.querySelectorAll('option[value]');
+        opciones.forEach(opt => {
+            if (opt.value && !userBodegas.includes(opt.value)) {
+                opt.style.display = 'none';
+            }
         });
+        // Auto-seleccionar si solo tiene una bodega
+        if (userBodegas.length === 1) {
+            sel.value = userBodegas[0];
+        }
     }
 
     // Setear fecha al lunes mas reciente

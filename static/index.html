@@ -844,26 +844,30 @@
                 <!-- Vista Semanal (solo admin) -->
                 <div id="view-semanal" class="view">
                     <div class="view-header">
-                        <h2><i class="fas fa-calendar-week"></i> Asignacion Semanal</h2>
+                        <h2><i class="fas fa-calendar-week"></i> Asignacion Semanal de Descuentos</h2>
                     </div>
 
-                    <!-- Selector bodega + semana -->
-                    <div class="form-section">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label><i class="fas fa-warehouse"></i> Bodega</label>
-                                <select id="sem-bodega">
-                                    <option value="">Seleccionar bodega...</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-calendar"></i> Semana del</label>
-                                <input type="date" id="sem-fecha-lunes">
-                            </div>
-                            <button id="btn-sem-cargar" class="btn-primary">
-                                <i class="fas fa-search"></i> Cargar Semana
-                            </button>
+                    <!-- Filtros -->
+                    <div class="obs-filtros">
+                        <div class="obs-filtro-grupo">
+                            <label for="sem-bodega">Bodega</label>
+                            <select id="sem-bodega" class="obs-filtro-input">
+                                <option value="">-- Seleccionar --</option>
+                                <option value="real_audiencia">Real Audiencia</option>
+                                <option value="floreana">Floreana</option>
+                                <option value="portugal">Portugal</option>
+                                <option value="santo_cachon_real">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                            </select>
                         </div>
+                        <div class="obs-filtro-grupo">
+                            <label for="sem-fecha-lunes">Semana del (Lunes)</label>
+                            <input type="date" id="sem-fecha-lunes" class="obs-filtro-input">
+                        </div>
+                        <button id="btn-sem-cargar" class="btn-obs-cargar">
+                            <i class="fas fa-search"></i> Cargar Semana
+                        </button>
                     </div>
 
                     <!-- Alerta semanas pendientes -->
@@ -875,10 +879,10 @@
                             <div id="sem-rango-fechas" class="sem-rango"></div>
                             <div id="sem-estado-badge"></div>
                             <div class="sem-acciones">
-                                <button id="btn-sem-cerrar" class="btn-danger" style="display:none;">
+                                <button id="btn-sem-cerrar" class="btn-obs-cargar" style="display:none;background:var(--accent);">
                                     <i class="fas fa-lock"></i> Cerrar Semana
                                 </button>
-                                <button id="btn-sem-reabrir" class="btn-secondary" style="display:none;">
+                                <button id="btn-sem-reabrir" class="btn-obs-cargar" style="display:none;background:var(--text-medium);">
                                     <i class="fas fa-lock-open"></i> Reabrir
                                 </button>
                             </div>
@@ -891,8 +895,8 @@
                     <!-- Diferencias semanales y asignaciones -->
                     <div id="sem-diferencias" class="hidden">
                         <div class="sem-toolbar">
-                            <h3><i class="fas fa-exclamation-triangle"></i> Diferencias de la Semana</h3>
-                            <button id="btn-sem-guardar-todo" class="btn-primary">
+                            <h3><i class="fas fa-exclamation-triangle"></i> Diferencias Netas de la Semana</h3>
+                            <button id="btn-sem-guardar-todo" class="btn-obs-cargar" style="background:var(--success);">
                                 <i class="fas fa-save"></i> Guardar Asignaciones
                             </button>
                         </div>
