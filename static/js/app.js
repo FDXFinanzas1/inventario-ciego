@@ -634,7 +634,8 @@ function setupEventListeners() {
 
     // Conteo
     document.getElementById('btn-consultar').addEventListener('click', consultarInventario);
-    document.getElementById('btn-cargar-productos').addEventListener('click', cargarProductos);
+    const btnCargarProd = document.getElementById('btn-cargar-productos');
+    if (btnCargarProd) btnCargarProd.addEventListener('click', cargarProductos);
     document.getElementById('btn-guardar-conteo').addEventListener('click', guardarConteoEtapa);
     document.getElementById('buscar-producto').addEventListener('input', filtrarProductos);
 
