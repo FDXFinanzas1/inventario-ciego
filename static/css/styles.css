@@ -861,6 +861,11 @@ main {
     border-left: 3px solid var(--success);
 }
 
+.tabla-observaciones .fila-manual {
+    background: #EFF6FF !important;
+    border-left: 3px solid #3B82F6;
+}
+
 /* Agregar producto a observaciones */
 .obs-agregar-wrapper {
     margin-top: 12px;

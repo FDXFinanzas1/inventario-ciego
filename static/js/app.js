@@ -1267,6 +1267,7 @@ const OBSERVACIONES_PREESTABLECIDAS = [
 // Estado local del módulo observaciones
 let _obsProductos = [];
 let _obsProductosAgregados = []; // IDs de productos agregados manualmente
+let _obsManuales = []; // Observaciones manuales (tabla separada)
 
 function initObservaciones() {
     const selectBodega = document.getElementById('obs-bodega');
@@ -1325,6 +1326,16 @@ async function cargarObservaciones() {
             corregido: p.corregido || false
         }));
 
+        // Cargar observaciones manuales
+        try {
+            const resManuales = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales?fecha=${fecha}&local=${bodega}`);
+            if (resManuales.ok) {
+                _obsManuales = await resManuales.json();
+            } else {
+                _obsManuales = [];
+            }
+        } catch(e) { _obsManuales = []; }
+
         renderObservaciones();
     } catch (error) {
         obsContainer.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error al cargar datos</p></div>`;
@@ -1345,7 +1356,7 @@ function renderObservaciones() {
         return;
     }
 
-    // Productos con diferencia actual
+    // Productos del conteo con diferencia actual
     const productosConDif = _obsProductos.filter(prod => {
         const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
@@ -1353,49 +1364,28 @@ function renderObservaciones() {
         return cantidadFinal - prod.cantidad_sistema !== 0;
     });
 
-    // Productos sin diferencia pero que ya tienen motivo/observación/corregido (ya fueron gestionados)
+    // Productos sin diferencia pero que ya tienen motivo/obs/corregido en el conteo
     const productosGestionados = _obsProductos.filter(prod => {
         const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
         if (cantidadFinal === null || cantidadFinal === undefined) return false;
         const tieneDif = cantidadFinal - prod.cantidad_sistema !== 0;
-        if (tieneDif) return false; // ya está en productosConDif
+        if (tieneDif) return false;
         return prod.motivo || prod.observaciones || prod.corregido;
     });
 
-    // Productos agregados manualmente (sin diferencia, sin gestión previa)
-    const idsYaEnLista = new Set([...productosConDif.map(p => p.id), ...productosGestionados.map(p => p.id)]);
-    const productosAgregados = (_obsProductosAgregados || []).filter(id => !idsYaEnLista.has(id))
-        .map(id => _obsProductos.find(p => p.id === id)).filter(Boolean);
-
-    const todosProductos = [...productosConDif, ...productosGestionados, ...productosAgregados];
-
-    if (todosProductos.length === 0) {
-        obsContainer.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-check-circle"></i>
-                <p>No hay productos con diferencia</p>
-            </div>
-            <div class="obs-agregar-wrapper">
-                <div class="obs-agregar-buscar">
-                    <i class="fas fa-plus-circle"></i>
-                    <input type="text" id="obs-agregar-input" placeholder="Buscar producto para agregar..."
-                           oninput="filtrarProductosAgregar(this.value)" autocomplete="off">
-                </div>
-                <div id="obs-agregar-lista" class="obs-agregar-lista" style="display:none;"></div>
-            </div>`;
-        return;
-    }
-
+    const todosConteo = [...productosConDif, ...productosGestionados];
     const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
-    const cantConDif = productosConDif.length;
-    const cantCorregidos = productosGestionados.length + productosAgregados.length;
 
-    obsContainer.innerHTML = `
+    let html = '';
+
+    // === TABLA 1: Productos del conteo con diferencia ===
+    if (todosConteo.length > 0) {
+        html += `
         <div class="tabla-obs-container">
             <div class="obs-header">
                 <i class="fas fa-clipboard-list"></i>
-                Observaciones (${cantConDif} con diferencia${cantCorregidos > 0 ? ` + ${cantCorregidos} corregidos` : ''})
+                Diferencias del conteo (${productosConDif.length} con diferencia${productosGestionados.length > 0 ? ` + ${productosGestionados.length} gestionados` : ''})
             </div>
             <table class="tabla-observaciones">
                 <thead>
@@ -1408,7 +1398,7 @@ function renderObservaciones() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${todosProductos.map(prod => {
+                    ${todosConteo.map(prod => {
                         const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
                         const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
                         const diferencia = (cantidadFinal !== null && cantidadFinal !== undefined) ? cantidadFinal - prod.cantidad_sistema : 0;
@@ -1461,16 +1451,87 @@ function renderObservaciones() {
                     <i class="fas fa-save"></i> Guardar Observaciones
                 </button>
             </div>
-        </div>
-        <div class="obs-agregar-wrapper">
-            <div class="obs-agregar-buscar">
+        </div>`;
+    } else {
+        html += `<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay productos con diferencia en el conteo</p></div>`;
+    }
+
+    // === TABLA 2: Observaciones manuales (productos agregados) ===
+    html += `
+        <div class="tabla-obs-container" style="margin-top:16px;">
+            <div class="obs-header" style="background:#DBEAFE;color:#1E40AF;border-color:#93C5FD;">
                 <i class="fas fa-plus-circle"></i>
-                <input type="text" id="obs-agregar-input" placeholder="Buscar producto para agregar..."
-                       oninput="filtrarProductosAgregar(this.value)" autocomplete="off">
+                Productos agregados manualmente (${_obsManuales.length})
             </div>
-            <div id="obs-agregar-lista" class="obs-agregar-lista" style="display:none;"></div>
-        </div>
-    `;
+            ${_obsManuales.length > 0 ? `
+            <table class="tabla-observaciones">
+                <thead>
+                    <tr>
+                        <th class="obs-col-producto">Producto</th>
+                        <th class="obs-col-dif">Dif</th>
+                        <th class="obs-col-motivo">Motivo</th>
+                        <th class="obs-col-obs">Observación</th>
+                        <th class="obs-col-corregido">Corregido</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${_obsManuales.map(m => {
+                        const dif = parseFloat(m.diferencia) || 0;
+                        const difClass = dif < 0 ? 'negativa' : dif > 0 ? 'positiva' : '';
+                        const obsActual = (m.observaciones || '').replace(/"/g, '&quot;');
+                        const motivoActual = m.motivo || '';
+                        const corregido = m.corregido || false;
+                        return `
+                            <tr class="fila-manual">
+                                <td class="obs-nombre">${m.nombre} ${m.codigo ? '<small style="color:#94A3B8">(' + m.codigo + ')</small>' : ''}</td>
+                                <td class="obs-dif ${difClass}">${dif !== 0 ? (dif > 0 ? '+' : '') + dif.toFixed(3) : '0.000'}</td>
+                                <td class="obs-motivo-cell">
+                                    <select class="select-motivo" data-manual-id="${m.id}" onchange="guardarMotivoManual(this)">
+                                        <option value="">-- Seleccionar --</option>
+                                        ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
+                                            `<option value="${op}" ${motivoActual === op ? 'selected' : ''}>${op}</option>`
+                                        ).join('')}
+                                    </select>
+                                </td>
+                                <td class="obs-input-cell">
+                                    <input type="text"
+                                           class="input-observacion"
+                                           value="${obsActual}"
+                                           placeholder="Escribir observación..."
+                                           data-manual-id="${m.id}"
+                                           onchange="guardarObsManual(this)"
+                                           onkeypress="if(event.key==='Enter') this.blur()">
+                                </td>
+                                <td class="obs-corregido-cell">
+                                    ${esAdmin
+                                        ? `<label class="toggle-corregido">
+                                               <input type="checkbox" class="check-corregido" data-manual-id="${m.id}"
+                                                      ${corregido ? 'checked' : ''}
+                                                      onchange="toggleCorregidoManual(this)">
+                                               <span class="toggle-slider"></span>
+                                               <span class="toggle-label">${corregido ? 'Sí' : 'No'}</span>
+                                           </label>`
+                                        : `<span class="badge-corregido ${corregido ? 'corregido-si' : 'corregido-no'}">${corregido ? 'Sí' : 'No'}</span>`
+                                    }
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>` : ''}
+            <div class="obs-agregar-wrapper" style="padding:10px 14px;">
+                <div class="obs-agregar-buscar">
+                    <i class="fas fa-plus-circle"></i>
+                    <input type="text" id="obs-agregar-input" placeholder="Buscar producto para agregar..."
+                           oninput="filtrarProductosAgregar(this.value)" autocomplete="off">
+                    <input type="number" id="obs-agregar-dif" placeholder="Dif" step="0.001"
+                           style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;">
+                </div>
+                <div id="obs-agregar-lista" class="obs-agregar-lista" style="display:none;"></div>
+            </div>
+        </div>`;
+
+    obsContainer.innerHTML = html;
 }
 
 function filtrarProductosAgregar(texto) {
@@ -1484,14 +1545,8 @@ function filtrarProductosAgregar(texto) {
     }
 
     const termino = texto.toLowerCase();
-    // Obtener IDs ya visibles en la tabla
-    const idsEnTabla = new Set();
-    document.querySelectorAll('.select-motivo[data-id]').forEach(el => idsEnTabla.add(parseInt(el.dataset.id)));
-
-    // Buscar en TODOS los productos cargados (incluye los sin diferencia y sin conteo)
     const resultados = _obsProductos.filter(p =>
-        !idsEnTabla.has(p.id) &&
-        (p.nombre.toLowerCase().includes(termino) || p.codigo.toLowerCase().includes(termino))
+        p.nombre.toLowerCase().includes(termino) || p.codigo.toLowerCase().includes(termino)
     ).slice(0, 10);
 
     if (resultados.length === 0) {
@@ -1502,23 +1557,98 @@ function filtrarProductosAgregar(texto) {
 
     lista.style.display = 'block';
     lista.innerHTML = resultados.map(p => `
-        <div class="obs-agregar-item" onclick="agregarProductoObs(${p.id})">
+        <div class="obs-agregar-item" onclick="agregarProductoObs('${p.codigo}', '${p.nombre.replace(/'/g, "\\'")}')">
             <span class="obs-agregar-codigo">${p.codigo}</span>
             <span class="obs-agregar-nombre">${p.nombre}</span>
         </div>
     `).join('');
 }
 
-function agregarProductoObs(id) {
-    if (!_obsProductosAgregados.includes(id)) {
-        _obsProductosAgregados.push(id);
+async function agregarProductoObs(codigo, nombre) {
+    const fecha = document.getElementById('obs-fecha').value;
+    const bodega = document.getElementById('obs-bodega').value;
+    const difInput = document.getElementById('obs-agregar-dif');
+    const diferencia = difInput ? parseFloat(difInput.value) || 0 : 0;
+
+    if (!fecha || !bodega) { showToast('Selecciona fecha y bodega', 'error'); return; }
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fecha, local: bodega, codigo, nombre, diferencia,
+                creado_por: state.user ? state.user.username : ''
+            })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            _obsManuales.push({ id: data.id, codigo, nombre, diferencia, motivo: '', observaciones: '', corregido: false });
+            renderObservaciones();
+            showToast('Producto agregado', 'success');
+        } else {
+            showToast('Error al agregar', 'error');
+        }
+    } catch (error) {
+        showToast('Error de conexión', 'error');
     }
-    const input = document.getElementById('obs-agregar-input');
-    if (input) input.value = '';
-    const lista = document.getElementById('obs-agregar-lista');
-    if (lista) { lista.style.display = 'none'; lista.innerHTML = ''; }
-    renderObservaciones();
-    showToast('Producto agregado a la lista', 'success');
+}
+
+async function guardarMotivoManual(select) {
+    if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso', 'error'); return; }
+    const id = parseInt(select.dataset.manualId);
+    const motivo = select.value;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motivo })
+        });
+        if (res.ok) {
+            const m = _obsManuales.find(x => x.id === id);
+            if (m) m.motivo = motivo;
+            select.classList.add('guardado');
+            setTimeout(() => select.classList.remove('guardado'), 1000);
+            showToast('Motivo guardado', 'success');
+        }
+    } catch(e) { showToast('Error de conexión', 'error'); }
+}
+
+async function guardarObsManual(input) {
+    if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso', 'error'); return; }
+    const id = parseInt(input.dataset.manualId);
+    const observaciones = input.value.trim();
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ observaciones })
+        });
+        if (res.ok) {
+            const m = _obsManuales.find(x => x.id === id);
+            if (m) m.observaciones = observaciones;
+            input.classList.add('guardado');
+            setTimeout(() => input.classList.remove('guardado'), 500);
+        }
+    } catch(e) { showToast('Error de conexión', 'error'); }
+}
+
+async function toggleCorregidoManual(checkbox) {
+    const id = parseInt(checkbox.dataset.manualId);
+    const corregido = checkbox.checked;
+    const label = checkbox.closest('.toggle-corregido').querySelector('.toggle-label');
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ corregido })
+        });
+        if (res.ok) {
+            const m = _obsManuales.find(x => x.id === id);
+            if (m) m.corregido = corregido;
+            label.textContent = corregido ? 'Sí' : 'No';
+            showToast(corregido ? 'Marcado como corregido' : 'Desmarcado', 'success');
+        } else {
+            checkbox.checked = !corregido;
+        }
+    } catch(e) { checkbox.checked = !corregido; showToast('Error', 'error'); }
 }
 
 async function guardarMotivo(select) {

@@ -632,6 +632,133 @@ def guardar_observacion():
         if conn:
             release_db(conn)
 
+# ==================== OBSERVACIONES MANUALES ====================
+
+@app.route('/api/observaciones-manuales', methods=['GET'])
+def listar_obs_manuales():
+    fecha = request.args.get('fecha')
+    local = request.args.get('local')
+    if not fecha or not local:
+        return jsonify({'error': 'fecha y local requeridos'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventario_diario.observaciones_manuales (
+                id SERIAL PRIMARY KEY,
+                fecha DATE NOT NULL,
+                local VARCHAR(100) NOT NULL,
+                codigo VARCHAR(50),
+                nombre VARCHAR(255) NOT NULL,
+                diferencia NUMERIC(12,3) DEFAULT 0,
+                motivo TEXT,
+                observaciones TEXT,
+                corregido BOOLEAN DEFAULT FALSE,
+                creado_por VARCHAR(100),
+                creado_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+
+        cur.execute("""
+            SELECT id, codigo, nombre, diferencia, motivo, observaciones, corregido, creado_por
+            FROM inventario_diario.observaciones_manuales
+            WHERE fecha = %s AND local = %s
+            ORDER BY creado_at
+        """, (fecha, local))
+        return jsonify(cur.fetchall())
+    except Exception as e:
+        print(f"Error en /api/observaciones-manuales GET: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+@app.route('/api/observaciones-manuales', methods=['POST'])
+def crear_obs_manual():
+    data = request.json
+    fecha = data.get('fecha')
+    local = data.get('local')
+    codigo = data.get('codigo', '')
+    nombre = data.get('nombre', '')
+    diferencia = data.get('diferencia', 0)
+    motivo = data.get('motivo', '')
+    observaciones = data.get('observaciones', '')
+    creado_por = data.get('creado_por', '')
+
+    if not fecha or not local or not nombre:
+        return jsonify({'error': 'fecha, local y nombre son requeridos'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO inventario_diario.observaciones_manuales
+            (fecha, local, codigo, nombre, diferencia, motivo, observaciones, creado_por)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (fecha, local, codigo, nombre, float(diferencia), motivo, observaciones, creado_por))
+        new_id = cur.fetchone()['id']
+        conn.commit()
+        return jsonify({'success': True, 'id': new_id})
+    except Exception as e:
+        print(f"Error en /api/observaciones-manuales POST: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+@app.route('/api/observaciones-manuales/<int:obs_id>', methods=['PUT'])
+def actualizar_obs_manual(obs_id):
+    data = request.json
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        sets = []
+        params = []
+        for campo in ['motivo', 'observaciones', 'diferencia']:
+            if campo in data:
+                sets.append(f"{campo} = %s")
+                params.append(data[campo])
+        if 'corregido' in data:
+            sets.append("corregido = %s")
+            params.append(bool(data['corregido']))
+        if sets:
+            params.append(obs_id)
+            cur.execute(f"""
+                UPDATE inventario_diario.observaciones_manuales
+                SET {', '.join(sets)}
+                WHERE id = %s
+            """, params)
+            conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error en /api/observaciones-manuales PUT: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+@app.route('/api/observaciones-manuales/<int:obs_id>', methods=['DELETE'])
+def eliminar_obs_manual(obs_id):
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM inventario_diario.observaciones_manuales WHERE id = %s", (obs_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error en /api/observaciones-manuales DELETE: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
 @app.route('/api/admin/corregir-conteo', methods=['PUT'])
 def corregir_conteo():
     """Permite al admin corregir conteo1 y/o conteo2 de un producto"""
