@@ -1488,10 +1488,11 @@ function filtrarProductosAgregar(texto) {
     const idsEnTabla = new Set();
     document.querySelectorAll('.select-motivo[data-id]').forEach(el => idsEnTabla.add(parseInt(el.dataset.id)));
 
+    // Buscar en TODOS los productos cargados (incluye los sin diferencia y sin conteo)
     const resultados = _obsProductos.filter(p =>
         !idsEnTabla.has(p.id) &&
         (p.nombre.toLowerCase().includes(termino) || p.codigo.toLowerCase().includes(termino))
-    ).slice(0, 8);
+    ).slice(0, 10);
 
     if (resultados.length === 0) {
         lista.style.display = 'block';
