@@ -723,6 +723,55 @@ def reporte_motivos():
         if conn:
             release_db(conn)
 
+@app.route('/api/reportes/diferencias-fecha', methods=['GET'])
+def reporte_diferencias_fecha():
+    """Productos con diferencia para una fecha y bodega específica"""
+    fecha = request.args.get('fecha')
+    bodega = request.args.get('bodega', '')
+
+    if not fecha:
+        return jsonify({'error': 'fecha requerida'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        query = """
+            SELECT nombre, unidad,
+                   cantidad as sistema,
+                   COALESCE(cantidad_contada_2, cantidad_contada) as conteo,
+                   COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
+                   COALESCE(motivo, '') as motivo
+            FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha = %s
+              AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
+              AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+        """
+        params = [fecha]
+        if bodega:
+            query += " AND local = %s"
+            params.append(bodega)
+        query += " ORDER BY ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) DESC LIMIT 20"
+
+        cur.execute(query, params)
+        productos = [{
+            'nombre': r['nombre'],
+            'unidad': r['unidad'],
+            'sistema': float(r['sistema']),
+            'conteo': float(r['conteo']),
+            'diferencia': float(r['diferencia']),
+            'motivo': r['motivo']
+        } for r in cur.fetchall()]
+
+        return jsonify(productos)
+    except Exception as e:
+        print(f"Error en /api/reportes/diferencias-fecha: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
 @app.route('/api/reportes/motivos/detalle', methods=['GET'])
 def reporte_motivo_detalle():
     fecha_desde = request.args.get('fecha_desde')

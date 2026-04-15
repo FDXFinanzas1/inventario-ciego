@@ -425,7 +425,7 @@ function renderTopDescuadre(items) {
     const tbody = document.getElementById('dash-top-tbody');
     if (!tbody) return;
     if (!items || items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748B;padding:20px;">Sin datos</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748B;padding:20px;">Sin datos</td></tr>';
         return;
     }
     tbody.innerHTML = items.map(p => {
@@ -433,7 +433,6 @@ function renderTopDescuadre(items) {
         return `<tr>
             <td>${escapeHtml(p.codigo)}</td>
             <td>${escapeHtml(p.nombre)}</td>
-            <td>${escapeHtml(p.local_nombre)}</td>
             <td style="${difColor}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(2)}</td>
             <td>$${p.costo_unitario.toFixed(2)}</td>
             <td style="font-weight:700;color:#123450;">$${p.valor_descuadre.toFixed(2)}</td>
@@ -469,6 +468,9 @@ function renderChartTendenciaTemporal(datos) {
         colorIdx++;
     }
 
+    const _tendenciaFechas = datos.fechas;
+    const _tendenciaSeries = datos.series;
+
     chartInstances['tendencia-temporal'] = new Chart(ctx, {
         type: 'line',
         data: {
@@ -478,8 +480,24 @@ function renderChartTendenciaTemporal(datos) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const datasetIdx = elements[0].datasetIndex;
+                    const fecha = _tendenciaFechas[idx];
+                    const serieKeys = Object.keys(_tendenciaSeries);
+                    const bodegaId = serieKeys[datasetIdx] || '';
+                    const bodegaNombre = _tendenciaSeries[bodegaId]?.nombre || bodegaId;
+                    abrirDetalleTendencia(fecha, bodegaId, bodegaNombre);
+                }
+            },
             plugins: {
-                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', padding: 16 } }
+                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', padding: 16 } },
+                tooltip: {
+                    callbacks: {
+                        afterLabel: () => 'Click para ver productos'
+                    }
+                }
             },
             scales: {
                 x: { grid: { color: '#F1F5F9', drawBorder: false }, ticks: { color: '#94A3B8', maxRotation: 45 } },
@@ -487,6 +505,60 @@ function renderChartTendenciaTemporal(datos) {
             }
         }
     });
+    ctx.style.cursor = 'pointer';
+}
+
+async function abrirDetalleTendencia(fecha, bodegaId, bodegaNombre) {
+    const modal = document.getElementById('modal-motivo');
+    const titulo = document.getElementById('modal-motivo-titulo');
+    const body = document.getElementById('modal-motivo-body');
+
+    const fechaCorta = fecha.split('-').reverse().join('/');
+    titulo.textContent = `Diferencias ${fechaCorta} — ${bodegaNombre}`;
+    body.innerHTML = '<div style="text-align:center;padding:20px;"><i class="fas fa-spinner fa-spin" style="font-size:24px;color:var(--primary);"></i><p style="margin-top:10px;color:#94A3B8;">Cargando...</p></div>';
+    modal.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/reportes/diferencias-fecha?fecha=${fecha}&bodega=${bodegaId}`);
+        if (!res.ok) throw new Error('Error');
+        const productos = await res.json();
+
+        if (productos.length === 0) {
+            body.innerHTML = '<p style="text-align:center;color:#94A3B8;padding:20px;">No hay productos con diferencia</p>';
+            return;
+        }
+
+        body.innerHTML = `
+            <div style="margin-bottom:12px;font-size:13px;color:var(--text-medium);">
+                <strong>${productos.length}</strong> producto${productos.length !== 1 ? 's' : ''} con diferencia
+            </div>
+            <table class="usuarios-tabla" style="margin:0;width:100%;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;">Producto</th>
+                        <th style="text-align:center;">Sistema</th>
+                        <th style="text-align:center;">Conteo</th>
+                        <th style="text-align:center;">Dif</th>
+                        <th style="text-align:left;">Motivo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${productos.map(p => {
+                        const difColor = p.diferencia < 0 ? 'color:var(--accent);' : 'color:var(--success);';
+                        return `<tr>
+                            <td style="font-weight:500;">${p.nombre}</td>
+                            <td style="text-align:center;">${p.sistema}</td>
+                            <td style="text-align:center;">${p.conteo}</td>
+                            <td style="text-align:center;font-weight:700;${difColor}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
+                            <td style="font-size:11px;color:#64748B;">${p.motivo || '-'}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch(e) {
+        body.innerHTML = '<p style="text-align:center;color:var(--accent);padding:20px;">Error al cargar detalle</p>';
+    }
 }
 
 function renderChartMotivos(datos) {
