@@ -648,6 +648,31 @@ def reporte_motivos():
         conn = get_db()
         cur = conn.cursor()
 
+        # Asegurar columna motivo existe en conteos
+        cur.execute("""
+            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ADD COLUMN IF NOT EXISTS motivo TEXT
+        """)
+        conn.commit()
+
+        # Asegurar tabla manuales existe
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventario_diario.observaciones_manuales (
+                id SERIAL PRIMARY KEY,
+                fecha DATE NOT NULL,
+                local VARCHAR(100) NOT NULL,
+                codigo VARCHAR(50),
+                nombre VARCHAR(255) NOT NULL,
+                diferencia NUMERIC(12,3) DEFAULT 0,
+                motivo TEXT,
+                observaciones TEXT,
+                corregido BOOLEAN DEFAULT FALSE,
+                creado_por VARCHAR(100),
+                creado_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+
         # Motivos de conteos
         query1 = """
             SELECT motivo, COUNT(*) as cantidad
