@@ -1253,6 +1253,7 @@ const OBSERVACIONES_PREESTABLECIDAS = [
     'Baja cargada fuera de tiempo',
     'Bajas mal ejecutadas',
     'Compra Extraordinaria',
+    'Cruce de productos',
     'Descuento a trabajador',
     'Error de sistema',
     'Factura mal cargada',
