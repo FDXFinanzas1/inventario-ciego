@@ -480,10 +480,12 @@ def consultar_inventario():
         conn = get_db()
         cur = conn.cursor()
 
-        # Asegurar que las columnas observaciones y corregido existen
+        # Asegurar que las columnas observaciones, motivo y corregido existen
         cur.execute("""
             ALTER TABLE inventario_diario.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS observaciones TEXT;
+            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ADD COLUMN IF NOT EXISTS motivo TEXT;
             ALTER TABLE inventario_diario.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS corregido BOOLEAN DEFAULT FALSE;
         """)
@@ -491,6 +493,7 @@ def consultar_inventario():
 
         cur.execute("""
             SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2, observaciones,
+                   COALESCE(motivo, '') as motivo,
                    COALESCE(corregido, FALSE) as corregido,
                    COALESCE(costo_unitario, 0) as costo_unitario
             FROM inventario_diario.inventario_ciego_conteos
@@ -590,25 +593,35 @@ def guardar_conteo():
 def guardar_observacion():
     data = request.json
     id_producto = data.get('id')
-    observaciones = data.get('observaciones', '')
+    observaciones = data.get('observaciones', None)
+    motivo = data.get('motivo', None)
     corregido = data.get('corregido', None)
 
     conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
+
+        # Construir SET dinámico según los campos enviados
+        sets = []
+        params = []
+        if observaciones is not None:
+            sets.append("observaciones = %s")
+            params.append(observaciones)
+        if motivo is not None:
+            sets.append("motivo = %s")
+            params.append(motivo)
         if corregido is not None:
-            cur.execute("""
+            sets.append("corregido = %s")
+            params.append(bool(corregido))
+
+        if sets:
+            params.append(id_producto)
+            cur.execute(f"""
                 UPDATE inventario_diario.inventario_ciego_conteos
-                SET observaciones = %s, corregido = %s
+                SET {', '.join(sets)}
                 WHERE id = %s
-            """, (observaciones, bool(corregido), id_producto))
-        else:
-            cur.execute("""
-                UPDATE inventario_diario.inventario_ciego_conteos
-                SET observaciones = %s
-                WHERE id = %s
-            """, (observaciones, id_producto))
+            """, params)
         conn.commit()
 
         return jsonify({'success': True})
@@ -878,6 +891,7 @@ def reporte_diferencias():
                    cantidad_contada as conteo1,
                    cantidad_contada_2 as conteo2,
                    COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
+                   COALESCE(motivo, '') as motivo,
                    observaciones,
                    COALESCE(corregido, FALSE) as corregido,
                    local
@@ -908,6 +922,7 @@ def reporte_diferencias():
                 'conteo1': float(p['conteo1']) if p['conteo1'] is not None else None,
                 'conteo2': float(p['conteo2']) if p['conteo2'] is not None else None,
                 'diferencia': float(p['diferencia']) if p['diferencia'] is not None else 0,
+                'motivo': p['motivo'] or '',
                 'observaciones': p['observaciones'] or '',
                 'corregido': bool(p['corregido'])
             }
@@ -945,6 +960,7 @@ def exportar_excel():
                    cantidad_contada as conteo1,
                    cantidad_contada_2 as conteo2,
                    COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
+                   COALESCE(motivo, '') as motivo,
                    observaciones,
                    COALESCE(corregido, FALSE) as corregido
             FROM inventario_diario.inventario_ciego_conteos
@@ -988,7 +1004,7 @@ def exportar_excel():
                 grupos[key] = []
             grupos[key].append(r)
 
-        headers = ['Codigo', 'Producto', 'Unidad', 'Sistema', 'Conteo 1', 'Conteo 2', 'Diferencia', 'Observaciones', 'Corregido']
+        headers = ['Codigo', 'Producto', 'Unidad', 'Sistema', 'Conteo 1', 'Conteo 2', 'Diferencia', 'Motivo', 'Observaciones', 'Corregido']
 
         for (fecha, local), items in grupos.items():
             sheet_name = f"{fecha}_{local}"[:31]
@@ -1012,6 +1028,7 @@ def exportar_excel():
                     float(item['conteo1']) if item['conteo1'] is not None else '',
                     float(item['conteo2']) if item['conteo2'] is not None else '',
                     float(item['diferencia']) if item['diferencia'] is not None else '',
+                    item.get('motivo') or '',
                     item['observaciones'] or '',
                     'Sí' if item.get('corregido') else 'No'
                 ]

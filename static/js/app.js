@@ -846,6 +846,7 @@ async function consultarInventario() {
                 cantidad_contada: p.cantidad_contada,
                 cantidad_contada_2: p.cantidad_contada_2,
                 observaciones: p.observaciones || '',
+                motivo: p.motivo || '',
                 corregido: p.corregido || false,
                 costo_unitario: parseFloat(p.costo_unitario) || 0
             }));
@@ -1164,16 +1165,6 @@ async function guardarConteoDirecto(input) {
 
 // ==================== GUARDAR OBSERVACION ====================
 
-function _obtenerObservacionFila(row) {
-    const select = row.querySelector('.select-observacion');
-    const input = row.querySelector('.input-observacion');
-    if (select.value === '__otro__') {
-        return input.value.trim();
-    } else {
-        return select.value;
-    }
-}
-
 async function guardarTodasObservaciones() {
     if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso para editar observaciones', 'error'); return; }
     const filas = document.querySelectorAll('.tabla-observaciones tbody tr');
@@ -1187,27 +1178,28 @@ async function guardarTodasObservaciones() {
 
     let errores = 0;
     for (const fila of filas) {
-        const select = fila.querySelector('.select-observacion');
-        if (!select) continue;
-        const id = parseInt(select.dataset.id);
-        const observaciones = _obtenerObservacionFila(fila);
+        const selectMotivo = fila.querySelector('.select-motivo');
+        const inputObs = fila.querySelector('.input-observacion');
+        if (!selectMotivo) continue;
+        const id = parseInt(selectMotivo.dataset.id);
+        const motivo = selectMotivo.value;
+        const observaciones = inputObs ? inputObs.value.trim() : '';
 
         try {
             const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, observaciones })
+                body: JSON.stringify({ id, motivo, observaciones })
             });
 
             if (response.ok) {
                 const prod = state.productos.find(p => p.id === id);
-                if (prod) prod.observaciones = observaciones;
-                select.classList.add('guardado');
-                setTimeout(() => select.classList.remove('guardado'), 1500);
+                if (prod) { prod.motivo = motivo; prod.observaciones = observaciones; }
+                selectMotivo.classList.add('guardado');
+                if (inputObs) inputObs.classList.add('guardado');
+                setTimeout(() => { selectMotivo.classList.remove('guardado'); if (inputObs) inputObs.classList.remove('guardado'); }, 1500);
             } else {
                 errores++;
-                select.classList.add('error');
-                setTimeout(() => select.classList.remove('error'), 1500);
             }
         } catch (error) {
             errores++;
@@ -1303,10 +1295,6 @@ function renderObservaciones() {
 
     const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
 
-    const opcionesSelect = OBSERVACIONES_PREESTABLECIDAS.map(op =>
-        `<option value="${op}">${op}</option>`
-    ).join('');
-
     obsContainer.innerHTML = `
         <div class="tabla-obs-container">
             <div class="obs-header">
@@ -1318,6 +1306,7 @@ function renderObservaciones() {
                     <tr>
                         <th class="obs-col-producto">Producto</th>
                         <th class="obs-col-dif">Dif</th>
+                        <th class="obs-col-motivo">Motivo</th>
                         <th class="obs-col-obs">Observación</th>
                         <th class="obs-col-corregido">Corregido</th>
                     </tr>
@@ -1329,31 +1318,29 @@ function renderObservaciones() {
                         const diferencia = cantidadFinal - prod.cantidad_sistema;
                         const difClass = diferencia < 0 ? 'negativa' : 'positiva';
                         const obsActual = (prod.observaciones || '').replace(/"/g, '&quot;');
-                        const esPreestablecida = OBSERVACIONES_PREESTABLECIDAS.includes(prod.observaciones || '');
+                        const motivoActual = prod.motivo || '';
                         const corregido = prod.corregido || false;
 
                         return `
                             <tr>
                                 <td class="obs-nombre">${prod.nombre}</td>
                                 <td class="obs-dif ${difClass}">${diferencia > 0 ? '+' : ''}${diferencia.toFixed(3)}</td>
+                                <td class="obs-motivo-cell">
+                                    <select class="select-motivo" data-id="${prod.id}" onchange="guardarMotivo(this)">
+                                        <option value="">-- Seleccionar --</option>
+                                        ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
+                                            `<option value="${op}" ${motivoActual === op ? 'selected' : ''}>${op}</option>`
+                                        ).join('')}
+                                    </select>
+                                </td>
                                 <td class="obs-input-cell">
-                                    <div class="obs-input-wrapper">
-                                        <select class="select-observacion" data-id="${prod.id}" onchange="seleccionarObservacion(this)">
-                                            <option value="">-- Seleccionar motivo --</option>
-                                            ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
-                                                `<option value="${op}" ${prod.observaciones === op ? 'selected' : ''}>${op}</option>`
-                                            ).join('')}
-                                            <option value="__otro__" ${obsActual && !esPreestablecida ? 'selected' : ''}>Otro (escribir)</option>
-                                        </select>
-                                        <input type="text"
-                                               class="input-observacion ${esPreestablecida ? 'obs-oculto' : ''}"
-                                               value="${!esPreestablecida ? obsActual : ''}"
-                                               placeholder="Escribir motivo..."
-                                               data-id="${prod.id}"
-                                               onchange="guardarObservacion(this)"
-                                               onkeypress="if(event.key==='Enter') this.blur()"
-                                               style="${esPreestablecida || !obsActual ? 'display:none;' : ''}">
-                                    </div>
+                                    <input type="text"
+                                           class="input-observacion"
+                                           value="${obsActual}"
+                                           placeholder="Escribir observación..."
+                                           data-id="${prod.id}"
+                                           onchange="guardarObservacion(this)"
+                                           onkeypress="if(event.key==='Enter') this.blur()">
                                 </td>
                                 <td class="obs-corregido-cell">
                                     ${esAdmin
@@ -1381,39 +1368,25 @@ function renderObservaciones() {
     `;
 }
 
-function seleccionarObservacion(select) {
-    const id = parseInt(select.dataset.id);
-    const valor = select.value;
-    const row = select.closest('tr');
-    const inputTexto = row.querySelector('.input-observacion');
-
-    if (valor === '__otro__') {
-        inputTexto.style.display = '';
-        inputTexto.focus();
-    } else {
-        inputTexto.style.display = 'none';
-        inputTexto.value = '';
-        // Guardar directamente la opción preestablecida
-        const prod = state.productos.find(p => p.id === id);
-        if (prod) prod.observaciones = valor;
-        guardarObservacionDirecta(id, valor);
-    }
-}
-
-async function guardarObservacionDirecta(id, observaciones) {
+async function guardarMotivo(select) {
     if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso', 'error'); return; }
+    const id = parseInt(select.dataset.id);
+    const motivo = select.value;
+
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, observaciones })
+            body: JSON.stringify({ id, motivo })
         });
         if (response.ok) {
             const prod = state.productos.find(p => p.id === id);
-            if (prod) prod.observaciones = observaciones;
-            showToast('Observación guardada', 'success');
+            if (prod) prod.motivo = motivo;
+            select.classList.add('guardado');
+            setTimeout(() => select.classList.remove('guardado'), 1000);
+            showToast('Motivo guardado', 'success');
         } else {
-            showToast('Error al guardar', 'error');
+            showToast('Error al guardar motivo', 'error');
         }
     } catch (error) {
         showToast('Error de conexión', 'error');
@@ -1424,16 +1397,15 @@ async function toggleCorregido(checkbox) {
     const id = parseInt(checkbox.dataset.id);
     const corregido = checkbox.checked;
     const label = checkbox.closest('.toggle-corregido').querySelector('.toggle-label');
-    const prod = state.productos.find(p => p.id === id);
-    const observaciones = prod ? prod.observaciones : '';
 
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, observaciones, corregido })
+            body: JSON.stringify({ id, corregido })
         });
         if (response.ok) {
+            const prod = state.productos.find(p => p.id === id);
             if (prod) prod.corregido = corregido;
             label.textContent = corregido ? 'Sí' : 'No';
             showToast(corregido ? 'Marcado como corregido' : 'Marcado como no corregido', 'success');
@@ -2755,6 +2727,7 @@ async function verDiferencias() {
                                     <th>Conteo 1</th>
                                     <th>Conteo 2</th>
                                     <th>Diferencia</th>
+                                    <th>Motivo</th>
                                     <th>Observacion</th>
                                     <th>Corregido</th>
                                 </tr>
@@ -2773,6 +2746,7 @@ async function verDiferencias() {
                                             <td class="text-center">${p.conteo1 !== null ? p.conteo1 : '-'}</td>
                                             <td class="text-center">${p.conteo2 !== null ? p.conteo2 : '-'}</td>
                                             <td class="col-diferencia ${difClass}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
+                                            <td class="col-obs">${p.motivo || '-'}</td>
                                             <td class="col-obs">${p.observaciones || '-'}</td>
                                             <td class="text-center"><span class="badge-corregido ${corregidoClass}">${p.corregido ? 'Sí' : 'No'}</span></td>
                                         </tr>

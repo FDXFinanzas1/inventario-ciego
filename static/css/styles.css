@@ -841,10 +841,11 @@ main {
     letter-spacing: 0.3px;
 }
 
-.tabla-observaciones .obs-col-producto { width: 30%; }
-.tabla-observaciones .obs-col-dif { width: 10%; text-align: center; }
-.tabla-observaciones .obs-col-obs { width: 42%; }
-.tabla-observaciones .obs-col-corregido { width: 18%; text-align: center; }
+.tabla-observaciones .obs-col-producto { width: 22%; }
+.tabla-observaciones .obs-col-dif { width: 8%; text-align: center; }
+.tabla-observaciones .obs-col-motivo { width: 25%; }
+.tabla-observaciones .obs-col-obs { width: 30%; }
+.tabla-observaciones .obs-col-corregido { width: 15%; text-align: center; }
 
 .tabla-observaciones tbody tr {
     border-bottom: 1px solid var(--border);
@@ -877,6 +878,10 @@ main {
 
 .tabla-observaciones .obs-dif.negativa {
     color: var(--accent);
+}
+
+.tabla-observaciones .obs-motivo-cell {
+    padding: 5px 8px;
 }
 
 .tabla-observaciones .obs-input-cell {
@@ -923,6 +928,7 @@ main {
     gap: 6px;
 }
 
+.select-motivo,
 .select-observacion {
     width: 100%;
     padding: 7px 10px;
@@ -936,17 +942,20 @@ main {
     appearance: auto;
 }
 
+.select-motivo:focus,
 .select-observacion:focus {
     outline: none;
     border-color: var(--warning);
     box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15);
 }
 
+.select-motivo.guardado,
 .select-observacion.guardado {
     border-color: var(--success);
     background: #F0FDF4;
 }
 
+.select-motivo.error,
 .select-observacion.error {
     border-color: var(--accent);
     background: #FEF2F2;
@@ -2817,16 +2826,18 @@ textarea:focus {
         font-size: 11px;
     }
 
-    .tabla-observaciones .obs-col-producto { width: 25%; }
-    .tabla-observaciones .obs-col-dif { width: 10%; }
-    .tabla-observaciones .obs-col-obs { width: 42%; }
-    .tabla-observaciones .obs-col-corregido { width: 23%; }
+    .tabla-observaciones .obs-col-producto { width: 20%; }
+    .tabla-observaciones .obs-col-dif { width: 8%; }
+    .tabla-observaciones .obs-col-motivo { width: 24%; }
+    .tabla-observaciones .obs-col-obs { width: 28%; }
+    .tabla-observaciones .obs-col-corregido { width: 20%; }
 
     .input-observacion {
         padding: 6px 6px;
         font-size: 12px;
     }
 
+    .select-motivo,
     .select-observacion {
         padding: 5px 4px;
         font-size: 11px;
