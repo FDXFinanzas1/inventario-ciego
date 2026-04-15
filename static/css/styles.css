@@ -870,6 +870,13 @@ main {
     border-top: 2px dashed var(--border);
 }
 
+.obs-texto-fijo {
+    font-size: 12px;
+    color: var(--text-dark);
+    padding: 7px 10px;
+    display: block;
+}
+
 .btn-eliminar-obs {
     background: none;
     border: none;

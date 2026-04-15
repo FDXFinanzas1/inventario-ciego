@@ -1164,10 +1164,83 @@ async function guardarConteoDirecto(input) {
 
 // ==================== GUARDAR OBSERVACION ====================
 
+// ==================== CACHE LOCAL (2 horas) ====================
+
+function _obsCacheKey() {
+    const fecha = document.getElementById('obs-fecha')?.value || '';
+    const bodega = document.getElementById('obs-bodega')?.value || '';
+    return `obs_cache_${fecha}_${bodega}`;
+}
+
+function cachearCambioObs(el) {
+    // Guardar todos los cambios actuales en localStorage con expiración 2h
+    const cache = {};
+    document.querySelectorAll('.select-motivo[data-id]').forEach(sel => {
+        const id = sel.dataset.id;
+        const fila = sel.closest('tr');
+        const input = fila?.querySelector('.input-observacion');
+        cache['conteo_' + id] = { motivo: sel.value, observaciones: input ? input.value : '' };
+    });
+    document.querySelectorAll('.select-motivo[data-manual-id]').forEach(sel => {
+        const id = sel.dataset.manualId;
+        const fila = sel.closest('tr');
+        const input = fila?.querySelector('.input-observacion');
+        cache['manual_' + id] = { motivo: sel.value, observaciones: input ? input.value : '' };
+    });
+    try {
+        localStorage.setItem(_obsCacheKey(), JSON.stringify({ data: cache, expira: Date.now() + 2 * 60 * 60 * 1000 }));
+    } catch(e) {}
+}
+
+function restaurarCacheObs() {
+    try {
+        const raw = localStorage.getItem(_obsCacheKey());
+        if (!raw) return;
+        const { data, expira } = JSON.parse(raw);
+        if (Date.now() > expira) { localStorage.removeItem(_obsCacheKey()); return; }
+
+        // Restaurar valores en conteo
+        document.querySelectorAll('.select-motivo[data-id]').forEach(sel => {
+            const cached = data['conteo_' + sel.dataset.id];
+            if (cached) {
+                if (cached.motivo && !sel.value) sel.value = cached.motivo;
+                const fila = sel.closest('tr');
+                const input = fila?.querySelector('.input-observacion');
+                if (input && cached.observaciones && !input.value) input.value = cached.observaciones;
+            }
+        });
+        // Restaurar valores en manuales
+        document.querySelectorAll('.select-motivo[data-manual-id]').forEach(sel => {
+            const cached = data['manual_' + sel.dataset.manualId];
+            if (cached) {
+                if (cached.motivo && !sel.value) sel.value = cached.motivo;
+                const fila = sel.closest('tr');
+                const input = fila?.querySelector('.input-observacion');
+                if (input && cached.observaciones && !input.value) input.value = cached.observaciones;
+            }
+        });
+    } catch(e) {}
+}
+
+// ==================== GUARDAR TODO ====================
+
 async function guardarTodasObservaciones() {
     if (!_puede('observaciones', 'editar')) { showToast('No tienes permiso para editar observaciones', 'error'); return; }
-    const filas = document.querySelectorAll('.tabla-observaciones tbody tr');
-    if (filas.length === 0) return;
+
+    // Validar que todos los motivos editables estén seleccionados
+    const todosSelects = document.querySelectorAll('.select-motivo[data-id], .select-motivo[data-manual-id]');
+    let sinMotivo = 0;
+    todosSelects.forEach(sel => {
+        if (!sel.value) {
+            sinMotivo++;
+            sel.style.border = '2px solid var(--accent)';
+            setTimeout(() => sel.style.border = '', 3000);
+        }
+    });
+    if (sinMotivo > 0) {
+        showToast(`Faltan ${sinMotivo} motivos por seleccionar`, 'error');
+        return;
+    }
 
     const btn = document.querySelector('.btn-guardar-obs');
     if (btn) {
@@ -1176,11 +1249,14 @@ async function guardarTodasObservaciones() {
     }
 
     let errores = 0;
-    for (const fila of filas) {
-        const selectMotivo = fila.querySelector('.select-motivo');
-        const inputObs = fila.querySelector('.input-observacion');
-        if (!selectMotivo) continue;
+    let guardados = 0;
+
+    // 1) Guardar filas del conteo
+    const filasConteo = document.querySelectorAll('.select-motivo[data-id]');
+    for (const selectMotivo of filasConteo) {
         const id = parseInt(selectMotivo.dataset.id);
+        const fila = selectMotivo.closest('tr');
+        const inputObs = fila?.querySelector('.input-observacion');
         const motivo = selectMotivo.value;
         const observaciones = inputObs ? inputObs.value.trim() : '';
 
@@ -1190,19 +1266,41 @@ async function guardarTodasObservaciones() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id, motivo, observaciones })
             });
-
             if (response.ok) {
                 const prod = _obsProductos.find(p => p.id === id);
                 if (prod) { prod.motivo = motivo; prod.observaciones = observaciones; }
                 selectMotivo.classList.add('guardado');
                 if (inputObs) inputObs.classList.add('guardado');
                 setTimeout(() => { selectMotivo.classList.remove('guardado'); if (inputObs) inputObs.classList.remove('guardado'); }, 1500);
-            } else {
-                errores++;
-            }
-        } catch (error) {
-            errores++;
-        }
+                guardados++;
+            } else { errores++; }
+        } catch(e) { errores++; }
+    }
+
+    // 2) Guardar filas manuales
+    const filasManuales = document.querySelectorAll('.select-motivo[data-manual-id]');
+    for (const selectMotivo of filasManuales) {
+        const id = parseInt(selectMotivo.dataset.manualId);
+        const fila = selectMotivo.closest('tr');
+        const inputObs = fila?.querySelector('.input-observacion');
+        const motivo = selectMotivo.value;
+        const observaciones = inputObs ? inputObs.value.trim() : '';
+
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/observaciones-manuales/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ motivo, observaciones })
+            });
+            if (response.ok) {
+                const m = _obsManuales.find(x => x.id === id);
+                if (m) { m.motivo = motivo; m.observaciones = observaciones; }
+                selectMotivo.classList.add('guardado');
+                if (inputObs) inputObs.classList.add('guardado');
+                setTimeout(() => { selectMotivo.classList.remove('guardado'); if (inputObs) inputObs.classList.remove('guardado'); }, 1500);
+                guardados++;
+            } else { errores++; }
+        } catch(e) { errores++; }
     }
 
     if (btn) {
@@ -1210,8 +1308,10 @@ async function guardarTodasObservaciones() {
         btn.innerHTML = '<i class="fas fa-save"></i> Guardar Observaciones';
     }
 
+    // Limpiar cache después de guardar exitosamente
     if (errores === 0) {
-        showToast('Observaciones guardadas correctamente', 'success');
+        try { localStorage.removeItem(_obsCacheKey()); } catch(e) {}
+        showToast(`${guardados} observaciones guardadas correctamente`, 'success');
     } else {
         showToast(`${errores} observaciones no se pudieron guardar`, 'error');
     }
@@ -1409,27 +1509,35 @@ function renderObservaciones() {
                         const obsActual = (prod.observaciones || '').replace(/"/g, '&quot;');
                         const motivoActual = prod.motivo || '';
                         const corregido = prod.corregido || false;
+                        const yaGuardado = motivoActual || obsActual;
+                        const bloqueado = yaGuardado && !esAdmin;
 
                         return `
                             <tr class="${esCorregido ? 'fila-corregida' : ''}">
                                 <td class="obs-nombre">${prod.nombre}</td>
                                 <td class="obs-dif ${difClass}">${diferencia !== 0 ? (diferencia > 0 ? '+' : '') + diferencia.toFixed(3) : '<span style="color:#94A3B8">0.000</span>'}</td>
                                 <td class="obs-motivo-cell">
-                                    <select class="select-motivo" data-id="${prod.id}" onchange="guardarMotivo(this)">
-                                        <option value="">-- Seleccionar --</option>
-                                        ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
-                                            `<option value="${op}" ${motivoActual === op ? 'selected' : ''}>${op}</option>`
-                                        ).join('')}
-                                    </select>
+                                    ${bloqueado
+                                        ? `<span class="obs-texto-fijo">${motivoActual || '-'}</span>`
+                                        : `<select class="select-motivo" data-id="${prod.id}" onchange="cachearCambioObs(this)">
+                                            <option value="">-- Seleccionar --</option>
+                                            ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
+                                                `<option value="${op}" ${motivoActual === op ? 'selected' : ''}>${op}</option>`
+                                            ).join('')}
+                                        </select>`
+                                    }
                                 </td>
                                 <td class="obs-input-cell">
-                                    <input type="text"
-                                           class="input-observacion"
-                                           value="${obsActual}"
-                                           placeholder="Escribir observación..."
-                                           data-id="${prod.id}"
-                                           onchange="guardarObservacion(this)"
-                                           onkeypress="if(event.key==='Enter') this.blur()">
+                                    ${bloqueado
+                                        ? `<span class="obs-texto-fijo">${obsActual || '-'}</span>`
+                                        : `<input type="text"
+                                               class="input-observacion"
+                                               value="${obsActual}"
+                                               placeholder="Escribir observación..."
+                                               data-id="${prod.id}"
+                                               onchange="cachearCambioObs(this)"
+                                               onkeypress="if(event.key==='Enter') this.blur()">`
+                                    }
                                 </td>
                                 <td class="obs-corregido-cell">
                                     ${esAdmin
@@ -1484,31 +1592,39 @@ function renderObservaciones() {
                         const obsActual = (m.observaciones || '').replace(/"/g, '&quot;');
                         const motivoActual = m.motivo || '';
                         const corregido = m.corregido || false;
+                        const yaGuardadoM = motivoActual || obsActual;
+                        const bloqueadoM = yaGuardadoM && !esAdmin;
                         return `
                             <tr class="fila-manual">
                                 <td class="obs-nombre">
                                     ${m.nombre}
-                                    <button class="btn-eliminar-obs" onclick="eliminarObsManual(${m.id})" title="Eliminar">
+                                    ${esAdmin ? `<button class="btn-eliminar-obs" onclick="eliminarObsManual(${m.id})" title="Eliminar">
                                         <i class="fas fa-trash-alt"></i>
-                                    </button>
+                                    </button>` : ''}
                                 </td>
                                 <td class="obs-dif ${difClass}">${dif !== 0 ? (dif > 0 ? '+' : '') + dif.toFixed(3) : '0.000'}</td>
                                 <td class="obs-motivo-cell">
-                                    <select class="select-motivo" data-manual-id="${m.id}" onchange="guardarMotivoManual(this)">
-                                        <option value="">-- Seleccionar --</option>
-                                        ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
-                                            `<option value="${op}" ${motivoActual === op ? 'selected' : ''}>${op}</option>`
-                                        ).join('')}
-                                    </select>
+                                    ${bloqueadoM
+                                        ? `<span class="obs-texto-fijo">${motivoActual || '-'}</span>`
+                                        : `<select class="select-motivo" data-manual-id="${m.id}" onchange="cachearCambioObs(this)">
+                                            <option value="">-- Seleccionar --</option>
+                                            ${OBSERVACIONES_PREESTABLECIDAS.map(op =>
+                                                `<option value="${op}" ${motivoActual === op ? 'selected' : ''}>${op}</option>`
+                                            ).join('')}
+                                        </select>`
+                                    }
                                 </td>
                                 <td class="obs-input-cell">
-                                    <input type="text"
-                                           class="input-observacion"
-                                           value="${obsActual}"
-                                           placeholder="Escribir observación..."
-                                           data-manual-id="${m.id}"
-                                           onchange="guardarObsManual(this)"
-                                           onkeypress="if(event.key==='Enter') this.blur()">
+                                    ${bloqueadoM
+                                        ? `<span class="obs-texto-fijo">${obsActual || '-'}</span>`
+                                        : `<input type="text"
+                                               class="input-observacion"
+                                               value="${obsActual}"
+                                               placeholder="Escribir observación..."
+                                               data-manual-id="${m.id}"
+                                               onchange="cachearCambioObs(this)"
+                                               onkeypress="if(event.key==='Enter') this.blur()">`
+                                    }
                                 </td>
                                 <td class="obs-corregido-cell">
                                     ${esAdmin
@@ -1550,6 +1666,7 @@ function renderObservaciones() {
         </div>`;
 
     obsContainer.innerHTML = html;
+    restaurarCacheObs();
 }
 
 let _agregandoManual = false;
