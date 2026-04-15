@@ -5859,12 +5859,12 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     background: var(--primary);
     color: #fff;
 }
-.badge-supervisor {
+.badge-gerente {
     background: #FEF3C7;
     color: #92400E;
     border: 1px solid #FCD34D;
 }
-.badge-empleado {
+.badge-subgerente {
     background: var(--bg-alt);
     color: var(--text-gray);
     border: 1px solid var(--border);

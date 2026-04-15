@@ -6184,7 +6184,7 @@ function usuariosRenderTabla() {
         return;
     }
     tbody.innerHTML = _usuariosCache.map(u => {
-        const rolClass = u.rol === 'admin' ? 'badge-admin' : u.rol === 'supervisor' ? 'badge-supervisor' : 'badge-empleado';
+        const rolClass = u.rol === 'admin' ? 'badge-admin' : u.rol === 'gerente' ? 'badge-gerente' : 'badge-subgerente';
         const estadoClass = u.activo ? 'badge-activo' : 'badge-inactivo';
         const bodegas = (u.bodegas || []).map(b => `<span class="badge-bodega">${BODEGAS_NOMBRES[b] || b}</span>`).join(' ');
         return `<tr>
@@ -6213,7 +6213,7 @@ function usuariosMostrarFormNuevo() {
     document.getElementById('uform-password').value = '';
     document.getElementById('uform-password').placeholder = 'Contrasena (o enviar por email)';
     document.getElementById('uform-email').value = '';
-    document.getElementById('uform-rol').value = 'empleado';
+    document.getElementById('uform-rol').value = 'subgerente';
     document.getElementById('uform-activo').value = 'true';
     document.getElementById('uform-enviar-invitacion').checked = false;
     usuariosSelNinguna();
@@ -6346,9 +6346,9 @@ async function rolesCargar() {
         const res = await fetch(`${CONFIG.API_URL}/api/admin/roles`);
         if (!res.ok) return;
         const rolesData = await res.json();
-        const roles = ['empleado', 'supervisor', 'admin'];
-        const rolIcons = { empleado: 'fa-user', supervisor: 'fa-user-tie', admin: 'fa-user-shield' };
-        const rolColors = { empleado: '#3B82F6', supervisor: '#D97706', admin: '#059669' };
+        const roles = ['subgerente', 'gerente', 'admin'];
+        const rolIcons = { subgerente: 'fa-user', gerente: 'fa-user-tie', admin: 'fa-user-shield' };
+        const rolColors = { subgerente: '#3B82F6', gerente: '#D97706', admin: '#059669' };
 
         container.innerHTML = roles.map(rol => {
             const mods = rolesData[rol] || {};
@@ -6442,7 +6442,7 @@ async function _refrescarPermisos() {
         const res = await fetch(`${CONFIG.API_URL}/api/admin/roles`);
         if (!res.ok) return;
         const rolesData = await res.json();
-        const rol = state.user.rol || 'empleado';
+        const rol = state.user.rol || 'subgerente';
         const permsRol = rolesData[rol] || {};
         state.user.permisos = permsRol;
         state.user.modulos = Object.keys(permsRol).filter(m => permsRol[m] && permsRol[m].ver);

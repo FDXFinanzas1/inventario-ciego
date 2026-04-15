@@ -266,20 +266,26 @@ def init_db():
         # Seed defaults si la tabla esta vacia
         cur.execute("SELECT COUNT(*) as cnt FROM inventario_diario.rol_modulos")
         if cur.fetchone()['cnt'] == 0:
-            # Empleado: ve y edita basicos
+            # Subgerente: conteo, observaciones, historico, dashboard
             for mod in ['conteo','observaciones','historico','dashboard']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('empleado', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
-            # Supervisor: ve todo, edita basicos, no elimina
+                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('subgerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+            # Gerente: todo lo del subgerente + semanal, cruce, bajas
             for mod in ['conteo','observaciones','historico','dashboard']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('supervisor', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('gerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             for mod in ['cruce','bajas','semanal','correccion']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('supervisor', %s, TRUE, FALSE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('gerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             # Admin: ve, edita y elimina todo
             for mod in ['conteo','observaciones','historico','dashboard','cruce','bajas','semanal','correccion','usuarios']:
                 cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('admin', %s, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING", (mod,))
         # Actualizar registros existentes que no tengan puede_ver seteado (migracion)
         cur.execute("UPDATE inventario_diario.rol_modulos SET puede_ver = TRUE WHERE puede_ver IS NULL")
         cur.execute("UPDATE inventario_diario.rol_modulos SET puede_editar = TRUE WHERE puede_editar IS NULL")
+
+        # Migrar roles: empleado → subgerente, supervisor → gerente
+        cur.execute("UPDATE inventario_diario.usuarios SET rol = 'subgerente' WHERE rol = 'empleado'")
+        cur.execute("UPDATE inventario_diario.usuarios SET rol = 'gerente' WHERE rol = 'supervisor'")
+        cur.execute("UPDATE inventario_diario.rol_modulos SET rol = 'subgerente' WHERE rol = 'empleado'")
+        cur.execute("UPDATE inventario_diario.rol_modulos SET rol = 'gerente' WHERE rol = 'supervisor'")
         conn.commit()
         print('init_db: tablas OK')
     except Exception as e:
@@ -3852,7 +3858,7 @@ def admin_crear_usuario():
         nombre = data.get('nombre', '').strip()
         password = data.get('password', '').strip()
         email = data.get('email', '').strip().lower()
-        rol = data.get('rol', 'empleado')
+        rol = data.get('rol', 'subgerente')
         bodegas = data.get('bodegas', [])
         enviar_invitacion = data.get('enviar_invitacion', False)
 
@@ -3912,7 +3918,7 @@ def admin_editar_usuario(uid):
         username = data.get('username', '').strip().lower()
         nombre = data.get('nombre', '').strip()
         password = data.get('password', '').strip()
-        rol = data.get('rol', 'empleado')
+        rol = data.get('rol', 'subgerente')
         activo = data.get('activo', True)
         bodegas = data.get('bodegas', [])
 
@@ -4008,7 +4014,7 @@ def admin_guardar_roles():
         cur = conn.cursor()
         rol = data.get('rol', '').strip().lower()
         modulos = data.get('modulos', {})
-        if rol not in ('empleado', 'supervisor', 'admin'):
+        if rol not in ('subgerente', 'gerente', 'admin'):
             return jsonify({'error': 'Rol invalido'}), 400
         cur.execute("DELETE FROM inventario_diario.rol_modulos WHERE rol = %s", (rol,))
         for mod, perms in modulos.items():
