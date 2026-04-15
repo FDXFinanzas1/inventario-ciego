@@ -995,6 +995,27 @@ function cambiarVista(viewName) {
             dashDesde.value = hace30.toISOString().split('T')[0];
             dashHasta.value = hoy.toISOString().split('T')[0];
         }
+        // Filtrar bodegas del dashboard según permisos del usuario
+        const esAdminDash = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+        if (!esAdminDash) {
+            const userBodegas = state.user?.bodegas || [];
+            const dashBodega = document.getElementById('dash-bodega');
+            if (dashBodega) {
+                const opciones = dashBodega.querySelectorAll('option[value]');
+                opciones.forEach(opt => {
+                    if (opt.value && !userBodegas.includes(opt.value)) {
+                        opt.style.display = 'none';
+                    }
+                });
+                // Auto-seleccionar si tiene una sola bodega
+                if (userBodegas.length === 1) {
+                    dashBodega.value = userBodegas[0];
+                }
+                // Ocultar selector de marca si no es admin
+                const dashMarca = document.getElementById('dash-marca');
+                if (dashMarca) dashMarca.closest('.form-group').style.display = 'none';
+            }
+        }
         cargarDashboard();
     }
 }
@@ -6184,7 +6205,7 @@ function usuariosRenderTabla() {
         return;
     }
     tbody.innerHTML = _usuariosCache.map(u => {
-        const rolClass = u.rol === 'admin' ? 'badge-admin' : u.rol === 'gerente' ? 'badge-gerente' : 'badge-subgerente';
+        const rolClass = u.rol === 'admin' ? 'badge-admin' : u.rol === 'gerente' ? 'badge-gerente' : u.rol === 'supervisor' ? 'badge-supervisor' : 'badge-subgerente';
         const estadoClass = u.activo ? 'badge-activo' : 'badge-inactivo';
         const bodegas = (u.bodegas || []).map(b => `<span class="badge-bodega">${BODEGAS_NOMBRES[b] || b}</span>`).join(' ');
         return `<tr>
@@ -6346,9 +6367,9 @@ async function rolesCargar() {
         const res = await fetch(`${CONFIG.API_URL}/api/admin/roles`);
         if (!res.ok) return;
         const rolesData = await res.json();
-        const roles = ['subgerente', 'gerente', 'admin'];
-        const rolIcons = { subgerente: 'fa-user', gerente: 'fa-user-tie', admin: 'fa-user-shield' };
-        const rolColors = { subgerente: '#3B82F6', gerente: '#D97706', admin: '#059669' };
+        const roles = ['subgerente', 'supervisor', 'gerente', 'admin'];
+        const rolIcons = { subgerente: 'fa-user', supervisor: 'fa-user-check', gerente: 'fa-user-tie', admin: 'fa-user-shield' };
+        const rolColors = { subgerente: '#3B82F6', supervisor: '#8B5CF6', gerente: '#D97706', admin: '#059669' };
 
         container.innerHTML = roles.map(rol => {
             const mods = rolesData[rol] || {};

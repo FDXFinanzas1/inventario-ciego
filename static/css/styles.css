@@ -5864,6 +5864,11 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     color: #92400E;
     border: 1px solid #FCD34D;
 }
+.badge-supervisor {
+    background: #F3E8FF;
+    color: #6D28D9;
+    border: 1px solid #C4B5FD;
+}
 .badge-subgerente {
     background: var(--bg-alt);
     color: var(--text-gray);

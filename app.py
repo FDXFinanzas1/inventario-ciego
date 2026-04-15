@@ -269,6 +269,9 @@ def init_db():
             # Subgerente: conteo, observaciones, historico, dashboard
             for mod in ['conteo','observaciones','historico','dashboard']:
                 cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('subgerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+            # Supervisor: igual que subgerente
+            for mod in ['conteo','observaciones','historico','dashboard']:
+                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('supervisor', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             # Gerente: todo lo del subgerente + semanal, cruce, bajas
             for mod in ['conteo','observaciones','historico','dashboard']:
                 cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('gerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
@@ -4014,7 +4017,7 @@ def admin_guardar_roles():
         cur = conn.cursor()
         rol = data.get('rol', '').strip().lower()
         modulos = data.get('modulos', {})
-        if rol not in ('subgerente', 'gerente', 'admin'):
+        if rol not in ('subgerente', 'supervisor', 'gerente', 'admin'):
             return jsonify({'error': 'Rol invalido'}), 400
         cur.execute("DELETE FROM inventario_diario.rol_modulos WHERE rol = %s", (rol,))
         for mod, perms in modulos.items():
