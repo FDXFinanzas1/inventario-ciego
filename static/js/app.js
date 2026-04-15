@@ -68,7 +68,8 @@ function destroyChart(id) {
 const MARCAS_BODEGAS = {
     'chios': ['real_audiencia', 'floreana', 'portugal'],
     'santo_cachon': ['santo_cachon_real', 'santo_cachon_portugal'],
-    'simon_bolon': ['simon_bolon']
+    'simon_bolon': ['simon_bolon'],
+    'operaciones': ['bodega_principal', 'materia_prima', 'planta']
 };
 
 function filtrarBodegasPorMarca() {
@@ -85,6 +86,13 @@ function filtrarBodegasPorMarca() {
         } else {
             opt.style.display = 'none';
         }
+    });
+
+    // Ocultar bodegas sin data-marca si hay marca seleccionada (excepto "Todas")
+    const sinMarca = selectBodega.querySelectorAll('option:not([data-marca])');
+    sinMarca.forEach(opt => {
+        if (opt.value === '') return; // "Todas las bodegas" siempre visible
+        opt.style.display = marca ? 'none' : '';
     });
 }
 
