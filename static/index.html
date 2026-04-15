@@ -300,15 +300,24 @@
                             <input type="date" id="dash-fecha-hasta">
                         </div>
                         <div class="form-group">
+                            <label><i class="fas fa-store"></i> Marca</label>
+                            <select id="dash-marca" onchange="filtrarBodegasPorMarca()">
+                                <option value="">Todas las marcas</option>
+                                <option value="chios">Chios Burger</option>
+                                <option value="santo_cachon">Santo Cachon</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
                             <label><i class="fas fa-warehouse"></i> Bodega</label>
                             <select id="dash-bodega">
                                 <option value="">Todas las bodegas</option>
-                                <option value="real_audiencia">Real Audiencia</option>
-                                <option value="floreana">Floreana</option>
-                                <option value="portugal">Portugal</option>
-                                <option value="santo_cachon_real">Santo Cachon Real</option>
-                                <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
-                                <option value="simon_bolon">Simon Bolon</option>
+                                <option value="real_audiencia" data-marca="chios">Real Audiencia</option>
+                                <option value="floreana" data-marca="chios">Floreana</option>
+                                <option value="portugal" data-marca="chios">Portugal</option>
+                                <option value="santo_cachon_real" data-marca="santo_cachon">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal" data-marca="santo_cachon">Santo Cachon Portugal</option>
+                                <option value="simon_bolon" data-marca="simon_bolon">Simon Bolon</option>
                                 <option value="bodega_principal">Bodega Principal</option>
                                 <option value="materia_prima">Materia Prima</option>
                                 <option value="planta">Planta de Produccion</option>

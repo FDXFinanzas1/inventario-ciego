@@ -65,6 +65,29 @@ function destroyChart(id) {
     }
 }
 
+const MARCAS_BODEGAS = {
+    'chios': ['real_audiencia', 'floreana', 'portugal'],
+    'santo_cachon': ['santo_cachon_real', 'santo_cachon_portugal'],
+    'simon_bolon': ['simon_bolon']
+};
+
+function filtrarBodegasPorMarca() {
+    const marca = document.getElementById('dash-marca').value;
+    const selectBodega = document.getElementById('dash-bodega');
+    const opciones = selectBodega.querySelectorAll('option[data-marca]');
+
+    // Resetear bodega
+    selectBodega.value = '';
+
+    opciones.forEach(opt => {
+        if (!marca || opt.dataset.marca === marca) {
+            opt.style.display = '';
+        } else {
+            opt.style.display = 'none';
+        }
+    });
+}
+
 let _dashCargando = false;
 async function cargarDashboard() {
     if (_dashCargando) return;
@@ -72,6 +95,7 @@ async function cargarDashboard() {
     const fechaDesde = document.getElementById('dash-fecha-desde').value;
     const fechaHasta = document.getElementById('dash-fecha-hasta').value;
     const bodega = document.getElementById('dash-bodega') ? document.getElementById('dash-bodega').value : '';
+    const marca = document.getElementById('dash-marca') ? document.getElementById('dash-marca').value : '';
 
     if (!fechaDesde || !fechaHasta) {
         showToast('Selecciona las fechas desde y hasta', 'error');
@@ -89,11 +113,18 @@ async function cargarDashboard() {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cargando...';
     }
 
+    // Construir parámetro de bodega: si hay bodega específica usar esa, si hay marca usar las bodegas de la marca
+    let bodegaParam = '';
+    if (bodega) {
+        bodegaParam = `&bodega=${bodega}`;
+    } else if (marca && MARCAS_BODEGAS[marca]) {
+        bodegaParam = MARCAS_BODEGAS[marca].map(b => `&bodega=${b}`).join('');
+    }
+
     // Cargar lista de productos disponibles
-    _dashCargarProductos(fechaDesde, fechaHasta, bodega);
+    _dashCargarProductos(fechaDesde, fechaHasta, bodega || (marca ? MARCAS_BODEGAS[marca]?.[0] : ''));
 
     try {
-        const bodegaParam = bodega ? `&bodega=${bodega}` : '';
         const prodParam = producto ? `&producto=${encodeURIComponent(producto)}` : '';
         const [resDash, resTend] = await Promise.all([
             fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`),

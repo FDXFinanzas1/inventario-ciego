@@ -638,7 +638,8 @@ def guardar_observacion():
 def reporte_motivos():
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
-    bodega = request.args.get('bodega', '')
+    bodegas = request.args.getlist('bodega')
+    bodegas = [b for b in bodegas if b]
 
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta requeridos'}), 400
@@ -681,9 +682,12 @@ def reporte_motivos():
               AND motivo IS NOT NULL AND motivo != ''
         """
         params1 = [fecha_desde, fecha_hasta]
-        if bodega:
+        if len(bodegas) == 1:
             query1 += " AND local = %s"
-            params1.append(bodega)
+            params1.append(bodegas[0])
+        elif len(bodegas) > 1:
+            query1 += " AND local IN (" + ",".join(["%s"] * len(bodegas)) + ")"
+            params1.extend(bodegas)
         query1 += " GROUP BY motivo"
 
         cur.execute(query1, params1)
@@ -697,9 +701,12 @@ def reporte_motivos():
               AND motivo IS NOT NULL AND motivo != ''
         """
         params2 = [fecha_desde, fecha_hasta]
-        if bodega:
+        if len(bodegas) == 1:
             query2 += " AND local = %s"
-            params2.append(bodega)
+            params2.append(bodegas[0])
+        elif len(bodegas) > 1:
+            query2 += " AND local IN (" + ",".join(["%s"] * len(bodegas)) + ")"
+            params2.extend(bodegas)
         query2 += " GROUP BY motivo"
 
         cur.execute(query2, params2)
@@ -1513,7 +1520,8 @@ def productos_disponibles():
 def reporte_dashboard():
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
-    bodega = request.args.get('bodega')
+    bodegas = request.args.getlist('bodega')
+    bodegas = [b for b in bodegas if b]  # filtrar vacíos
     producto = request.args.get('producto', '').strip()
 
     if not fecha_desde or not fecha_hasta:
@@ -1527,9 +1535,12 @@ def reporte_dashboard():
         # Filtros comunes
         filtro_extra = ""
         params = [fecha_desde, fecha_hasta]
-        if bodega:
+        if len(bodegas) == 1:
             filtro_extra += " AND local = %s"
-            params.append(bodega)
+            params.append(bodegas[0])
+        elif len(bodegas) > 1:
+            filtro_extra += " AND local IN (" + ",".join(["%s"] * len(bodegas)) + ")"
+            params.extend(bodegas)
         if producto:
             filtro_extra += " AND codigo = %s"
             params.append(producto)
@@ -1664,7 +1675,8 @@ def reporte_dashboard():
 
 @app.route('/api/reportes/tendencias-temporal', methods=['GET'])
 def reporte_tendencias_temporal():
-    bodega = request.args.get('bodega')
+    bodegas = request.args.getlist('bodega')
+    bodegas = [b for b in bodegas if b]
     dias = request.args.get('dias', 30, type=int)
 
     conn = None
@@ -1684,9 +1696,12 @@ def reporte_tendencias_temporal():
         """
         params = [dias]
 
-        if bodega:
+        if len(bodegas) == 1:
             query += " AND local = %s"
-            params.append(bodega)
+            params.append(bodegas[0])
+        elif len(bodegas) > 1:
+            query += " AND local IN (" + ",".join(["%s"] * len(bodegas)) + ")"
+            params.extend(bodegas)
 
         query += " GROUP BY fecha, local ORDER BY fecha, local"
 
