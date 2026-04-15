@@ -3084,48 +3084,50 @@ def diferencias_semana(semana_id):
         fecha_fin = semana['fecha_fin']
         local = semana['local']
 
-        # Para cada producto, obtener primer registro (stock) y ultimo registro (contado)
+        # Netear diferencias diarias por producto en la semana
+        # Cada día: diferencia = conteo - sistema. Neto = suma de diferencias diarias.
         cur.execute("""
-            WITH primer_conteo AS (
-                SELECT DISTINCT ON (codigo)
-                    codigo, nombre, unidad, cantidad, fecha, costo_unitario
-                FROM inventario_diario.inventario_ciego_conteos
-                WHERE local = %s AND fecha BETWEEN %s AND %s
-                ORDER BY codigo, fecha ASC, id ASC
-            ),
-            ultimo_conteo AS (
-                SELECT DISTINCT ON (codigo)
-                    codigo,
+            WITH diferencias_diarias AS (
+                SELECT
+                    codigo, nombre, unidad, fecha,
+                    cantidad as stock_sistema,
                     COALESCE(cantidad_contada_2, cantidad_contada) as contado,
-                    fecha as fecha_ultimo,
-                    costo_unitario as costo_ultimo
+                    COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as dif_dia,
+                    COALESCE(costo_unitario, 0) as costo_unitario
                 FROM inventario_diario.inventario_ciego_conteos
                 WHERE local = %s AND fecha BETWEEN %s AND %s
-                  AND (cantidad_contada IS NOT NULL OR cantidad_contada_2 IS NOT NULL)
-                ORDER BY codigo, fecha DESC, id DESC
+                  AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
             )
             SELECT
-                p.codigo,
-                p.nombre,
-                p.unidad,
-                p.cantidad as stock_sistema,
-                u.contado,
-                COALESCE(u.contado, 0) - COALESCE(p.cantidad, 0) as diferencia,
-                COALESCE(u.costo_ultimo, p.costo_unitario, 0) as costo_unitario,
-                p.fecha as fecha_primer,
-                u.fecha_ultimo
-            FROM primer_conteo p
-            LEFT JOIN ultimo_conteo u ON p.codigo = u.codigo
-            WHERE u.contado IS NOT NULL
-              AND (COALESCE(u.contado, 0) - COALESCE(p.cantidad, 0)) != 0
-            ORDER BY p.nombre
-        """, (local, fecha_inicio, fecha_fin, local, fecha_inicio, fecha_fin))
+                codigo,
+                nombre,
+                unidad,
+                SUM(dif_dia) as diferencia,
+                AVG(costo_unitario) as costo_unitario,
+                COUNT(*) as dias_contados,
+                json_agg(json_build_object(
+                    'fecha', fecha,
+                    'stock', stock_sistema,
+                    'contado', contado,
+                    'dif', dif_dia
+                ) ORDER BY fecha) as detalle_diario
+            FROM diferencias_diarias
+            GROUP BY codigo, nombre, unidad
+            HAVING SUM(dif_dia) != 0
+            ORDER BY nombre
+        """, (local, fecha_inicio, fecha_fin))
         diferencias = cur.fetchall()
 
-        # Serializar fechas
+        # Serializar datos
         for d in diferencias:
-            d['fecha_primer'] = str(d['fecha_primer']) if d.get('fecha_primer') else None
-            d['fecha_ultimo'] = str(d['fecha_ultimo']) if d.get('fecha_ultimo') else None
+            d['diferencia'] = float(d['diferencia']) if d['diferencia'] else 0
+            d['costo_unitario'] = float(d['costo_unitario']) if d['costo_unitario'] else 0
+            if d.get('detalle_diario'):
+                for dd in d['detalle_diario']:
+                    dd['fecha'] = str(dd['fecha'])
+                    dd['stock'] = float(dd['stock']) if dd['stock'] else 0
+                    dd['contado'] = float(dd['contado']) if dd['contado'] else 0
+                    dd['dif'] = float(dd['dif']) if dd['dif'] else 0
 
         # Obtener asignaciones existentes para esta semana
         cur.execute("""

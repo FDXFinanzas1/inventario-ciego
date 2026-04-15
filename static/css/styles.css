@@ -5146,6 +5146,64 @@ tr.cruce-solo-cont { background: #F1F5F9; }
 }
 
 /* Producto row */
+/* KPIs semanal */
+.sem-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 0 16px 16px;
+}
+.sem-kpi {
+    background: var(--bg-white);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    text-align: center;
+}
+.sem-kpi-val {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary);
+}
+.sem-kpi-neg .sem-kpi-val { color: var(--accent); }
+.sem-kpi-pos .sem-kpi-val { color: var(--success); }
+.sem-kpi-label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 2px;
+}
+
+/* Desglose diario */
+.sem-desglose-diario {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #F8FAFC;
+    border-top: 1px solid var(--border-light);
+}
+.sem-dia-chip {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #E2E8F0;
+    color: var(--text-dark);
+    font-weight: 500;
+}
+.sem-dia-chip.sem-diff-negativo { background: #FEE2E2; color: #B91C1C; }
+.sem-dia-chip.sem-diff-positivo { background: #DCFCE7; color: #15803D; }
+
+.sem-prod-dias {
+    font-size: 10px;
+    background: var(--primary);
+    color: white;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
 .sem-producto-row {
     margin: 0 16px 12px;
     background: var(--bg-white);

@@ -5646,7 +5646,7 @@ function semanalRenderDiferencias(data) {
 
     if (diferencias.length === 0) {
         container.classList.remove('hidden');
-        listEl.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay diferencias en esta semana</p></div>';
+        listEl.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay diferencias netas en esta semana (todo se compensó)</p></div>';
         document.getElementById('btn-sem-guardar-todo').style.display = 'none';
         return;
     }
@@ -5655,13 +5655,41 @@ function semanalRenderDiferencias(data) {
     const esCerrada = _semanalSemanaActual && _semanalSemanaActual.estado === 'cerrada';
     document.getElementById('btn-sem-guardar-todo').style.display = esCerrada ? 'none' : '';
 
-    let html = '';
+    // KPIs resumen
+    let totalFaltante = 0, totalSobrante = 0, totalValor = 0;
+    diferencias.forEach(p => {
+        const d = parseFloat(p.diferencia) || 0;
+        const c = parseFloat(p.costo_unitario) || 0;
+        if (d < 0) totalFaltante += Math.abs(d) * c;
+        else totalSobrante += d * c;
+        totalValor += Math.abs(d) * c;
+    });
+
+    let html = `
+        <div class="sem-kpis">
+            <div class="sem-kpi"><span class="sem-kpi-val">${diferencias.length}</span><span class="sem-kpi-label">Productos con diferencia neta</span></div>
+            <div class="sem-kpi sem-kpi-neg"><span class="sem-kpi-val">$${totalFaltante.toFixed(2)}</span><span class="sem-kpi-label">Total Faltantes</span></div>
+            <div class="sem-kpi sem-kpi-pos"><span class="sem-kpi-val">$${totalSobrante.toFixed(2)}</span><span class="sem-kpi-label">Total Sobrantes</span></div>
+            <div class="sem-kpi"><span class="sem-kpi-val">$${totalValor.toFixed(2)}</span><span class="sem-kpi-label">Total a Descontar</span></div>
+        </div>
+    `;
+
     diferencias.forEach((prod, idx) => {
         const diff = parseFloat(prod.diferencia) || 0;
         const diffClass = diff < 0 ? 'sem-diff-negativo' : (diff > 0 ? 'sem-diff-positivo' : '');
         const diffLabel = diff < 0 ? 'Faltante' : (diff > 0 ? 'Sobrante' : 'OK');
         const costo = parseFloat(prod.costo_unitario) || 0;
         const valorTotal = Math.abs(diff) * costo;
+        const diasContados = prod.dias_contados || 0;
+        const detalle = prod.detalle_diario || [];
+
+        // Desglose diario
+        const desgloseDiario = detalle.map(dd => {
+            const difDia = parseFloat(dd.dif) || 0;
+            const difClass = difDia < 0 ? 'sem-diff-negativo' : difDia > 0 ? 'sem-diff-positivo' : '';
+            const fechaCorta = dd.fecha ? dd.fecha.split('-').slice(1).reverse().join('/') : '';
+            return `<span class="sem-dia-chip ${difClass}" title="${dd.fecha}: Sistema ${dd.stock} → Conteo ${dd.contado}">${fechaCorta}: ${difDia > 0 ? '+' : ''}${difDia.toFixed(1)}</span>`;
+        }).join('');
 
         // Existing assignments
         const asignacion = prod.asignacion;
@@ -5673,15 +5701,15 @@ function semanalRenderDiferencias(data) {
                     <div class="sem-prod-info">
                         <span class="sem-prod-codigo">${escapeHtml(prod.codigo)}</span>
                         <span class="sem-prod-nombre">${escapeHtml(prod.nombre)}</span>
+                        <span class="sem-prod-dias" title="${diasContados} días contados">${diasContados}d</span>
                     </div>
                     <div class="sem-prod-numeros">
-                        <span class="sem-prod-stock" title="Stock sistema">${parseFloat(prod.stock_sistema || 0).toFixed(2)}</span>
-                        <span class="sem-prod-contado" title="Contado">${parseFloat(prod.contado || 0).toFixed(2)}</span>
-                        <span class="sem-prod-diff ${diffClass}" title="${diffLabel}">${diff > 0 ? '+' : ''}${diff.toFixed(2)}</span>
-                        <span class="sem-prod-costo" title="Costo unit.">$${costo.toFixed(4)}</span>
-                        <span class="sem-prod-valor ${diffClass}" title="Valor">$${valorTotal.toFixed(2)}</span>
+                        <span class="sem-prod-diff ${diffClass}" title="Neto semanal (${diffLabel})">Neto: ${diff > 0 ? '+' : ''}${diff.toFixed(2)}</span>
+                        <span class="sem-prod-costo" title="Costo unit.">×$${costo.toFixed(4)}</span>
+                        <span class="sem-prod-valor ${diffClass}" title="Valor a descontar">= $${valorTotal.toFixed(2)}</span>
                     </div>
                 </div>
+                <div class="sem-desglose-diario">${desgloseDiario}</div>
                 <div class="sem-asig-container" data-idx="${idx}">
                     ${personasAsig.length > 0 ? personasAsig.map((pa, pi) => _semanalPersonaRowHTML(idx, pi, pa.persona, pa.cantidad, costo, esCerrada)).join('') : _semanalPersonaRowHTML(idx, 0, '', '', costo, esCerrada)}
                     ${!esCerrada ? `<button class="btn-secondary btn-sm sem-btn-add-persona" onclick="semanalAddPersonaRow(${idx})"><i class="fas fa-plus"></i> Persona</button>` : ''}
