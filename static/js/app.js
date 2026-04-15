@@ -84,16 +84,14 @@ async function cargarDashboard() {
     try {
         const bodegaParam = bodega ? `&bodega=${bodega}` : '';
         const prodParam = producto ? `&producto=${encodeURIComponent(producto)}` : '';
-        const [resDash, resTend, resMotivos] = await Promise.all([
+        const [resDash, resTend] = await Promise.all([
             fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`),
-            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?dias=30${bodegaParam}`),
-            fetch(`${CONFIG.API_URL}/api/reportes/motivos?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}`)
+            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?dias=30${bodegaParam}`)
         ]);
 
         if (resDash.ok && resTend.ok) {
             const datosDash = await resDash.json();
             const datosTend = await resTend.json();
-            const datosMotivos = resMotivos.ok ? await resMotivos.json() : [];
 
             renderDashboardStats(datosDash.bodegas, datosDash.promedios);
             renderDashboardValorResumen(datosDash.bodegas);
@@ -102,8 +100,14 @@ async function cargarDashboard() {
             renderChartDiferenciasBodega(datosDash.bodegas);
             renderChartFaltantesSobrantes(datosDash.bodegas);
             renderChartTendenciaTemporal(datosTend);
-            renderChartMotivos(datosMotivos);
             renderTopDescuadre(datosDash.top_descuadre);
+
+            // Cargar motivos por separado para no bloquear el resto
+            try {
+                const resMotivos = await fetch(`${CONFIG.API_URL}/api/reportes/motivos?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}`);
+                const datosMotivos = resMotivos.ok ? await resMotivos.json() : [];
+                renderChartMotivos(datosMotivos);
+            } catch(e) { console.log('Error cargando motivos:', e); }
         } else {
             showToast('Error al cargar datos del dashboard', 'error');
         }
