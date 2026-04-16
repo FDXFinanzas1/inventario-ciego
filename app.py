@@ -491,7 +491,7 @@ def consultar_inventario():
         conn = get_db()
         cur = conn.cursor()
 
-        # Asegurar que las columnas observaciones, motivo y corregido existen
+        # Asegurar columnas: observaciones, motivo, corregido (auditoría) y justificado (no descontar)
         cur.execute("""
             ALTER TABLE inventario_diario.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS observaciones TEXT;
@@ -499,6 +499,8 @@ def consultar_inventario():
             ADD COLUMN IF NOT EXISTS motivo TEXT;
             ALTER TABLE inventario_diario.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS corregido BOOLEAN DEFAULT FALSE;
+            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ADD COLUMN IF NOT EXISTS justificado BOOLEAN DEFAULT FALSE;
         """)
         conn.commit()
 
@@ -506,6 +508,7 @@ def consultar_inventario():
             SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2, observaciones,
                    COALESCE(motivo, '') as motivo,
                    COALESCE(corregido, FALSE) as corregido,
+                   COALESCE(justificado, FALSE) as justificado,
                    COALESCE(costo_unitario, 0) as costo_unitario
             FROM inventario_diario.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
@@ -607,6 +610,7 @@ def guardar_observacion():
     observaciones = data.get('observaciones', None)
     motivo = data.get('motivo', None)
     corregido = data.get('corregido', None)
+    justificado = data.get('justificado', None)
 
     conn = None
     try:
@@ -625,6 +629,9 @@ def guardar_observacion():
         if corregido is not None:
             sets.append("corregido = %s")
             params.append(bool(corregido))
+        if justificado is not None:
+            sets.append("justificado = %s")
+            params.append(bool(justificado))
 
         if sets:
             params.append(id_producto)
@@ -895,14 +902,17 @@ def listar_obs_manuales():
                 motivo TEXT,
                 observaciones TEXT,
                 corregido BOOLEAN DEFAULT FALSE,
+                justificado BOOLEAN DEFAULT FALSE,
                 creado_por VARCHAR(100),
                 creado_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        # Asegurar columna justificado (migracion)
+        cur.execute("ALTER TABLE inventario_diario.observaciones_manuales ADD COLUMN IF NOT EXISTS justificado BOOLEAN DEFAULT FALSE")
         conn.commit()
 
         cur.execute("""
-            SELECT id, codigo, nombre, diferencia, motivo, observaciones, corregido, creado_por
+            SELECT id, codigo, nombre, diferencia, motivo, observaciones, corregido, COALESCE(justificado, FALSE) as justificado, creado_por
             FROM inventario_diario.observaciones_manuales
             WHERE fecha = %s AND local = %s
             ORDER BY creado_at
@@ -966,6 +976,9 @@ def actualizar_obs_manual(obs_id):
         if 'corregido' in data:
             sets.append("corregido = %s")
             params.append(bool(data['corregido']))
+        if 'justificado' in data:
+            sets.append("justificado = %s")
+            params.append(bool(data['justificado']))
         if sets:
             params.append(obs_id)
             cur.execute(f"""
@@ -3149,7 +3162,7 @@ def diferencias_semana(semana_id):
 
         # Netear diferencias diarias por producto en la semana
         # Cada día: diferencia = conteo - sistema. Neto = suma de diferencias diarias.
-        # Producto queda "justificado" si CUALQUIER día de la semana tiene corregido=TRUE
+        # Producto queda "justificado" si CUALQUIER día de la semana tiene justificado=TRUE
         cur.execute("""
             WITH diferencias_diarias AS (
                 SELECT
@@ -3158,7 +3171,8 @@ def diferencias_semana(semana_id):
                     COALESCE(cantidad_contada_2, cantidad_contada) as contado,
                     COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as dif_dia,
                     COALESCE(costo_unitario, 0) as costo_unitario,
-                    COALESCE(corregido, FALSE) as corregido
+                    COALESCE(corregido, FALSE) as corregido,
+                    COALESCE(justificado, FALSE) as justificado
                 FROM inventario_diario.inventario_ciego_conteos
                 WHERE local = %s AND fecha BETWEEN %s AND %s
                   AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
@@ -3170,13 +3184,15 @@ def diferencias_semana(semana_id):
                 SUM(dif_dia) as diferencia,
                 AVG(costo_unitario) as costo_unitario,
                 COUNT(*) as dias_contados,
-                BOOL_OR(corregido) as justificado,
+                BOOL_OR(justificado) as justificado,
+                BOOL_OR(corregido) as tiene_correccion,
                 json_agg(json_build_object(
                     'fecha', fecha,
                     'stock', stock_sistema,
                     'contado', contado,
                     'dif', dif_dia,
-                    'corregido', corregido
+                    'corregido', corregido,
+                    'justificado', justificado
                 ) ORDER BY fecha) as detalle_diario
             FROM diferencias_diarias
             GROUP BY codigo, nombre, unidad
