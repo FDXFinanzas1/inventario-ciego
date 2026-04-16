@@ -6457,13 +6457,26 @@ async function semanalEliminarSemana(id, esCerrada) {
                 ? 'Semana cerrada eliminada. Los productos quedan sin asignar.'
                 : 'Semana eliminada';
             showToast(mensaje, 'success');
+
+            // Si era la semana activa, limpiar la UI
             if (_semanalSemanaActual && _semanalSemanaActual.id === id) {
                 _semanalSemanaActual = null;
                 _semGrupos = [];
                 document.getElementById('sem-info').classList.add('hidden');
                 document.getElementById('sem-diferencias').classList.add('hidden');
+                document.getElementById('sem-lista-semanas').innerHTML = '';
             }
-            semanalCargar();
+
+            // Recargar solo las listas (pendientes + lista de semanas de la bodega) SIN crear nueva
+            semanalCargarPendientes();
+            const bodega = document.getElementById('sem-bodega').value;
+            if (bodega) {
+                try {
+                    const resSemanas = await fetch(`${CONFIG.API_URL}/api/semanas?local=${bodega}`);
+                    const semanas = await resSemanas.json();
+                    if (!semanas.error) semanalRenderSemanas(semanas);
+                } catch(e) {}
+            }
         } else {
             const data = await res.json();
             showToast(data.error || 'Error al eliminar', 'error');
