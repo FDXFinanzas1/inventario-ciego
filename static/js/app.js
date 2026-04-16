@@ -1366,31 +1366,11 @@ function renderProductosInventario() {
 
     // Observaciones ahora se cargan independientemente con fecha/bodega
 
-    // Renderizar modulo de asignacion de diferencias (solo etapa 3)
+    // Las asignaciones y secciones se manejan en el módulo Semanal (deshabilitado aquí)
     const asigContainer = document.getElementById('asignaciones-container');
     const seccionesContainer = document.getElementById('secciones-asig-container');
-    if (asigContainer) {
-        if (state.etapaConteo === 3) {
-            const productosConDif = productosAMostrar.filter(prod => {
-                const conteo2 = prod.cantidad_contada_2 !== null && prod.cantidad_contada_2 !== undefined;
-                const cantidadFinal = conteo2 ? prod.cantidad_contada_2 : prod.cantidad_contada;
-                return cantidadFinal - prod.cantidad_sistema !== 0;
-            });
-            if (productosConDif.length > 0) {
-                renderAsignacionesDiferencias(asigContainer, productosConDif);
-                // ---- PROTOTIPO: panel secciones ----
-                if (seccionesContainer) {
-                    renderPanelSecciones(seccionesContainer, productosConDif);
-                }
-            } else {
-                asigContainer.innerHTML = '';
-                if (seccionesContainer) seccionesContainer.innerHTML = '';
-            }
-        } else {
-            asigContainer.innerHTML = '';
-            if (seccionesContainer) seccionesContainer.innerHTML = '';
-        }
-    }
+    if (asigContainer) asigContainer.innerHTML = '';
+    if (seccionesContainer) seccionesContainer.innerHTML = '';
 
     totalSpan.textContent = productosAMostrar.length;
     actualizarContador();
@@ -5657,6 +5637,8 @@ function semanalRenderSemanas(semanas) {
 
     let html = '<h3 class="sem-seccion-titulo"><i class="fas fa-list"></i> Semanas de esta Bodega</h3><div class="sem-cards-grid">';
 
+    const esAdminSem = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+
     semanas.forEach(s => {
         const esCerrada = s.estado === 'cerrada';
         const esActiva = _semanalSemanaActual && _semanalSemanaActual.id === s.id;
@@ -5673,6 +5655,7 @@ function semanalRenderSemanas(semanas) {
                     <span class="sem-badge ${badgeClass}"><i class="fas ${badgeIcon}"></i> ${badgeText}</span>
                     <span class="sem-card-stat"><i class="fas fa-box"></i> ${s.total_productos || 0} productos</span>
                     <span class="sem-card-stat"><i class="fas fa-dollar-sign"></i> ${totalAsig}</span>
+                    ${esAdminSem ? `<button onclick="event.stopPropagation(); semanalEliminarSemana(${s.id}, ${esCerrada})" title="Eliminar semana" style="background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;"><i class="fas fa-trash-alt"></i> Eliminar</button>` : ''}
                 </div>
                 ${esCerrada && s.cerrada_por ? `<div class="sem-card-cerrada-info">Cerrada por ${escapeHtml(s.cerrada_por)}</div>` : ''}
             </div>
@@ -5693,6 +5676,10 @@ async function semanalCargarSemanaById(id) {
         }
         _semanalSemanaActual = dataDif.semana;
         _semanalDiferencias = dataDif.diferencias || [];
+
+        // Reconstruir grupos desde las asignaciones ya guardadas
+        _semReconstruirGruposDesdeAsignaciones();
+
         semanalRenderInfo(_semanalSemanaActual);
         semanalRenderDiferencias(dataDif);
 
@@ -5704,9 +5691,55 @@ async function semanalCargarSemanaById(id) {
     }
 }
 
-// Estado local del módulo semanal
-let _semanalProductosSeleccionados = [];
-let _semanalPersonasSeleccionadas = [];
+// Reconstruye _semGrupos desde las asignaciones ya guardadas en BD
+// Agrupa productos que tienen el mismo conjunto de personas
+function _semReconstruirGruposDesdeAsignaciones() {
+    _semGrupos = [];
+    const esCerrada = _semanalSemanaActual && _semanalSemanaActual.estado === 'cerrada';
+
+    _semanalDiferencias.forEach(prod => {
+        if (prod.justificado) return;
+        if (!prod.asignacion || !prod.asignacion.personas || prod.asignacion.personas.length === 0) return;
+
+        // Personas del producto (nombres ordenados para comparar)
+        const personas = prod.asignacion.personas.map(p => p.persona).sort();
+        const cantidadTotal = prod.asignacion.personas.reduce((s, p) => s + (parseFloat(p.cantidad) || 0), 0);
+
+        // Buscar un grupo existente con las mismas personas
+        const keyPersonas = personas.join('|');
+        let grupo = _semGrupos.find(g => g.personas.slice().sort().join('|') === keyPersonas);
+
+        if (!grupo) {
+            grupo = { productos: [], personas: personas };
+            _semGrupos.push(grupo);
+        }
+
+        grupo.productos.push({ codigo: prod.codigo, cantidad: cantidadTotal });
+    });
+
+    // Agregar grupo vacío al final para nuevas asignaciones (si no está cerrada)
+    if (!esCerrada) {
+        _semGrupos.push({ productos: [], personas: [] });
+    }
+}
+
+// Estado local del módulo semanal - múltiples grupos
+// _semGrupos = [{ productos: [{codigo, cantidad}], personas: [nombre] }, ...]
+let _semGrupos = [];
+let _semanalProductosSeleccionados = []; // deprecated
+let _semanalProductosJustificados = [];  // deprecated
+let _semanalPersonasSeleccionadas = [];  // deprecated
+
+// Calcula cuánto ya está asignado de un producto en TODOS los grupos (excepto gIdx)
+function _semCalcAsignadoOtros(codigo, excluirGIdx) {
+    let total = 0;
+    _semGrupos.forEach((g, i) => {
+        if (i === excluirGIdx) return;
+        const prod = g.productos.find(p => p.codigo === codigo);
+        if (prod) total += parseFloat(prod.cantidad) || 0;
+    });
+    return total;
+}
 
 function semanalRenderDiferencias(data) {
     const container = document.getElementById('sem-diferencias');
@@ -5724,123 +5757,396 @@ function semanalRenderDiferencias(data) {
     const esCerrada = _semanalSemanaActual && _semanalSemanaActual.estado === 'cerrada';
     document.getElementById('btn-sem-guardar-todo').style.display = esCerrada ? 'none' : '';
 
-    // KPIs resumen
-    let totalFaltante = 0, totalSobrante = 0, totalValor = 0;
-    diferencias.forEach(p => {
-        const d = parseFloat(p.diferencia) || 0;
-        const c = parseFloat(p.costo_unitario) || 0;
-        if (d < 0) totalFaltante += Math.abs(d) * c;
-        else totalSobrante += d * c;
-        totalValor += Math.abs(d) * c;
-    });
-
-    // Restaurar selecciones previas
-    const asignacion0 = diferencias[0]?.asignacion;
-    if (asignacion0 && asignacion0.personas && _semanalPersonasSeleccionadas.length === 0) {
-        _semanalPersonasSeleccionadas = asignacion0.personas.map(p => p.persona);
+    // Si no hay grupos aún, crear uno vacío (solo si no está cerrada)
+    if (_semGrupos.length === 0 && !esCerrada) {
+        _semGrupos.push({ productos: [], personas: [] });
+    }
+    // Asegurar que haya SIEMPRE un grupo vacío al final para nuevas asignaciones (no cerrada)
+    if (!esCerrada) {
+        const ultimo = _semGrupos[_semGrupos.length - 1];
+        if (ultimo && (ultimo.productos.length > 0 || ultimo.personas.length > 0)) {
+            _semGrupos.push({ productos: [], personas: [] });
+        }
     }
 
-    // Productos HTML (checkboxes)
-    const productosHtml = diferencias.map((prod, idx) => {
+    // KPIs
+    const productosCobrar = diferencias.filter(p => !p.justificado);
+    const valorACobrar = productosCobrar.reduce((s, p) =>
+        s + Math.abs(parseFloat(p.diferencia) || 0) * (parseFloat(p.costo_unitario) || 0), 0);
+    const valorJustificado = diferencias.filter(p => p.justificado)
+        .reduce((s, p) => s + Math.abs(parseFloat(p.diferencia) || 0) * (parseFloat(p.costo_unitario) || 0), 0);
+
+    // Calcular valor total ya asignado en todos los grupos
+    let valorAsignadoTotal = 0;
+    _semGrupos.forEach(g => {
+        g.productos.forEach(p => {
+            const prodOrig = diferencias.find(d => d.codigo === p.codigo);
+            if (prodOrig && !prodOrig.justificado) {
+                const costo = parseFloat(prodOrig.costo_unitario) || 0;
+                valorAsignadoTotal += (parseFloat(p.cantidad) || 0) * costo;
+            }
+        });
+    });
+    const pendientePorAsignar = Math.max(0, valorACobrar - valorAsignadoTotal);
+    const pendienteClass = pendientePorAsignar > 0.01 ? 'sem-kpi-neg' : 'sem-kpi-pos';
+    const pendienteIcon = pendientePorAsignar > 0.01 ? 'fa-exclamation-circle' : 'fa-check-circle';
+
+    // Render grupos
+    const gruposHtml = _semGrupos.map((g, gIdx) => _semHtmlGrupo(g, gIdx, diferencias, esCerrada)).join('');
+
+    // === Resumen consolidado por persona ===
+    // Suma los montos de cada persona en todos los grupos y lista los productos que le corresponden
+    const resumenPersonas = {}; // { nombre: { monto: 0, detalles: [{producto, cantidad, valor}] } }
+    _semGrupos.forEach(g => {
+        if (g.productos.length === 0 || g.personas.length === 0) return;
+        let totalGrupo = 0;
+        const productosGrupo = [];
+        g.productos.forEach(p => {
+            const prodOrig = diferencias.find(d => d.codigo === p.codigo);
+            if (prodOrig && !prodOrig.justificado) {
+                const costo = parseFloat(prodOrig.costo_unitario) || 0;
+                const cant = parseFloat(p.cantidad) || 0;
+                const valor = cant * costo;
+                totalGrupo += valor;
+                productosGrupo.push({
+                    nombre: prodOrig.nombre,
+                    codigo: prodOrig.codigo,
+                    unidad: prodOrig.unidad || '',
+                    cantidad_total: cant,
+                    valor_total: valor
+                });
+            }
+        });
+        const montoPersona = totalGrupo / g.personas.length;
+        const cantDivisor = g.personas.length;
+        g.personas.forEach(nombre => {
+            if (!resumenPersonas[nombre]) resumenPersonas[nombre] = { monto: 0, detalles: [] };
+            resumenPersonas[nombre].monto += montoPersona;
+            productosGrupo.forEach(p => {
+                resumenPersonas[nombre].detalles.push({
+                    nombre: p.nombre,
+                    codigo: p.codigo,
+                    unidad: p.unidad,
+                    cantidad: p.cantidad_total / cantDivisor,
+                    valor: p.valor_total / cantDivisor
+                });
+            });
+        });
+    });
+
+    const personasOrdenadas = Object.keys(resumenPersonas).sort();
+    let resumenConsolidadoHtml = '';
+    if (personasOrdenadas.length > 0) {
+        const totalConsolidado = personasOrdenadas.reduce((s, n) => s + resumenPersonas[n].monto, 0);
+        resumenConsolidadoHtml = `
+            <div class="sem-resumen-final">
+                <div class="sem-resumen-header">
+                    <h3><i class="fas fa-receipt"></i> Resumen Consolidado por Persona</h3>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span class="sem-resumen-total-chip">Total: $${totalConsolidado.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div class="sem-resumen-acciones">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+                            <input type="checkbox" id="sem-sel-todas" onchange="_semToggleTodasPersonas(this.checked)">
+                            Seleccionar todas
+                        </label>
+                        <span id="sem-contador-seleccionadas" style="font-size:12px;color:var(--text-medium);">0 seleccionadas</span>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn-sem-imprimir-sec" onclick="semanalImprimirActas()">
+                            <i class="fas fa-file-pdf"></i> Imprimir Seleccionadas
+                        </button>
+                        <button class="btn-sem-imprimir" onclick="semanalImprimirActasTodas()">
+                            <i class="fas fa-print"></i> Imprimir Consolidado (Todas)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sem-resumen-cards">
+                    ${personasOrdenadas.map(nombre => {
+                        const r = resumenPersonas[nombre];
+                        // Consolidar productos del mismo código
+                        const prodMap = {};
+                        r.detalles.forEach(d => {
+                            const k = d.codigo;
+                            if (!prodMap[k]) prodMap[k] = { nombre: d.nombre, codigo: d.codigo, unidad: d.unidad, cantidad: 0, valor: 0 };
+                            prodMap[k].cantidad += d.cantidad;
+                            prodMap[k].valor += d.valor;
+                        });
+                        const productos = Object.values(prodMap);
+                        const nombreSafe = nombre.replace(/"/g, '&quot;');
+                        return `
+                        <div class="sem-persona-card">
+                            <div class="sem-persona-card-header">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
+                                    <input type="checkbox" class="sem-persona-check" data-nombre="${nombreSafe}"
+                                           onchange="_semActualizarContador()"
+                                           style="width:16px;height:16px;cursor:pointer;">
+                                    <i class="fas fa-user-circle"></i>
+                                    <strong>${escapeHtml(nombre)}</strong>
+                                </label>
+                                <span class="sem-persona-monto">$${r.monto.toFixed(2)}</span>
+                            </div>
+                            <table class="sem-persona-detalle">
+                                <thead><tr><th>Producto</th><th style="text-align:center;">Cantidad</th><th style="text-align:right;">Monto</th></tr></thead>
+                                <tbody>
+                                    ${productos.map(p => `
+                                        <tr>
+                                            <td>${escapeHtml(p.nombre)}</td>
+                                            <td style="text-align:center;">${p.cantidad.toFixed(2)} ${p.unidad}</td>
+                                            <td style="text-align:right;font-weight:600;">$${p.valor.toFixed(2)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    listEl.innerHTML = `
+        <div class="sem-kpis">
+            <div class="sem-kpi sem-kpi-neg"><span class="sem-kpi-val">$${valorACobrar.toFixed(2)}</span><span class="sem-kpi-label">Total a Cobrar</span></div>
+            <div class="sem-kpi sem-kpi-pos"><span class="sem-kpi-val">$${valorJustificado.toFixed(2)}</span><span class="sem-kpi-label">Justificado (no se cobra)</span></div>
+            <div class="sem-kpi"><span class="sem-kpi-val">$${valorAsignadoTotal.toFixed(2)}</span><span class="sem-kpi-label">Ya asignado</span></div>
+            <div class="sem-kpi ${pendienteClass}"><span class="sem-kpi-val"><i class="fas ${pendienteIcon}" style="font-size:14px;margin-right:4px;"></i>$${pendientePorAsignar.toFixed(2)}</span><span class="sem-kpi-label">Pendiente por asignar</span></div>
+        </div>
+        <div id="sem-grupos-container">${gruposHtml}</div>
+        ${!esCerrada ? `<div style="text-align:center;margin:16px 0;">
+            <button class="btn-secondary" onclick="_semAgregarGrupo()" style="padding:10px 24px;">
+                <i class="fas fa-plus"></i> Agregar Grupo de Asignación
+            </button>
+        </div>` : ''}
+        ${resumenConsolidadoHtml}
+    `;
+
+    // Guardar resumen para generar PDFs
+    _semResumenPersonas = resumenPersonas;
+}
+
+let _semResumenPersonas = {};
+
+function _semHtmlGrupo(grupo, gIdx, diferencias, esCerrada) {
+    // Calcular total del grupo
+    let totalGrupo = 0;
+    grupo.productos.forEach(p => {
+        const prodOrig = diferencias.find(d => d.codigo === p.codigo);
+        if (prodOrig && !prodOrig.justificado) {
+            totalGrupo += (parseFloat(p.cantidad) || 0) * (parseFloat(prodOrig.costo_unitario) || 0);
+        }
+    });
+    const montoPorPersona = grupo.personas.length > 0 ? totalGrupo / grupo.personas.length : 0;
+
+    // Productos HTML (checkbox + cantidad)
+    const productosHtml = diferencias.map(prod => {
+        if (prod.justificado) return ''; // no mostrar justificados
         const diff = parseFloat(prod.diferencia) || 0;
+        const difAbs = Math.abs(diff);
         const costo = parseFloat(prod.costo_unitario) || 0;
-        const valorTotal = Math.abs(diff) * costo;
+        const unidad = prod.unidad || '';
         const difClass = diff < 0 ? 'negativa' : 'positiva';
         const difLabel = diff < 0 ? '▼' : '▲';
-        const unidad = prod.unidad || '';
-        const detalle = prod.detalle_diario || [];
-        const seleccionado = _semanalProductosSeleccionados.includes(prod.codigo) ||
-            (prod.asignacion && prod.asignacion.personas && prod.asignacion.personas.length > 0);
 
-        const desglose = detalle.map(dd => {
-            const d = parseFloat(dd.dif) || 0;
-            const cls = d < 0 ? 'sem-diff-negativo' : d > 0 ? 'sem-diff-positivo' : '';
-            const f = dd.fecha ? dd.fecha.split('-').slice(1).reverse().join('/') : '';
-            return `<span class="sem-dia-chip ${cls}">${f}:${d > 0?'+':''}${d.toFixed(1)}</span>`;
-        }).join(' ');
+        const prodEnGrupo = grupo.productos.find(p => p.codigo === prod.codigo);
+        const seleccionado = !!prodEnGrupo;
+        const asignadoOtros = _semCalcAsignadoOtros(prod.codigo, gIdx);
+        const disponible = Math.max(0, difAbs - asignadoOtros);
+        const cantAsig = seleccionado ? (parseFloat(prodEnGrupo.cantidad) || disponible) : disponible;
+        const valorAsig = cantAsig * costo;
+
+        // No mostrar si no hay nada disponible y no está seleccionado
+        if (disponible <= 0.001 && !seleccionado) return '';
 
         return `
-        <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-codigo="${escapeHtml(prod.codigo)}">
+        <label class="sec-prod-item ${seleccionado ? 'selected' : ''}" data-gidx="${gIdx}" data-codigo="${escapeHtml(prod.codigo)}">
             <input type="checkbox" ${seleccionado ? 'checked' : ''} ${esCerrada ? 'disabled' : ''}
-                   onchange="_semToggleProd(this, '${escapeHtml(prod.codigo)}')">
+                   onchange="_semToggleProdEnGrupo(${gIdx}, '${escapeHtml(prod.codigo)}', this.checked)">
             <div class="sec-prod-info">
                 <span class="sec-prod-nombre">${escapeHtml(prod.nombre)}</span>
-                <span class="sec-prod-dif ${difClass}">${difLabel} neto ${Math.abs(diff).toFixed(2)} ${unidad}</span>
-                <div class="sem-desglose-diario" style="margin-top:2px;">${desglose}</div>
+                <span class="sec-prod-dif ${difClass}">${difLabel} disp. ${disponible.toFixed(2)} de ${difAbs.toFixed(2)} ${unidad}</span>
             </div>
-            <span class="sec-prod-valor">$${valorTotal.toFixed(2)}</span>
+            ${seleccionado ? `
+                <div class="sec-prod-qty">
+                    <input type="number" class="sec-qty-input" value="${cantAsig.toFixed(2)}"
+                           min="0" max="${disponible.toFixed(2)}" step="0.01"
+                           ${esCerrada ? 'disabled' : ''}
+                           onchange="_semActualizarCantidad(${gIdx}, '${escapeHtml(prod.codigo)}', this.value, ${disponible.toFixed(4)})"
+                           oninput="_semActualizarCantidad(${gIdx}, '${escapeHtml(prod.codigo)}', this.value, ${disponible.toFixed(4)})">
+                    <span class="sec-qty-unidad">${unidad}</span>
+                </div>` : ''}
+            <span class="sec-prod-valor" style="font-weight:${seleccionado ? '700' : '400'};color:${seleccionado ? 'var(--accent)' : '#94A3B8'};">$${valorAsig.toFixed(2)}</span>
         </label>`;
     }).join('');
 
     // Personas HTML
-    const personasHtml = _semanalPersonasSeleccionadas.length === 0
+    const personasHtml = grupo.personas.length === 0
         ? '<div class="sec-empty-inner"><i class="fas fa-user-plus"></i> Agrega personas</div>'
-        : _semanalPersonasSeleccionadas.map((nombre, i) => `
+        : grupo.personas.map((nombre, pIdx) => `
             <div class="sec-persona-chip">
                 <i class="fas fa-user"></i>
                 <span>${escapeHtml(nombre)}</span>
-                ${!esCerrada ? `<button class="baja-item-del" onclick="_semQuitarPersona(${i})" title="Quitar"><i class="fas fa-times"></i></button>` : ''}
+                ${!esCerrada ? `<button class="baja-item-del" onclick="_semQuitarPersonaGrupo(${gIdx}, ${pIdx})" title="Quitar"><i class="fas fa-times"></i></button>` : ''}
             </div>`).join('');
 
-    // Info división
-    const selCount = diferencias.filter(p =>
-        _semanalProductosSeleccionados.includes(p.codigo) ||
-        (p.asignacion && p.asignacion.personas && p.asignacion.personas.length > 0)
-    ).length;
-    const valorSeleccionado = diferencias.filter(p =>
-        _semanalProductosSeleccionados.includes(p.codigo) ||
-        (p.asignacion && p.asignacion.personas && p.asignacion.personas.length > 0)
-    ).reduce((s, p) => s + Math.abs(parseFloat(p.diferencia) || 0) * (parseFloat(p.costo_unitario) || 0), 0);
-
-    const divisionInfo = _semanalPersonasSeleccionadas.length > 0 && selCount > 0 ? `
+    const resumen = grupo.personas.length > 0 && totalGrupo > 0 ? `
         <div class="sec-division-info">
             <i class="fas fa-divide"></i>
-            ${selCount} producto(s) ÷ ${_semanalPersonasSeleccionadas.length} persona(s)
-            · <strong>$${(valorSeleccionado / _semanalPersonasSeleccionadas.length).toFixed(2)}</strong> c/u
+            <strong>$${totalGrupo.toFixed(2)}</strong> ÷ ${grupo.personas.length} persona(s) = <strong>$${montoPorPersona.toFixed(2)}</strong> c/u
         </div>` : '';
 
-    listEl.innerHTML = `
-        <div class="sem-kpis">
-            <div class="sem-kpi"><span class="sem-kpi-val">${diferencias.length}</span><span class="sem-kpi-label">Productos con diferencia neta</span></div>
-            <div class="sem-kpi sem-kpi-neg"><span class="sem-kpi-val">$${totalFaltante.toFixed(2)}</span><span class="sem-kpi-label">Total Faltantes</span></div>
-            <div class="sem-kpi sem-kpi-pos"><span class="sem-kpi-val">$${totalSobrante.toFixed(2)}</span><span class="sem-kpi-label">Total Sobrantes</span></div>
-            <div class="sem-kpi"><span class="sem-kpi-val">$${totalValor.toFixed(2)}</span><span class="sem-kpi-label">Total a Descontar</span></div>
+    return `
+    <div class="sec-card" data-gidx="${gIdx}" style="margin-bottom:14px;">
+        <div class="sec-card-header">
+            <span class="sec-nombre-input" style="pointer-events:none;"><i class="fas fa-layer-group"></i> Grupo ${gIdx + 1}</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span class="sec-total-chip" style="background:var(--accent);color:white;">$${totalGrupo.toFixed(2)}</span>
+                ${!esCerrada && _semGrupos.length > 1 ? `<button class="btn-icon" onclick="_semEliminarGrupo(${gIdx})" title="Eliminar grupo" style="background:transparent;border:none;color:var(--accent);cursor:pointer;"><i class="fas fa-trash-alt"></i></button>` : ''}
+            </div>
         </div>
+        <div class="sec-two-col">
+            <div class="sec-col">
+                <div class="sec-col-header">
+                    <span><i class="fas fa-box-open"></i> Productos</span>
+                </div>
+                <div class="sec-productos-lista" style="max-height:300px;overflow-y:auto;">${productosHtml || '<div class="sec-empty-inner">No quedan productos disponibles</div>'}</div>
+            </div>
+            <div class="sec-col">
+                <div class="sec-col-header">
+                    <span><i class="fas fa-users"></i> Personas (se divide entre ellas)</span>
+                    ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semAbrirPersonaGrupo(${gIdx})"><i class="fas fa-plus"></i> Agregar</button>` : ''}
+                </div>
+                <div class="sec-personas-lista chips">${personasHtml}</div>
+                ${resumen}
+            </div>
+        </div>
+    </div>`;
+}
 
-        <div class="sec-card">
-            <div class="sec-card-header">
-                <span class="sec-nombre-input" style="pointer-events:none;">Asignación Semanal de Descuentos</span>
-            </div>
-            <div class="sec-two-col">
-                <div class="sec-col">
-                    <div class="sec-col-header">
-                        <span><i class="fas fa-box-open"></i> Productos con descuadre</span>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semSeleccionarTodosProds()"><i class="fas fa-check-double"></i> Todos</button>` : ''}
-                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semDeseleccionarTodosProds()" style="opacity:0.7;"><i class="fas fa-times"></i> Ninguno</button>` : ''}
-                            <span class="sec-total-chip">$${totalValor.toFixed(2)}</span>
-                        </div>
-                    </div>
-                    <div class="sec-productos-lista">${productosHtml}</div>
-                </div>
-                <div class="sec-col">
-                    <div class="sec-col-header">
-                        <span><i class="fas fa-users"></i> Personas responsables</span>
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semAgregarTodasPersonas()"><i class="fas fa-users"></i> Todos</button>` : ''}
-                            ${!esCerrada ? `<button class="btn-secondary btn-xs" onclick="_semAbrirPersona()"><i class="fas fa-plus"></i> Agregar</button>` : ''}
-                        </div>
-                    </div>
-                    <div class="sec-personas-lista chips">${personasHtml}</div>
-                    ${divisionInfo}
-                </div>
-            </div>
+function _semAgregarGrupo() {
+    _semGrupos.push({ productos: [], personas: [] });
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semEliminarGrupo(gIdx) {
+    if (_semGrupos.length <= 1) { showToast('Debe haber al menos un grupo', 'error'); return; }
+    if (!confirm('¿Eliminar este grupo?')) return;
+    _semGrupos.splice(gIdx, 1);
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semToggleProdEnGrupo(gIdx, codigo, checked) {
+    const grupo = _semGrupos[gIdx];
+    if (!grupo) return;
+    if (checked) {
+        if (!grupo.productos.find(p => p.codigo === codigo)) {
+            const prodOrig = _semanalDiferencias.find(d => d.codigo === codigo);
+            const difAbs = Math.abs(parseFloat(prodOrig.diferencia) || 0);
+            const asignadoOtros = _semCalcAsignadoOtros(codigo, gIdx);
+            const disponible = Math.max(0, difAbs - asignadoOtros);
+            grupo.productos.push({ codigo, cantidad: disponible });
+        }
+    } else {
+        grupo.productos = grupo.productos.filter(p => p.codigo !== codigo);
+    }
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semActualizarCantidad(gIdx, codigo, valor, maximo) {
+    const grupo = _semGrupos[gIdx];
+    if (!grupo) return;
+    let cant = parseFloat(valor) || 0;
+    if (cant > maximo) cant = maximo;
+    if (cant < 0) cant = 0;
+    const prod = grupo.productos.find(p => p.codigo === codigo);
+    if (prod) prod.cantidad = cant;
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semAbrirPersonaGrupo(gIdx) {
+    const personas = state.personas || [];
+    if (personas.length === 0) { showToast('No hay personas cargadas', 'error'); return; }
+    const grupo = _semGrupos[gIdx];
+    const opciones = personas.map(p => typeof p === 'string' ? p : p.nombre)
+        .filter(n => !grupo.personas.includes(n));
+    if (opciones.length === 0) { showToast('Todas las personas ya están en este grupo', 'info'); return; }
+
+    let existing = document.getElementById('sem-persona-dropdown');
+    if (existing) { existing.remove(); return; }
+
+    const card = document.querySelector(`.sec-card[data-gidx="${gIdx}"]`);
+    const btn = card?.querySelector('.sec-col:last-child .btn-secondary');
+    if (!btn) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.id = 'sem-persona-dropdown';
+    wrapper.style.cssText = 'position:absolute;right:0;top:100%;z-index:50;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.1);min-width:260px;margin-top:4px;';
+    wrapper.innerHTML = `
+        <div style="padding:8px;border-bottom:1px solid var(--border-light);">
+            <input type="text" id="sem-persona-buscar" placeholder="Buscar persona..."
+                   style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;outline:none;" autofocus>
         </div>
+        <div id="sem-persona-resultados" style="max-height:220px;overflow-y:auto;"></div>
     `;
+    btn.parentElement.style.position = 'relative';
+    btn.parentElement.appendChild(wrapper);
+
+    const inputBuscar = document.getElementById('sem-persona-buscar');
+    const resultados = document.getElementById('sem-persona-resultados');
+
+    const renderLista = (filtro = '') => {
+        const f = filtro.toLowerCase().trim();
+        const filtradas = f ? opciones.filter(n => n.toLowerCase().includes(f)) : opciones;
+        if (filtradas.length === 0) {
+            resultados.innerHTML = '<div style="padding:12px;text-align:center;color:#94A3B8;font-size:12px;">Sin resultados</div>';
+            return;
+        }
+        resultados.innerHTML = filtradas.slice(0, 50).map(n => `
+            <div class="obs-agregar-item" onclick="_semAgregarPersonaAGrupo(${gIdx}, '${n.replace(/'/g, "\\'")}')">
+                <i class="fas fa-user" style="color:var(--primary);"></i>
+                <span>${n}</span>
+            </div>
+        `).join('');
+    };
+
+    renderLista();
+    inputBuscar.focus();
+    inputBuscar.addEventListener('input', (e) => renderLista(e.target.value));
+
+    setTimeout(() => {
+        document.addEventListener('click', function _cerrar(e) {
+            if (!wrapper.contains(e.target) && e.target !== btn) {
+                wrapper.remove();
+                document.removeEventListener('click', _cerrar);
+            }
+        });
+    }, 10);
+}
+
+function _semAgregarPersonaAGrupo(gIdx, nombre) {
+    const grupo = _semGrupos[gIdx];
+    if (!grupo) return;
+    if (!grupo.personas.includes(nombre)) grupo.personas.push(nombre);
+    const dropdown = document.getElementById('sem-persona-dropdown');
+    if (dropdown) dropdown.remove();
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semQuitarPersonaGrupo(gIdx, pIdx) {
+    const grupo = _semGrupos[gIdx];
+    if (!grupo) return;
+    grupo.personas.splice(pIdx, 1);
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
 }
 
 function _semSeleccionarTodosProds() {
-    _semanalProductosSeleccionados = _semanalDiferencias.map(p => p.codigo);
+    _semanalProductosSeleccionados = _semanalDiferencias
+        .filter(p => !_semanalProductosJustificados.includes(p.codigo))
+        .map(p => p.codigo);
     semanalRenderDiferencias({ diferencias: _semanalDiferencias });
 }
 
@@ -5849,10 +6155,261 @@ function _semDeseleccionarTodosProds() {
     semanalRenderDiferencias({ diferencias: _semanalDiferencias });
 }
 
+function _semToggleJustificar(codigo) {
+    if (_semanalProductosJustificados.includes(codigo)) {
+        _semanalProductosJustificados = _semanalProductosJustificados.filter(c => c !== codigo);
+    } else {
+        _semanalProductosJustificados.push(codigo);
+        // Si estaba seleccionado para cobrar, quitarlo
+        _semanalProductosSeleccionados = _semanalProductosSeleccionados.filter(c => c !== codigo);
+    }
+    semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
 function _semAgregarTodasPersonas() {
     const personas = state.personas || [];
     _semanalPersonasSeleccionadas = personas.map(p => typeof p === 'string' ? p : p.nombre);
     semanalRenderDiferencias({ diferencias: _semanalDiferencias });
+}
+
+function _semToggleTodasPersonas(checked) {
+    document.querySelectorAll('.sem-persona-check').forEach(c => c.checked = checked);
+    _semActualizarContador();
+}
+
+function _semActualizarContador() {
+    const seleccionadas = document.querySelectorAll('.sem-persona-check:checked').length;
+    const total = document.querySelectorAll('.sem-persona-check').length;
+    const cont = document.getElementById('sem-contador-seleccionadas');
+    if (cont) cont.textContent = `${seleccionadas} de ${total} seleccionadas`;
+    // Checkbox de "todas" se marca si todas están
+    const todasCheck = document.getElementById('sem-sel-todas');
+    if (todasCheck) todasCheck.checked = seleccionadas === total && total > 0;
+}
+
+function semanalImprimirActas() {
+    const seleccionadas = Array.from(document.querySelectorAll('.sem-persona-check:checked'))
+        .map(c => c.dataset.nombre);
+    if (seleccionadas.length === 0) {
+        showToast('Selecciona al menos una persona', 'error');
+        return;
+    }
+    _semGenerarPDFActas(seleccionadas);
+}
+
+function semanalImprimirActasTodas() {
+    const todas = Object.keys(_semResumenPersonas || {}).sort();
+    if (todas.length === 0) {
+        showToast('No hay personas asignadas', 'error');
+        return;
+    }
+    _semGenerarPDFActas(todas);
+}
+
+async function _semGenerarPDFActas(nombres) {
+    if (!_semanalSemanaActual) { showToast('No hay semana cargada', 'error'); return; }
+
+    // Traer cédulas desde el backend
+    let cedulasMap = {};
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/personas-cedulas`);
+        if (res.ok) cedulasMap = await res.json();
+    } catch(e) { console.log('No se pudieron cargar cédulas:', e); }
+
+    const bodegaNombre = _semanalBodegaNombre(_semanalSemanaActual.local);
+    const fechaIni = _semanalFormatFechaLarga(_semanalSemanaActual.fecha_inicio);
+    const fechaFin = _semanalFormatFechaLarga(_semanalSemanaActual.fecha_fin);
+    const hoy = new Date().toLocaleDateString('es-EC', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    // Generar HTML de cada acta en hoja separada
+    const actasHtml = nombres.map(nombre => {
+        const r = _semResumenPersonas[nombre];
+        if (!r) return '';
+        const cedula = cedulasMap[nombre] || '________________';
+
+        // Consolidar productos
+        const prodMap = {};
+        r.detalles.forEach(d => {
+            const k = d.codigo;
+            if (!prodMap[k]) prodMap[k] = { nombre: d.nombre, unidad: d.unidad, cantidad: 0, valor: 0 };
+            prodMap[k].cantidad += d.cantidad;
+            prodMap[k].valor += d.valor;
+        });
+        const productos = Object.values(prodMap);
+
+        return `
+            <div class="acta-page">
+                <div class="acta-title">
+                    <h1>Acta de Autorización de Descuentos</h1>
+                </div>
+
+                <div class="acta-dirigido">
+                    <p><strong>SEÑORES</strong><br>
+                    <strong>FOODIX S.A.S.</strong></p>
+                </div>
+
+                <div class="acta-fecha-lugar">
+                    <p style="text-align:right;">${hoy}</p>
+                </div>
+
+                <div class="acta-declaracion">
+                    <p>Yo, <strong>${nombre}</strong>, portador/a de la cédula de identidad N° <strong>${cedula}</strong>,
+                    <strong>autorizo de manera expresa, voluntaria e irrevocable</strong> para que, al momento de mi liquidación o en mi próximo rol de pagos,
+                    se efectúen los descuentos correspondientes de los siguientes valores y conceptos,
+                    los cuales reconozco y acepto en su totalidad:</p>
+                </div>
+
+                <div class="acta-contexto">
+                    <p><strong>Período:</strong> Semana del ${fechaIni} al ${fechaFin} · <strong>Local:</strong> ${bodegaNombre}</p>
+                </div>
+
+                <table class="acta-tabla">
+                    <thead>
+                        <tr>
+                            <th>Concepto de descuento</th>
+                            <th style="text-align:center;">Cantidad</th>
+                            <th style="text-align:right;">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${productos.map(p => `
+                            <tr>
+                                <td>Diferencia de inventario — ${p.nombre}</td>
+                                <td style="text-align:center;">${p.cantidad.toFixed(2)} ${p.unidad || ''}</td>
+                                <td style="text-align:right;">$${p.valor.toFixed(2)}</td>
+                            </tr>
+                        `).join('')}
+                        <tr class="acta-total">
+                            <td colspan="2" style="text-align:right;"><strong>TOTAL A DESCONTAR:</strong></td>
+                            <td style="text-align:right;"><strong>$${r.monto.toFixed(2)}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="acta-acuerdo">
+                    <p>Asimismo, <strong>reconozco y acepto que todos los valores anteriormente mencionados me sean descontados
+                    en mi liquidación de haberes o en mi próximo rol de pagos</strong>.</p>
+                </div>
+
+                <div class="acta-atentamente">
+                    <p>Atentamente,</p>
+                </div>
+
+                <div class="acta-firma-empleado">
+                    <div class="acta-linea-firma"></div>
+                    <p>(Firma del empleado)</p>
+                    <p><strong>${nombre}</strong></p>
+                    <p>C.I.: ${cedula}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Abrir ventana de impresión
+    const win = window.open('', '_blank', 'width=900,height=700');
+    win.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Actas de Aceptación - ${fechaIni} al ${fechaFin}</title>
+            <style>
+                * { box-sizing: border-box; }
+                body { font-family: 'Calibri', 'Arial', 'Helvetica', sans-serif; margin: 0; padding: 0; color: #000; }
+                .acta-page { page-break-after: always; padding: 50px 70px; min-height: 100vh; }
+                .acta-page:last-child { page-break-after: auto; }
+
+                .acta-title { text-align: center; margin-bottom: 30px; }
+                .acta-title h1 { margin: 0; color: #000; font-size: 18px; font-weight: 700; }
+
+                .acta-dirigido { margin-bottom: 20px; font-size: 13px; }
+                .acta-dirigido p { margin: 0; line-height: 1.5; }
+
+                .acta-fecha-lugar { margin-bottom: 20px; font-size: 12px; color: #555; }
+                .acta-fecha-lugar p { margin: 0; }
+
+                .acta-declaracion { font-size: 13px; line-height: 1.7; text-align: justify; margin-bottom: 14px; }
+                .acta-declaracion p { margin: 0; }
+
+                .acta-contexto { font-size: 12px; color: #64748B; margin-bottom: 14px; padding: 8px 12px; background: #F8FAFC; border-left: 3px solid #123450; }
+                .acta-contexto p { margin: 0; }
+
+                .acta-tabla { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 12px; }
+                .acta-tabla th { background: #1E3A5F; color: white; padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600; border: 1px solid #1E3A5F; }
+                .acta-tabla td { padding: 8px 10px; border: 1px solid #CBD5E1; }
+                .acta-total { background: #F1F5F9; }
+                .acta-total td { border-top: 2px solid #1E3A5F; font-size: 13px; }
+
+                .acta-acuerdo { font-size: 13px; line-height: 1.7; text-align: justify; margin: 18px 0; }
+                .acta-acuerdo p { margin: 0; }
+
+                .acta-atentamente { margin-top: 40px; font-size: 13px; }
+                .acta-atentamente p { margin: 0; }
+
+                .acta-firma-empleado { margin-top: 70px; text-align: left; font-size: 12px; max-width: 350px; }
+                .acta-linea-firma { border-top: 1px solid #000; margin-bottom: 4px; width: 100%; }
+                .acta-firma-empleado p { margin: 2px 0; }
+
+                @media print {
+                    .acta-page { page-break-after: always; }
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+            </style>
+        </head>
+        <body>
+            ${actasHtml}
+            <script>
+                window.onload = function() { setTimeout(function() { window.print(); }, 300); };
+            </script>
+        </body>
+        </html>
+    `);
+    win.document.close();
+}
+
+function semanalContinuarSemana(id, local, fechaInicio) {
+    // Cambiar bodega y fecha en los selectores
+    const selBodega = document.getElementById('sem-bodega');
+    const inputFecha = document.getElementById('sem-fecha-lunes');
+    if (selBodega) selBodega.value = local;
+    if (inputFecha) {
+        inputFecha.value = fechaInicio;
+        semanalMostrarRango();
+    }
+    // Cargar la semana
+    semanalCargarSemanaById(id);
+    // Scroll suave hasta las diferencias
+    setTimeout(() => {
+        const el = document.getElementById('sem-diferencias');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
+}
+
+async function semanalEliminarSemana(id, esCerrada) {
+    const msg = esCerrada
+        ? '⚠️ Esta semana está CERRADA. Al eliminarla, los productos asignados quedarán sin responsables y deberán ser reasignados.\n\n¿Confirmas eliminar esta semana cerrada y todas sus asignaciones?'
+        : '¿Eliminar esta semana y todas sus asignaciones?';
+    if (!confirm(msg)) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/semanas/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            const data = await res.json();
+            const mensaje = data.estado_previo === 'cerrada'
+                ? 'Semana cerrada eliminada. Los productos quedan sin asignar.'
+                : 'Semana eliminada';
+            showToast(mensaje, 'success');
+            if (_semanalSemanaActual && _semanalSemanaActual.id === id) {
+                _semanalSemanaActual = null;
+                _semGrupos = [];
+                document.getElementById('sem-info').classList.add('hidden');
+                document.getElementById('sem-diferencias').classList.add('hidden');
+            }
+            semanalCargar();
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al eliminar', 'error');
+        }
+    } catch(e) { showToast('Error de conexión', 'error'); }
 }
 
 function _semToggleProd(checkbox, codigo) {
@@ -6008,37 +6565,49 @@ async function semanalGuardarTodo() {
         return;
     }
 
-    // Obtener productos seleccionados
-    const productosSeleccionados = _semanalDiferencias.filter(p =>
-        _semanalProductosSeleccionados.includes(p.codigo) ||
-        (p.asignacion && p.asignacion.personas && p.asignacion.personas.length > 0)
-    );
-
-    if (productosSeleccionados.length === 0) {
-        showToast('Selecciona al menos un producto', 'error');
-        return;
-    }
-    if (_semanalPersonasSeleccionadas.length === 0) {
-        showToast('Agrega al menos una persona responsable', 'error');
+    // Validar que hay grupos con contenido
+    const gruposValidos = (_semGrupos || []).filter(g => g.productos.length > 0 && g.personas.length > 0);
+    if (gruposValidos.length === 0) {
+        showToast('Agrega productos y personas en al menos un grupo', 'error');
         return;
     }
 
-    // Dividir equitativamente entre personas
-    const asignaciones = productosSeleccionados.map(prod => {
-        const difAbs = Math.abs(parseFloat(prod.diferencia) || 0);
-        const cantPorPersona = difAbs / _semanalPersonasSeleccionadas.length;
-        return {
-            codigo: prod.codigo,
-            nombre: prod.nombre,
-            unidad: prod.unidad || '',
-            diferencia_semanal: parseFloat(prod.diferencia) || 0,
-            costo_unitario: parseFloat(prod.costo_unitario) || 0,
-            personas: _semanalPersonasSeleccionadas.map(nombre => ({
-                persona: nombre,
-                cantidad: parseFloat(cantPorPersona.toFixed(4))
-            }))
-        };
+    // Consolidar: por cada producto (código) sumar todas las personas de los grupos donde aparece
+    // Estructura: { codigo: { codigo, nombre, unidad, diferencia_semanal, costo_unitario, personas: [{persona, cantidad}] } }
+    const consolidado = {};
+    gruposValidos.forEach(g => {
+        g.productos.forEach(p => {
+            const prodOrig = _semanalDiferencias.find(d => d.codigo === p.codigo);
+            if (!prodOrig || prodOrig.justificado) return;
+            if (!consolidado[p.codigo]) {
+                consolidado[p.codigo] = {
+                    codigo: p.codigo,
+                    nombre: prodOrig.nombre,
+                    unidad: prodOrig.unidad || '',
+                    diferencia_semanal: parseFloat(prodOrig.diferencia) || 0,
+                    costo_unitario: parseFloat(prodOrig.costo_unitario) || 0,
+                    personas: []
+                };
+            }
+            // Dividir la cantidad entre las personas del grupo
+            const cantPorPersona = (parseFloat(p.cantidad) || 0) / g.personas.length;
+            g.personas.forEach(nombre => {
+                // Si la persona ya existe, sumar; si no, agregar
+                const existe = consolidado[p.codigo].personas.find(x => x.persona === nombre);
+                if (existe) {
+                    existe.cantidad = parseFloat((existe.cantidad + cantPorPersona).toFixed(4));
+                } else {
+                    consolidado[p.codigo].personas.push({ persona: nombre, cantidad: parseFloat(cantPorPersona.toFixed(4)) });
+                }
+            });
+        });
     });
+
+    const asignaciones = Object.values(consolidado);
+    if (asignaciones.length === 0) {
+        showToast('No hay asignaciones válidas para guardar', 'error');
+        return;
+    }
 
     const btn = document.getElementById('btn-sem-guardar-todo');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...'; }
@@ -6054,9 +6623,7 @@ async function semanalGuardarTodo() {
             showToast(data.error, 'error');
             return;
         }
-        showToast('Asignaciones guardadas correctamente', 'success');
-        _semanalProductosSeleccionados = [];
-        _semanalPersonasSeleccionadas = [];
+        showToast(`Guardado: ${asignaciones.length} producto(s) asignado(s)`, 'success');
         semanalCargarSemanaById(_semanalSemanaActual.id);
     } catch (error) {
         console.error('Error guardando asignaciones:', error);
@@ -6069,6 +6636,35 @@ async function semanalGuardarTodo() {
 async function semanalCerrar() {
     if (!_puede('semanal', 'editar')) { showToast('No tienes permiso para cerrar semanas', 'error'); return; }
     if (!_semanalSemanaActual) return;
+
+    // Validar que todo esté asignado antes de cerrar
+    const productosCobrar = (_semanalDiferencias || []).filter(p => !p.justificado);
+    const valorACobrar = productosCobrar.reduce((s, p) =>
+        s + Math.abs(parseFloat(p.diferencia) || 0) * (parseFloat(p.costo_unitario) || 0), 0);
+
+    let valorAsignado = 0;
+    (_semGrupos || []).forEach(g => {
+        g.productos.forEach(p => {
+            const prodOrig = _semanalDiferencias.find(d => d.codigo === p.codigo);
+            if (prodOrig && !prodOrig.justificado) {
+                valorAsignado += (parseFloat(p.cantidad) || 0) * (parseFloat(prodOrig.costo_unitario) || 0);
+            }
+        });
+    });
+
+    const pendiente = valorACobrar - valorAsignado;
+    if (Math.abs(pendiente) > 0.01) {
+        showToast(`No puedes cerrar la semana: quedan $${pendiente.toFixed(2)} por asignar`, 'error');
+        return;
+    }
+
+    // Validar que cada grupo tenga al menos una persona
+    const gruposSinPersonas = (_semGrupos || []).filter(g => g.productos.length > 0 && g.personas.length === 0);
+    if (gruposSinPersonas.length > 0) {
+        showToast(`Hay ${gruposSinPersonas.length} grupo(s) con productos pero sin personas asignadas`, 'error');
+        return;
+    }
+
     if (!confirm(`Cerrar la semana del ${_semanalFormatFechaLarga(_semanalSemanaActual.fecha_inicio)} al ${_semanalFormatFechaLarga(_semanalSemanaActual.fecha_fin)}?\n\nUna vez cerrada no se podran editar las asignaciones.`)) {
         return;
     }
@@ -6123,13 +6719,26 @@ async function semanalCargarPendientes() {
             return;
         }
         alertaEl.classList.remove('hidden');
-        let html = '<div class="sem-alerta-header"><i class="fas fa-exclamation-triangle"></i> Semanas Pendientes de Cerrar</div><ul>';
+        const esAdminPend = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+        let html = '<div class="sem-alerta-header-v2"><i class="fas fa-clock"></i> Semanas sin cerrar</div><div class="sem-pendientes-lista">';
         data.forEach(s => {
             const ini = _semanalFormatFecha(s.fecha_inicio);
             const fin = _semanalFormatFecha(s.fecha_fin);
-            html += `<li><strong>${_semanalBodegaNombre(s.local)}</strong> &mdash; Semana del ${ini} al ${fin} &mdash; <span class="sem-alerta-sin-cerrar">SIN CERRAR</span></li>`;
+            html += `<div class="sem-pendiente-item">
+                <div class="sem-pendiente-info">
+                    <span class="sem-pendiente-bodega"><i class="fas fa-warehouse"></i> ${_semanalBodegaNombre(s.local)}</span>
+                    <span class="sem-pendiente-fechas">Semana ${ini} → ${fin}</span>
+                    <span class="sem-pendiente-badge">Sin cerrar</span>
+                </div>
+                <div class="sem-pendiente-acciones">
+                    <button class="btn-sem-continuar" onclick="semanalContinuarSemana(${s.id}, '${s.local}', '${s.fecha_inicio}')">
+                        <i class="fas fa-edit"></i> Continuar asignación
+                    </button>
+                    ${esAdminPend ? `<button class="btn-sem-eliminar" onclick="semanalEliminarSemana(${s.id})" title="Eliminar semana"><i class="fas fa-trash-alt"></i></button>` : ''}
+                </div>
+            </div>`;
         });
-        html += '</ul>';
+        html += '</div>';
         alertaEl.innerHTML = html;
     } catch (error) {
         console.error('Error cargando pendientes:', error);

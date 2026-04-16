@@ -2194,6 +2194,60 @@ def actualizar_costos():
         return jsonify({'error': str(e)}), 500
 
 
+_cedulas_cache = {'datos': {}, 'timestamp': 0}
+
+@app.route('/api/personas-cedulas-debug', methods=['GET'])
+def debug_personas_airtable():
+    """Debug: trae TODOS los campos de los primeros 3 registros"""
+    import urllib.request, json as json_lib
+    try:
+        url = f'https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?pageSize=3'
+        req = urllib.request.Request(url, headers={'Authorization': f'Bearer {_get_airtable_token()}'})
+        data = json_lib.loads(urllib.request.urlopen(req, timeout=10).read())
+        return jsonify({'records': [r.get('fields', {}) for r in data.get('records', [])]})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+@app.route('/api/personas-cedulas', methods=['GET'])
+def obtener_personas_cedulas():
+    """Retorna mapa {nombre: cedula} desde AirTable"""
+    global _cedulas_cache
+    ahora = _time.time()
+    if _cedulas_cache['datos'] and (ahora - _cedulas_cache['timestamp']) < 600:
+        return jsonify(_cedulas_cache['datos'])
+
+    import urllib.request, json as json_lib
+    cedulas = {}
+    offset = None
+    try:
+        # Traer TODOS los campos (sin filtrar) para buscar cualquier variante de cédula
+        while True:
+            url = f'https://api.airtable.com/v0/{AIRTABLE_BASE}/{AIRTABLE_TABLE}?pageSize=100'
+            if offset:
+                url += f'&offset={offset}'
+            req = urllib.request.Request(url, headers={'Authorization': f'Bearer {_get_airtable_token()}'})
+            data = json_lib.loads(urllib.request.urlopen(req, timeout=10).read())
+            for r in data.get('records', []):
+                f = r.get('fields', {})
+                nombre = f.get('nombre') or f.get('Nombre') or ''
+                # Buscar cédula en cualquier campo cuyo nombre contenga "ced" o "identif"
+                ced = ''
+                for k, v in f.items():
+                    kl = k.lower().replace('é', 'e').replace('á', 'a').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+                    if 'cedula' in kl or 'identif' in kl or kl == 'ci' or kl == 'dni':
+                        ced = str(v).strip()
+                        break
+                if nombre and ced:
+                    cedulas[nombre] = ced
+            offset = data.get('offset')
+            if not offset:
+                break
+        _cedulas_cache = {'datos': cedulas, 'timestamp': ahora}
+        return jsonify(cedulas)
+    except Exception as e:
+        print(f"Error cargando cedulas: {e}")
+        return jsonify({})
+
 def _cargar_personas_airtable():
     """Carga personas desde Airtable y actualiza cache del servidor"""
     import urllib.request, json as json_lib
@@ -3095,6 +3149,7 @@ def diferencias_semana(semana_id):
 
         # Netear diferencias diarias por producto en la semana
         # Cada día: diferencia = conteo - sistema. Neto = suma de diferencias diarias.
+        # Producto queda "justificado" si CUALQUIER día de la semana tiene corregido=TRUE
         cur.execute("""
             WITH diferencias_diarias AS (
                 SELECT
@@ -3102,7 +3157,8 @@ def diferencias_semana(semana_id):
                     cantidad as stock_sistema,
                     COALESCE(cantidad_contada_2, cantidad_contada) as contado,
                     COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as dif_dia,
-                    COALESCE(costo_unitario, 0) as costo_unitario
+                    COALESCE(costo_unitario, 0) as costo_unitario,
+                    COALESCE(corregido, FALSE) as corregido
                 FROM inventario_diario.inventario_ciego_conteos
                 WHERE local = %s AND fecha BETWEEN %s AND %s
                   AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
@@ -3114,11 +3170,13 @@ def diferencias_semana(semana_id):
                 SUM(dif_dia) as diferencia,
                 AVG(costo_unitario) as costo_unitario,
                 COUNT(*) as dias_contados,
+                BOOL_OR(corregido) as justificado,
                 json_agg(json_build_object(
                     'fecha', fecha,
                     'stock', stock_sistema,
                     'contado', contado,
-                    'dif', dif_dia
+                    'dif', dif_dia,
+                    'corregido', corregido
                 ) ORDER BY fecha) as detalle_diario
             FROM diferencias_diarias
             GROUP BY codigo, nombre, unidad
@@ -3316,6 +3374,42 @@ def cerrar_semana(semana_id):
         if conn:
             release_db(conn)
 
+
+@app.route('/api/semanas/<int:semana_id>', methods=['DELETE'])
+def eliminar_semana(semana_id):
+    """Elimina una semana (abierta o cerrada) y todas sus asignaciones (solo admin)"""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute("SELECT estado FROM inventario_diario.semanas_inventario WHERE id = %s", (semana_id,))
+        semana = cur.fetchone()
+        if not semana:
+            return jsonify({'error': 'Semana no encontrada'}), 404
+
+        # Admin puede eliminar tanto abiertas como cerradas
+        # Al eliminar, los productos asignados quedan sin responsable y deben ser reasignados
+
+        # Eliminar asignaciones de personas
+        cur.execute("""
+            DELETE FROM inventario_diario.asignacion_semanal_personas
+            WHERE asignacion_semanal_id IN (
+                SELECT id FROM inventario_diario.asignacion_semanal WHERE semana_id = %s
+            )
+        """, (semana_id,))
+        # Eliminar asignaciones
+        cur.execute("DELETE FROM inventario_diario.asignacion_semanal WHERE semana_id = %s", (semana_id,))
+        # Eliminar semana
+        cur.execute("DELETE FROM inventario_diario.semanas_inventario WHERE id = %s", (semana_id,))
+        conn.commit()
+
+        return jsonify({'success': True, 'estado_previo': semana['estado']})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
 
 @app.route('/api/semanas/<int:semana_id>/reabrir', methods=['POST'])
 def reabrir_semana(semana_id):
