@@ -1034,7 +1034,8 @@ def corregir_conteo():
                 cantidad_contada = %s,
                 cantidad_contada_2 = %s,
                 modificado_por = %s,
-                modificado_at = CURRENT_TIMESTAMP
+                modificado_at = CURRENT_TIMESTAMP,
+                corregido = TRUE
             WHERE id = %s
         """, (cantidad_sistema, cantidad_contada, cantidad_contada_2, usuario or None, id_producto))
         conn.commit()
