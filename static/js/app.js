@@ -1751,7 +1751,8 @@ function renderObservaciones() {
     });
 
     const todosConteo = [...productosConDif, ...productosGestionados];
-    const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+    // Admin y Supervisor pueden justificar (marcar corregido)
+    const esAdmin = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
 
     let html = '';
 
@@ -1770,7 +1771,7 @@ function renderObservaciones() {
                         <th class="obs-col-dif">Dif</th>
                         <th class="obs-col-motivo">Motivo</th>
                         <th class="obs-col-obs">Observación</th>
-                        <th class="obs-col-corregido">Corregido</th>
+                        <th class="obs-col-corregido">Justificado</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1851,7 +1852,7 @@ function renderObservaciones() {
                         <th class="obs-col-dif">Dif</th>
                         <th class="obs-col-motivo">Motivo</th>
                         <th class="obs-col-obs">Observación</th>
-                        <th class="obs-col-corregido">Corregido</th>
+                        <th class="obs-col-corregido">Justificado</th>
                     </tr>
                 </thead>
                 <tbody>
