@@ -6301,28 +6301,67 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     .sem-pendiente-acciones { width: 100%; display: flex; gap: 6px; }
     .btn-sem-continuar { flex: 1; justify-content: center; }
 
-    /* Dashboard filtros compactos en móvil */
-    .filtros-dashboard {
+    /* TODOS los filtros compactos en móvil */
+    .filtros-dashboard,
+    .filtros-historico,
+    .form-section {
         display: grid !important;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
         padding: 10px;
     }
-    .filtros-dashboard .form-group { margin: 0; }
-    .filtros-dashboard .form-group label { font-size: 10px; margin-bottom: 2px; }
+    .filtros-dashboard .form-group,
+    .filtros-historico .form-group,
+    .form-section .form-group { margin: 0; }
+    .filtros-dashboard .form-group label,
+    .filtros-historico .form-group label,
+    .form-section .form-group label { font-size: 10px; margin-bottom: 2px; }
     .filtros-dashboard .form-group input,
-    .filtros-dashboard .form-group select {
-        height: 32px;
+    .filtros-dashboard .form-group select,
+    .filtros-historico .form-group input,
+    .filtros-historico .form-group select,
+    .form-section .form-group input,
+    .form-section .form-group select {
+        height: 34px;
         font-size: 12px;
         padding: 0 6px;
+        width: 100%;
     }
-    .filtros-dashboard #btn-cargar-dashboard {
+    .filtros-dashboard .btn-secondary,
+    .filtros-dashboard .btn-primary,
+    .filtros-historico .btn-secondary,
+    .filtros-historico .btn-primary,
+    .form-section .btn-primary,
+    .form-section .btn-secondary,
+    .form-row.botones-accion .btn-primary,
+    .form-row.botones-accion .btn-secondary {
         grid-column: 1 / -1;
         height: 36px;
         font-size: 12px;
+        width: 100%;
+        justify-content: center;
     }
+    .form-row { display: contents; }
+    .form-row.botones-accion { display: contents; }
+
+    /* Obs filtros */
+    .obs-filtros {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .btn-obs-cargar {
+        grid-column: 1 / -1;
+        width: 100%;
+        justify-content: center;
+    }
+    .obs-filtro-grupo { width: 100%; }
+
     .dashboard-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
     .dashboard-charts-grid { grid-template-columns: 1fr; }
+
+    /* Vista header */
+    .view-header h2 { font-size: 16px; }
 
     /* Header */
     .header-left span { font-size: 13px; }
