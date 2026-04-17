@@ -40,6 +40,9 @@
         <div id="main-screen" class="screen">
             <header>
                 <div class="header-left">
+                    <button id="btn-menu-toggle" class="btn-menu-toggle" onclick="toggleSidebar()">
+                        <i class="fas fa-bars"></i>
+                    </button>
                     <i class="fas fa-boxes-stacked"></i>
                     <span>FOODIX - Inventario</span>
                 </div>
@@ -51,7 +54,8 @@
                 </div>
             </header>
 
-            <nav class="main-nav">
+            <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+            <nav class="sidebar" id="sidebar">
                 <button class="nav-btn active" data-view="conteo" style="display:none;">
                     <i class="fas fa-clipboard-list"></i>
                     <span>Conteo</span>
