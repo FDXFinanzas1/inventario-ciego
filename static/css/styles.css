@@ -6245,3 +6245,68 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     .usuarios-tabla td:nth-child(5) { display: none; }
     .usuarios-acciones button { width: 30px; height: 30px; font-size: 0.75rem; }
 }
+
+/* ==================== MOBILE RESPONSIVE GLOBAL ==================== */
+@media (max-width: 768px) {
+    /* Evitar desbordamiento horizontal */
+    body, html { overflow-x: hidden; }
+    main { padding: 10px; margin-top: 56px; }
+
+    /* KPIs semanal: 2 columnas */
+    .sem-kpis { grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 0 0 12px; }
+    .sem-kpi { padding: 8px 10px; }
+    .sem-kpi-val { font-size: 16px; }
+    .sem-kpi-label { font-size: 9px; }
+
+    /* Sección dos columnas: apilar */
+    .sec-two-col { grid-template-columns: 1fr !important; }
+
+    /* Resumen consolidado */
+    .sem-resumen-cards { grid-template-columns: 1fr; }
+    .sem-resumen-acciones { flex-direction: column; gap: 8px; align-items: stretch; }
+    .sem-resumen-acciones > div { justify-content: center; }
+    .btn-sem-imprimir, .btn-sem-imprimir-sec { width: 100%; justify-content: center; }
+    .sem-resumen-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+
+    /* Persona card header */
+    .sem-persona-card-header { flex-wrap: wrap; gap: 6px; }
+
+    /* Productos lista */
+    .sec-prod-item { flex-wrap: wrap; gap: 6px; padding: 8px; }
+    .sec-prod-info { min-width: 0; }
+    .sec-prod-nombre { font-size: 12px; word-break: break-word; }
+    .sec-prod-valor { font-size: 13px; white-space: nowrap; }
+
+    /* Observaciones tabla */
+    .tabla-observaciones { font-size: 11px; }
+    .tabla-observaciones th, .tabla-observaciones td { padding: 5px 4px; }
+    .obs-col-producto { width: 25% !important; }
+    .obs-col-dif { width: 10% !important; }
+    .obs-col-motivo { width: 25% !important; }
+    .obs-col-obs { width: 25% !important; }
+    .obs-col-corregido { width: auto !important; min-width: 50px; }
+    .select-motivo, .select-observacion { font-size: 11px; padding: 4px; }
+    .input-observacion { font-size: 11px; padding: 4px 6px; }
+
+    /* Filtros observaciones */
+    .obs-filtros { flex-direction: column; gap: 8px; }
+    .obs-filtro-input { min-width: auto; width: 100%; }
+
+    /* Desglose diario chips */
+    .sem-desglose-diario { flex-wrap: wrap; }
+    .sem-dia-chip { font-size: 9px; padding: 1px 4px; }
+
+    /* Pendientes semana */
+    .sem-pendiente-item { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .sem-pendiente-acciones { width: 100%; display: flex; gap: 6px; }
+    .btn-sem-continuar { flex: 1; justify-content: center; }
+
+    /* Dashboard */
+    .filtros-dashboard { flex-direction: column; gap: 8px; }
+    .dashboard-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .dashboard-charts-grid { grid-template-columns: 1fr; }
+
+    /* Header */
+    .header-left span { font-size: 13px; }
+    #user-name { display: none; }
+}
