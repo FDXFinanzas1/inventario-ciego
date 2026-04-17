@@ -6400,8 +6400,8 @@ async function _semGenerarPDFActas(nombres) {
             <style>
                 * { box-sizing: border-box; }
                 body { font-family: 'Calibri', 'Arial', 'Helvetica', sans-serif; margin: 0; padding: 0; color: #000; }
-                .acta-page { page-break-after: always; padding: 50px 70px; min-height: 100vh; }
-                .acta-page:last-child { page-break-after: auto; }
+                .acta-page { page-break-after: always; padding: 40px 50px; }
+                .acta-page:last-child { page-break-after: avoid; }
 
                 .acta-title { text-align: center; margin-bottom: 30px; }
                 .acta-title h1 { margin: 0; color: #000; font-size: 18px; font-weight: 700; }
@@ -6430,13 +6430,15 @@ async function _semGenerarPDFActas(nombres) {
                 .acta-atentamente { margin-top: 40px; font-size: 13px; }
                 .acta-atentamente p { margin: 0; }
 
-                .acta-firma-empleado { margin-top: 70px; text-align: left; font-size: 12px; max-width: 350px; }
+                .acta-firma-empleado { margin-top: 40px; text-align: left; font-size: 12px; max-width: 350px; }
                 .acta-linea-firma { border-top: 1px solid #000; margin-bottom: 4px; width: 100%; }
                 .acta-firma-empleado p { margin: 2px 0; }
 
                 @media print {
-                    .acta-page { page-break-after: always; }
-                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .acta-page { page-break-after: always; page-break-inside: avoid; }
+                    .acta-page:last-child { page-break-after: avoid; }
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }
+                    html, body { height: auto; }
                 }
             </style>
         </head>
