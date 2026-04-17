@@ -6154,18 +6154,30 @@ function _semAbrirPersonaGrupo(gIdx) {
     const btn = card?.querySelector('.sec-col:last-child .btn-secondary');
     if (!btn) return;
 
+    const esMobil = window.innerWidth <= 768;
+
     const wrapper = document.createElement('div');
     wrapper.id = 'sem-persona-dropdown';
-    wrapper.style.cssText = 'position:absolute;right:0;top:100%;z-index:50;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.1);min-width:260px;margin-top:4px;';
+    if (esMobil) {
+        // En móvil: modal fijo en la parte inferior
+        wrapper.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:300;background:white;border-top:2px solid var(--primary);border-radius:16px 16px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,0.2);max-height:60vh;display:flex;flex-direction:column;';
+    } else {
+        wrapper.style.cssText = 'position:absolute;right:0;top:100%;z-index:50;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,0.1);min-width:280px;margin-top:4px;';
+    }
     wrapper.innerHTML = `
-        <div style="padding:8px;border-bottom:1px solid var(--border-light);">
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px;">
+            ${esMobil ? '<button onclick="document.getElementById(\'sem-persona-dropdown\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#94A3B8;padding:4px;"><i class="fas fa-times"></i></button>' : ''}
             <input type="text" id="sem-persona-buscar" placeholder="Buscar persona..."
-                   style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;outline:none;" autofocus>
+                   style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;outline:none;" autofocus>
         </div>
-        <div id="sem-persona-resultados" style="max-height:220px;overflow-y:auto;"></div>
+        <div id="sem-persona-resultados" style="flex:1;overflow-y:auto;max-height:${esMobil ? '50vh' : '250px'};"></div>
     `;
-    btn.parentElement.style.position = 'relative';
-    btn.parentElement.appendChild(wrapper);
+    if (esMobil) {
+        document.body.appendChild(wrapper);
+    } else {
+        btn.parentElement.style.position = 'relative';
+        btn.parentElement.appendChild(wrapper);
+    }
 
     const inputBuscar = document.getElementById('sem-persona-buscar');
     const resultados = document.getElementById('sem-persona-resultados');
