@@ -925,6 +925,9 @@ function showMainScreen() {
 
     // Recargar bodegas filtradas segun usuario
     cargarBodegas();
+
+    // Cargar selector de impersonacion si es admin
+    cargarSelectorImpersonar();
 }
 
 // ==================== NAVEGACION ====================
@@ -1050,11 +1053,12 @@ function cargarBodegas() {
     const reporteBodega = document.getElementById('reporte-bodega');
     const dashBodega = document.getElementById('dash-bodega');
 
-    // Bodega asignada al usuario (null = ve todas)
-    const bodegaUsuario = state.user ? state.user.bodega : null;
+    // Bodega asignada al usuario (null = ve todas) — respetar impersonacion
+    const imp = state._impersonando;
+    const bodegaUsuario = imp ? imp.bodega : (state.user ? state.user.bodega : null);
 
     // Bodegas permitidas (filtrar por las asignadas si tiene varias)
-    const userBodegas = (state.user && state.user.bodegas) ? state.user.bodegas : [];
+    const userBodegas = imp ? (imp.bodegas || []) : ((state.user && state.user.bodegas) ? state.user.bodegas : []);
     const bodegas = bodegaUsuario
         ? CONFIG.BODEGAS.filter(b => b.id === bodegaUsuario)
         : userBodegas.length > 0
@@ -7359,9 +7363,119 @@ async function _refrescarPermisos() {
 }
 
 function _puede(modulo, accion) {
-    if (!state.user) return false;
-    if (state.user.rol === 'admin' || state.user.username === 'admin') return true;
-    const perms = state.user.permisos;
+    // En modo impersonación, usar permisos del usuario simulado
+    const user = state._impersonando || state.user;
+    if (!user) return false;
+    if (!state._impersonando && (user.rol === 'admin' || user.username === 'admin')) return true;
+    const perms = user.permisos;
     if (!perms || !perms[modulo]) return false;
     return perms[modulo][accion] === true;
+}
+
+// ==================== IMPERSONACION (solo admin) ====================
+
+async function cargarSelectorImpersonar() {
+    const select = document.getElementById('btn-impersonar');
+    if (!select) return;
+    const esAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+    if (!esAdmin) { select.style.display = 'none'; return; }
+
+    select.style.display = '';
+    select.innerHTML = '<option value="">👁 Ver como...</option>';
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/usuarios`);
+        if (!res.ok) return;
+        const usuarios = await res.json();
+        usuarios.forEach(u => {
+            if (u.username === state.user.username) return; // No mostrarse a si mismo
+            if (!u.activo) return;
+            const opt = document.createElement('option');
+            opt.value = u.username;
+            opt.textContent = `${u.nombre} (${u.rol})`;
+            opt.dataset.info = JSON.stringify(u);
+            select.appendChild(opt);
+        });
+    } catch (e) { console.log('Error cargando usuarios para impersonar:', e); }
+
+    select.onchange = function() {
+        if (!this.value) { salirImpersonacion(); return; }
+        const opt = this.querySelector(`option[value="${this.value}"]`);
+        if (!opt) return;
+        const uData = JSON.parse(opt.dataset.info);
+        iniciarImpersonacion(uData);
+    };
+}
+
+async function iniciarImpersonacion(uData) {
+    // Cargar permisos del rol
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/roles`);
+        if (!res.ok) return;
+        const rolesData = await res.json();
+        const permsRol = rolesData[uData.rol] || {};
+        const modulos = Object.keys(permsRol).filter(m => permsRol[m] && permsRol[m].ver);
+
+        // Determinar bodega asignada (igual que login)
+        const bodegas = uData.bodegas || [];
+        const bodegas_ventas = bodegas.filter(b => !['bodega_principal','materia_prima','planta'].includes(b));
+        const bodega = bodegas_ventas.length === 1 ? bodegas_ventas[0] : null;
+
+        state._impersonando = {
+            username: uData.username,
+            nombre: uData.nombre,
+            rol: uData.rol,
+            bodega: bodega,
+            bodegas: bodegas,
+            modulos: modulos,
+            permisos: permsRol
+        };
+
+        // Mostrar banner
+        document.getElementById('impersonar-banner').style.display = '';
+        document.getElementById('impersonar-nombre').textContent = uData.nombre;
+        document.getElementById('impersonar-rol').textContent = uData.rol;
+
+        // Refrescar UI con permisos simulados
+        _aplicarVistaImpersonada();
+    } catch (e) { console.log('Error en impersonacion:', e); }
+}
+
+function _aplicarVistaImpersonada() {
+    const imp = state._impersonando;
+    if (!imp) return;
+
+    // Actualizar nombre mostrado
+    document.getElementById('user-name').textContent = imp.nombre + ' (vista)';
+
+    // Mostrar/ocultar nav segun modulos del usuario simulado
+    const userModulos = imp.modulos || [];
+    document.querySelectorAll('.nav-btn[data-view]').forEach(btn => {
+        const mod = btn.dataset.view;
+        if (mod === 'usuarios') {
+            btn.style.display = 'none';
+        } else {
+            btn.style.display = userModulos.includes(mod) ? '' : 'none';
+        }
+    });
+
+    // Recargar bodegas con las del usuario simulado
+    const origUser = state.user;
+    const tempUser = { ...state.user, bodega: imp.bodega, bodegas: imp.bodegas };
+    state.user = tempUser;
+    cargarBodegas();
+    state.user = origUser;
+    // Guardar bodegas impersonadas para que cargarBodegas funcione
+    state._impBodegas = imp.bodegas;
+    state._impBodega = imp.bodega;
+}
+
+function salirImpersonacion() {
+    state._impersonando = null;
+    state._impBodegas = null;
+    state._impBodega = null;
+    document.getElementById('impersonar-banner').style.display = 'none';
+    document.getElementById('btn-impersonar').value = '';
+    document.getElementById('user-name').textContent = state.user.nombre;
+    showMainScreen();
 }

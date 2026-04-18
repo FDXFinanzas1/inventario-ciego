@@ -47,12 +47,22 @@
                     <span>FOODIX - Inventario</span>
                 </div>
                 <div class="header-right">
+                    <select id="btn-impersonar" style="display:none;font-size:12px;padding:2px 6px;border-radius:6px;border:1px solid #475569;background:#1e293b;color:#94a3b8;margin-right:8px;max-width:180px;cursor:pointer;" title="Ver como otro usuario">
+                        <option value="">👁 Ver como...</option>
+                    </select>
                     <span id="user-name">Usuario</span>
                     <button id="btn-logout" class="btn-icon" title="Cerrar sesión">
                         <i class="fas fa-sign-out-alt"></i>
                     </button>
                 </div>
             </header>
+            <!-- Banner de impersonación -->
+            <div id="impersonar-banner" style="display:none;background:#f59e0b;color:#000;text-align:center;padding:6px 12px;font-size:13px;font-weight:600;position:relative;z-index:100;">
+                <i class="fas fa-eye"></i> Viendo como: <span id="impersonar-nombre"></span> (<span id="impersonar-rol"></span>)
+                <button onclick="salirImpersonacion()" style="margin-left:12px;background:#000;color:#f59e0b;border:none;border-radius:4px;padding:2px 10px;cursor:pointer;font-size:12px;font-weight:600;">
+                    <i class="fas fa-times"></i> Salir
+                </button>
+            </div>
 
             <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
             <nav class="sidebar" id="sidebar">
