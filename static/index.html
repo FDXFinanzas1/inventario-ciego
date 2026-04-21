@@ -594,127 +594,134 @@
                         <h2><i class="fas fa-exchange-alt"></i> Cruce Operativo</h2>
                     </div>
 
-                    <div class="filtros-cruce">
-                        <div class="form-group">
-                            <label><i class="fas fa-calendar"></i> Desde</label>
-                            <input type="date" id="cruce-fecha-desde">
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-calendar"></i> Hasta</label>
-                            <input type="date" id="cruce-fecha-hasta">
-                        </div>
-                        <div class="form-group">
+                    <!-- SELECTOR GLOBAL DE BODEGA -->
+                    <div class="filtros-cruce" style="margin-bottom:0; padding-bottom:8px;">
+                        <div class="form-group" style="flex:1; max-width:300px;">
                             <label><i class="fas fa-warehouse"></i> Bodega</label>
-                            <select id="cruce-bodega">
-                                <option value="">Todas</option>
+                            <select id="cruce-bodega-global" onchange="cruceBodegaGlobalCambio()">
                                 <option value="bodega_principal">Bodega Principal</option>
                                 <option value="materia_prima">Materia Prima</option>
                                 <option value="planta">Planta de Produccion</option>
                             </select>
                         </div>
-                        <button id="btn-buscar-cruce" class="btn-secondary">
-                            <i class="fas fa-search"></i> Buscar
+                    </div>
+
+                    <!-- SUB-TABS -->
+                    <div class="cruce-subtabs" style="display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid #e5e7eb;">
+                        <button class="cruce-subtab active" data-subtab="cuadrar" onclick="cruceSubtab('cuadrar')">
+                            <i class="fas fa-bolt"></i> Cuadrar
+                        </button>
+                        <button class="cruce-subtab" data-subtab="cargar" onclick="cruceSubtab('cargar')">
+                            <i class="fas fa-upload"></i> Cargar a Contifico
+                        </button>
+                        <button class="cruce-subtab" data-subtab="historial" onclick="cruceSubtab('historial')">
+                            <i class="fas fa-history"></i> Historial
                         </button>
                     </div>
 
-                    <!-- BLOQUE CUADRAR -->
-                    <div class="cuadrar-card">
-                        <div class="cuadrar-header">
-                            <div class="cuadrar-header-icon"><i class="fas fa-bolt"></i></div>
-                            <div class="cuadrar-header-text">
-                                <h3>Ejecutar nuevo cruce</h3>
-                                <p>Descarga automaticamente los saldos de Contifico y los compara con la toma fisica</p>
+                    <!-- SUB-TAB: CUADRAR -->
+                    <div id="cruce-sub-cuadrar" class="cruce-subtab-content">
+                        <div class="cuadrar-card">
+                            <div class="cuadrar-header">
+                                <div class="cuadrar-header-icon"><i class="fas fa-bolt"></i></div>
+                                <div class="cuadrar-header-text">
+                                    <h3>Ejecutar nuevo cruce</h3>
+                                    <p>Descarga automaticamente los saldos de Contifico y los compara con la toma fisica</p>
+                                </div>
                             </div>
+                            <div class="cuadrar-body">
+                                <div class="cuadrar-field">
+                                    <label><i class="fas fa-calendar-day"></i> Fecha de toma fisica</label>
+                                    <select id="cuadrar-fecha">
+                                        <option value="">Cargando fechas...</option>
+                                    </select>
+                                </div>
+                                <div class="cuadrar-field">
+                                    <label><i class="fas fa-calendar-check"></i> Fecha corte Contifico</label>
+                                    <input type="date" id="cuadrar-fecha-corte">
+                                </div>
+                                <div class="cuadrar-field">
+                                    <label>&nbsp;</label>
+                                    <button id="btn-cuadrar" class="btn-cuadrar" onclick="cuadrarSolicitar()">
+                                        <i class="fas fa-bolt"></i>
+                                        <span>CUADRAR</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="cuadrar-progreso" class="cuadrar-progreso hidden">
+                                <div class="cuadrar-progreso-track">
+                                    <div id="cuadrar-progreso-bar" class="cuadrar-progreso-bar"></div>
+                                </div>
+                                <div class="cuadrar-progreso-msg">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    <span id="cuadrar-progreso-msg">Preparando...</span>
+                                </div>
+                            </div>
+                            <div id="cuadrar-status" class="cuadrar-status"></div>
                         </div>
-                        <div class="cuadrar-body">
-                            <div class="cuadrar-field">
-                                <label><i class="fas fa-warehouse"></i> Bodega</label>
-                                <select id="cuadrar-bodega">
-                                    <option value="bodega_principal">Bodega Principal</option>
-                                    <option value="materia_prima">Materia Prima</option>
-                                    <option value="planta">Planta de Produccion</option>
-                                </select>
-                            </div>
-                            <div class="cuadrar-field">
-                                <label><i class="fas fa-calendar-day"></i> Fecha de toma fisica</label>
-                                <select id="cuadrar-fecha">
-                                    <option value="">Cargando fechas...</option>
-                                </select>
-                            </div>
-                            <div class="cuadrar-field">
-                                <label><i class="fas fa-calendar-check"></i> Fecha corte Contifico</label>
-                                <input type="date" id="cuadrar-fecha-corte">
-                            </div>
-                            <div class="cuadrar-field">
-                                <label>&nbsp;</label>
-                                <button id="btn-cuadrar" class="btn-cuadrar" onclick="cuadrarSolicitar()">
-                                    <i class="fas fa-bolt"></i>
-                                    <span>CUADRAR</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="cuadrar-progreso" class="cuadrar-progreso hidden">
-                            <div class="cuadrar-progreso-track">
-                                <div id="cuadrar-progreso-bar" class="cuadrar-progreso-bar"></div>
-                            </div>
-                            <div class="cuadrar-progreso-msg">
-                                <i class="fas fa-spinner fa-spin"></i>
-                                <span id="cuadrar-progreso-msg">Preparando...</span>
-                            </div>
-                        </div>
-                        <div id="cuadrar-status" class="cuadrar-status"></div>
                     </div>
 
-                    <!-- BLOQUE CARGAR A CONTIFICO -->
-                    <div class="cuadrar-card" style="border-left-color: #27ae60;">
-                        <div class="cuadrar-header">
-                            <div class="cuadrar-header-icon" style="background: linear-gradient(135deg, #27ae60, #2ecc71);"><i class="fas fa-upload"></i></div>
-                            <div class="cuadrar-header-text">
-                                <h3>Cargar toma fisica a Contifico</h3>
-                                <p>Registra automaticamente la toma fisica en Contifico. Una vez cargado no se puede repetir.</p>
+                    <!-- SUB-TAB: CARGAR A CONTIFICO -->
+                    <div id="cruce-sub-cargar" class="cruce-subtab-content" style="display:none;">
+                        <div class="cuadrar-card" style="border-left-color: #27ae60;">
+                            <div class="cuadrar-header">
+                                <div class="cuadrar-header-icon" style="background: linear-gradient(135deg, #27ae60, #2ecc71);"><i class="fas fa-upload"></i></div>
+                                <div class="cuadrar-header-text">
+                                    <h3>Cargar toma fisica a Contifico</h3>
+                                    <p>Registra automaticamente la toma fisica en Contifico. Una vez cargado no se puede repetir.</p>
+                                </div>
                             </div>
+                            <div class="cuadrar-body">
+                                <div class="cuadrar-field">
+                                    <label><i class="fas fa-calendar-day"></i> Fecha de toma fisica</label>
+                                    <select id="carga-fecha" onchange="cargaVerificarEstado()">
+                                        <option value="">Cargando fechas...</option>
+                                    </select>
+                                </div>
+                                <div class="cuadrar-field">
+                                    <label>&nbsp;</label>
+                                    <button id="btn-cargar-contifico" class="btn-cuadrar" style="background: linear-gradient(135deg, #27ae60, #2ecc71);" onclick="cargaSolicitar()">
+                                        <i class="fas fa-upload"></i>
+                                        <span>CARGAR A CONTIFICO</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="carga-progreso" class="cuadrar-progreso hidden">
+                                <div class="cuadrar-progreso-track">
+                                    <div id="carga-progreso-bar" class="cuadrar-progreso-bar" style="background: linear-gradient(90deg, #27ae60, #2ecc71);"></div>
+                                </div>
+                                <div class="cuadrar-progreso-msg">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    <span id="carga-progreso-msg">Preparando...</span>
+                                </div>
+                            </div>
+                            <div id="carga-status" class="cuadrar-status"></div>
                         </div>
-                        <div class="cuadrar-body">
-                            <div class="cuadrar-field">
-                                <label><i class="fas fa-warehouse"></i> Bodega</label>
-                                <select id="carga-bodega" onchange="cargaCargarFechas()">
-                                    <option value="bodega_principal">Bodega Principal</option>
-                                    <option value="materia_prima">Materia Prima</option>
-                                    <option value="planta">Planta de Produccion</option>
-                                </select>
-                            </div>
-                            <div class="cuadrar-field">
-                                <label><i class="fas fa-calendar-day"></i> Fecha de toma fisica</label>
-                                <select id="carga-fecha" onchange="cargaVerificarEstado()">
-                                    <option value="">Cargando fechas...</option>
-                                </select>
-                            </div>
-                            <div class="cuadrar-field">
-                                <label>&nbsp;</label>
-                                <button id="btn-cargar-contifico" class="btn-cuadrar" style="background: linear-gradient(135deg, #27ae60, #2ecc71);" onclick="cargaSolicitar()">
-                                    <i class="fas fa-upload"></i>
-                                    <span>CARGAR A CONTIFICO</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="carga-progreso" class="cuadrar-progreso hidden">
-                            <div class="cuadrar-progreso-track">
-                                <div id="carga-progreso-bar" class="cuadrar-progreso-bar" style="background: linear-gradient(90deg, #27ae60, #2ecc71);"></div>
-                            </div>
-                            <div class="cuadrar-progreso-msg">
-                                <i class="fas fa-spinner fa-spin"></i>
-                                <span id="carga-progreso-msg">Preparando...</span>
-                            </div>
-                        </div>
-                        <div id="carga-status" class="cuadrar-status"></div>
                     </div>
 
-                    <div id="cruce-resumen" class="dashboard-stats-grid"></div>
+                    <!-- SUB-TAB: HISTORIAL -->
+                    <div id="cruce-sub-historial" class="cruce-subtab-content" style="display:none;">
+                        <div class="filtros-cruce" style="margin-bottom:12px;">
+                            <div class="form-group">
+                                <label><i class="fas fa-calendar"></i> Desde</label>
+                                <input type="date" id="cruce-fecha-desde">
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-calendar"></i> Hasta</label>
+                                <input type="date" id="cruce-fecha-hasta">
+                            </div>
+                            <button id="btn-buscar-cruce" class="btn-secondary">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                        </div>
 
-                    <div id="cruce-ejecuciones" class="cruce-ejecuciones-list">
-                        <div class="empty-state">
-                            <i class="fas fa-exchange-alt"></i>
-                            <p>Selecciona un rango de fechas para ver los cruces operativos</p>
+                        <div id="cruce-resumen" class="dashboard-stats-grid"></div>
+
+                        <div id="cruce-ejecuciones" class="cruce-ejecuciones-list">
+                            <div class="empty-state">
+                                <i class="fas fa-exchange-alt"></i>
+                                <p>Selecciona un rango de fechas para ver los cruces operativos</p>
+                            </div>
                         </div>
                     </div>
 

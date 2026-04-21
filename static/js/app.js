@@ -3700,7 +3700,7 @@ function showToast(message, type = 'info') {
 async function cargarCruceOperativo() {
     const fechaDesde = document.getElementById('cruce-fecha-desde').value;
     const fechaHasta = document.getElementById('cruce-fecha-hasta').value;
-    const bodega = document.getElementById('cruce-bodega').value;
+    const bodega = getCruceBodegaGlobal();
 
     if (!fechaDesde || !fechaHasta) {
         showToast('Selecciona las fechas desde y hasta', 'error');
@@ -6873,19 +6873,46 @@ function semanalRenderResumenPersonas(data) {
 }
 
 // ============================================================
+// CRUCE OPERATIVO - Sub-tabs y selector global de bodega
+// ============================================================
+
+function cruceSubtab(tab) {
+    document.querySelectorAll('.cruce-subtab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.cruce-subtab').forEach(el => el.classList.remove('active'));
+    const panel = document.getElementById(`cruce-sub-${tab}`);
+    if (panel) panel.style.display = '';
+    const btn = document.querySelector(`.cruce-subtab[data-subtab="${tab}"]`);
+    if (btn) btn.classList.add('active');
+    // Al cambiar a historial, cargar automaticamente
+    if (tab === 'historial') cargarCruceOperativo();
+}
+
+function cruceBodegaGlobalCambio() {
+    // Recargar fechas de cuadrar y carga cuando cambia la bodega global
+    cuadrarCargarFechas();
+    cargaCargarFechas();
+    // Si estamos en historial, recargar
+    const histPanel = document.getElementById('cruce-sub-historial');
+    if (histPanel && histPanel.style.display !== 'none') cargarCruceOperativo();
+}
+
+function getCruceBodegaGlobal() {
+    const sel = document.getElementById('cruce-bodega-global');
+    return sel ? sel.value : 'bodega_principal';
+}
+
 // CUADRAR - Solicitar nuevo cruce operativo (boton + worker)
 // ============================================================
 let cuadrarPollHandle = null;
 
 async function cuadrarCargarFechas() {
     const sel = document.getElementById('cuadrar-fecha');
-    const bodSel = document.getElementById('cuadrar-bodega');
     const corteInp = document.getElementById('cuadrar-fecha-corte');
-    if (!sel || !bodSel) return;
-    bodSel.onchange = cuadrarCargarFechas;
+    if (!sel) return;
+    const bodega = getCruceBodegaGlobal();
     sel.innerHTML = '<option value="">Cargando fechas...</option>';
     try {
-        const r = await fetch(`${CONFIG.API_URL}/api/cruce-op/fechas-disponibles?bodega=${bodSel.value}`);
+        const r = await fetch(`${CONFIG.API_URL}/api/cruce-op/fechas-disponibles?bodega=${bodega}`);
         const fechas = await r.json();
         if (!Array.isArray(fechas) || fechas.length === 0) {
             sel.innerHTML = '<option value="">Sin tomas fisicas</option>';
@@ -6915,7 +6942,7 @@ function cuadrarActualizarCorteDefault() {
 
 async function cuadrarSolicitar() {
     if (!_puede('cruce', 'editar')) { showToast('No tienes permiso para ejecutar cruces', 'error'); return; }
-    const bodega = document.getElementById('cuadrar-bodega').value;
+    const bodega = getCruceBodegaGlobal();
     const fecha = document.getElementById('cuadrar-fecha').value;
     const fechaCorte = document.getElementById('cuadrar-fecha-corte').value || fecha;
     const btn = document.getElementById('btn-cuadrar');
@@ -7044,11 +7071,11 @@ let cargaPollHandle = null;
 
 async function cargaCargarFechas() {
     const sel = document.getElementById('carga-fecha');
-    const bodSel = document.getElementById('carga-bodega');
-    if (!sel || !bodSel) return;
+    if (!sel) return;
+    const bodega = getCruceBodegaGlobal();
     sel.innerHTML = '<option value="">Cargando fechas...</option>';
     try {
-        const r = await fetch(`${CONFIG.API_URL}/api/carga-contifico/fechas-con-cruce?bodega=${bodSel.value}`);
+        const r = await fetch(`${CONFIG.API_URL}/api/carga-contifico/fechas-con-cruce?bodega=${bodega}`);
         const fechas = await r.json();
         if (!Array.isArray(fechas) || fechas.length === 0) {
             sel.innerHTML = '<option value="">Sin cruces completados</option>';
@@ -7065,7 +7092,7 @@ async function cargaCargarFechas() {
 }
 
 async function cargaVerificarEstado() {
-    const bodega = document.getElementById('carga-bodega')?.value;
+    const bodega = getCruceBodegaGlobal();
     const fecha = document.getElementById('carga-fecha')?.value;
     const btn = document.getElementById('btn-cargar-contifico');
     const status = document.getElementById('carga-status');
@@ -7103,7 +7130,7 @@ async function cargaVerificarEstado() {
 
 async function cargaSolicitar() {
     if (!_puede('cruce', 'editar')) { showToast('No tienes permiso para ejecutar cargas', 'error'); return; }
-    const bodega = document.getElementById('carga-bodega').value;
+    const bodega = getCruceBodegaGlobal();
     const fecha = document.getElementById('carga-fecha').value;
     const btn = document.getElementById('btn-cargar-contifico');
     const status = document.getElementById('carga-status');

@@ -5716,6 +5716,21 @@ tr.cruce-solo-cont { background: #F1F5F9; }
 /* ============================================================
    CUADRAR - Bloque de solicitud de cruce operativo
    ============================================================ */
+/* Sub-tabs del cruce operativo */
+.cruce-subtabs { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 16px; }
+.cruce-subtab {
+    padding: 10px 20px; border: none; background: none; cursor: pointer;
+    font-size: 14px; font-weight: 500; color: #6b7280;
+    border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s;
+}
+.cruce-subtab:hover { color: #374151; background: #f9fafb; }
+.cruce-subtab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+.cruce-subtab i { margin-right: 6px; }
+@media (max-width: 640px) {
+    .cruce-subtab { padding: 8px 12px; font-size: 13px; }
+    .cruce-subtab i { margin-right: 4px; }
+}
+
 .cuadrar-card {
     background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid #e2e8f0;
