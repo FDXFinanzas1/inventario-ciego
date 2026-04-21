@@ -7041,14 +7041,14 @@ async function cargaCargarFechas() {
     if (!sel || !bodSel) return;
     sel.innerHTML = '<option value="">Cargando fechas...</option>';
     try {
-        const r = await fetch(`${CONFIG.API_URL}/api/cruce-op/fechas-disponibles?bodega=${bodSel.value}`);
+        const r = await fetch(`${CONFIG.API_URL}/api/carga-contifico/fechas-con-cruce?bodega=${bodSel.value}`);
         const fechas = await r.json();
         if (!Array.isArray(fechas) || fechas.length === 0) {
-            sel.innerHTML = '<option value="">Sin tomas fisicas</option>';
+            sel.innerHTML = '<option value="">Sin cruces completados</option>';
             return;
         }
         sel.innerHTML = fechas.map(f =>
-            `<option value="${f.fecha}">${f.fecha} (${f.productos} productos)</option>`
+            `<option value="${f.fecha}">${f.fecha} (${f.cruzados} cruzados, ${f.con_dif} con dif)</option>`
         ).join('');
         cargaVerificarEstado();
     } catch (e) {

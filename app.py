@@ -3859,6 +3859,36 @@ def cruce_op_fechas():
 #        Panel web -> GET /estado-carga/<id> (polling) -> muestra resultado
 #        UNIQUE(bodega, fecha_toma) -> no permite cargar dos veces
 
+@app.route('/api/carga-contifico/fechas-con-cruce', methods=['GET'])
+def carga_contifico_fechas_con_cruce():
+    """Devuelve las fechas que tienen cruce operativo completado para una bodega."""
+    bodega = request.args.get('bodega')
+    if bodega not in ('bodega_principal', 'materia_prima', 'planta'):
+        return jsonify({'error': 'bodega invalida'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT fecha_toma, total_cruzados, total_con_diferencia, valor_total_dif
+            FROM inventario_diario.cruce_operativo_ejecuciones
+            WHERE bodega = %s AND estado = 'completado'
+            ORDER BY fecha_toma DESC
+        """, (bodega,))
+        rows = cur.fetchall()
+        return jsonify([{
+            'fecha': r['fecha_toma'].isoformat(),
+            'cruzados': r['total_cruzados'],
+            'con_dif': r['total_con_diferencia'],
+            'valor_dif': float(r['valor_total_dif']) if r['valor_total_dif'] else 0,
+        } for r in rows])
+    except Exception as e:
+        print(f"Error en /api/carga-contifico/fechas-con-cruce: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
 @app.route('/api/carga-contifico/verificar', methods=['GET'])
 def carga_contifico_verificar():
     """Verifica si ya existe una carga completada para bodega+fecha."""
