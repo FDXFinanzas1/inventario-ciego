@@ -970,6 +970,7 @@ function cambiarVista(viewName) {
         }
         cargarCruceOperativo();
         cuadrarCargarFechas();
+        cargaCargarFechas();
     }
 
     // Auto-inicializar observaciones al entrar
@@ -7027,6 +7028,179 @@ async function cruceEliminar(ejecId, bodega, fecha) {
     } catch (e) {
         alert('Error eliminando: ' + e.message);
     }
+}
+
+// ============================================================
+// CARGAR TOMA FISICA A CONTIFICO
+// ============================================================
+let cargaPollHandle = null;
+
+async function cargaCargarFechas() {
+    const sel = document.getElementById('carga-fecha');
+    const bodSel = document.getElementById('carga-bodega');
+    if (!sel || !bodSel) return;
+    sel.innerHTML = '<option value="">Cargando fechas...</option>';
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/cruce-op/fechas-disponibles?bodega=${bodSel.value}`);
+        const fechas = await r.json();
+        if (!Array.isArray(fechas) || fechas.length === 0) {
+            sel.innerHTML = '<option value="">Sin tomas fisicas</option>';
+            return;
+        }
+        sel.innerHTML = fechas.map(f =>
+            `<option value="${f.fecha}">${f.fecha} (${f.productos} productos)</option>`
+        ).join('');
+        cargaVerificarEstado();
+    } catch (e) {
+        sel.innerHTML = '<option value="">Error cargando</option>';
+        console.error(e);
+    }
+}
+
+async function cargaVerificarEstado() {
+    const bodega = document.getElementById('carga-bodega')?.value;
+    const fecha = document.getElementById('carga-fecha')?.value;
+    const btn = document.getElementById('btn-cargar-contifico');
+    const status = document.getElementById('carga-status');
+    const prog = document.getElementById('carga-progreso');
+    if (!bodega || !fecha || !btn) return;
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-upload"></i> <span>CARGAR A CONTIFICO</span>';
+    status.innerHTML = '';
+    prog.classList.add('hidden');
+
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/carga-contifico/verificar?bodega=${bodega}&fecha=${fecha}`);
+        const data = await r.json();
+
+        if (data.cargado) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> <span>YA CARGADO</span>';
+            btn.style.opacity = '0.6';
+            const fechaFin = data.timestamp_fin ? new Date(data.timestamp_fin).toLocaleString('es-EC') : '';
+            status.innerHTML = `<div class="cuadrar-status-ok">
+                <i class="fas fa-check-circle"></i>
+                <span>Cargado a Contifico &nbsp;·&nbsp; ${data.productos_ok || 0}/${data.total_productos || 0} productos OK${data.productos_error > 0 ? ` &nbsp;·&nbsp; ${data.productos_error} con error` : ''} &nbsp;·&nbsp; ${fechaFin}</span>
+            </div>`;
+        } else if (data.existe && (data.estado === 'pendiente' || data.estado === 'en_proceso')) {
+            btn.disabled = true;
+            cargaPollEstado(data.id);
+        } else {
+            btn.style.opacity = '1';
+        }
+    } catch (e) {
+        console.error('Error verificando carga:', e);
+    }
+}
+
+async function cargaSolicitar() {
+    if (!_puede('cruce', 'editar')) { showToast('No tienes permiso para ejecutar cargas', 'error'); return; }
+    const bodega = document.getElementById('carga-bodega').value;
+    const fecha = document.getElementById('carga-fecha').value;
+    const btn = document.getElementById('btn-cargar-contifico');
+    const status = document.getElementById('carga-status');
+    const prog = document.getElementById('carga-progreso');
+    const progBar = document.getElementById('carga-progreso-bar');
+    const progMsg = document.getElementById('carga-progreso-msg');
+
+    if (!fecha) { alert('Selecciona una fecha'); return; }
+
+    const bodNombres = {bodega_principal:'Bodega Principal', materia_prima:'Materia Prima', planta:'Planta de Produccion'};
+    if (!confirm(`Va a cargar la toma fisica de ${bodNombres[bodega] || bodega} del ${fecha} a Contifico.\n\nEste proceso NO se puede deshacer.\n\nContinuar?`)) return;
+
+    btn.disabled = true;
+    status.innerHTML = '';
+    prog.classList.remove('hidden');
+    progBar.style.width = '5%';
+    progMsg.textContent = 'Solicitando carga...';
+
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/carga-contifico/solicitar`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                bodega, fecha_toma: fecha,
+                usuario: state.usuario?.username || 'panel'
+            })
+        });
+        const data = await r.json();
+        if (r.status === 409) {
+            prog.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> <span>YA CARGADO</span>';
+            btn.style.opacity = '0.6';
+            status.innerHTML = `<div class="cuadrar-status-ok"><i class="fas fa-check-circle"></i> Ya fue cargado previamente</div>`;
+            return;
+        }
+        if (!r.ok) throw new Error(data.error || 'Error solicitando');
+        progMsg.textContent = `Tarea creada (id ${data.id}). Esperando worker en PC FINANZAS...`;
+        progBar.style.width = '10%';
+        cargaPollEstado(data.id);
+    } catch (e) {
+        prog.classList.add('hidden');
+        btn.disabled = false;
+        status.innerHTML = `<div class="cuadrar-status-error"><i class="fas fa-exclamation-triangle"></i> Error: ${e.message}</div>`;
+    }
+}
+
+function cargaPollEstado(ejecId) {
+    const btn = document.getElementById('btn-cargar-contifico');
+    const progBar = document.getElementById('carga-progreso-bar');
+    const progMsg = document.getElementById('carga-progreso-msg');
+    const status = document.getElementById('carga-status');
+    const prog = document.getElementById('carga-progreso');
+
+    let intentos = 0;
+    if (cargaPollHandle) clearInterval(cargaPollHandle);
+
+    btn.disabled = true;
+    prog.classList.remove('hidden');
+
+    cargaPollHandle = setInterval(async () => {
+        intentos++;
+        try {
+            const r = await fetch(`${CONFIG.API_URL}/api/carga-contifico/estado/${ejecId}`);
+            const d = await r.json();
+            if (d.estado === 'pendiente') {
+                progBar.style.width = Math.min(10 + intentos * 2, 25) + '%';
+                progMsg.textContent = `Esperando worker... (${intentos * 5}s)`;
+            } else if (d.estado === 'en_proceso') {
+                progBar.style.width = Math.min(30 + intentos, 85) + '%';
+                progMsg.textContent = `Worker llenando formulario en Contifico... esto puede tomar varios minutos`;
+            } else if (d.estado === 'completado') {
+                clearInterval(cargaPollHandle);
+                progBar.style.width = '100%';
+                progMsg.textContent = 'Carga completada';
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-check-circle"></i> <span>YA CARGADO</span>';
+                btn.style.opacity = '0.6';
+                status.innerHTML = `<div class="cuadrar-status-ok">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Cargado a Contifico &nbsp;·&nbsp; ${d.productos_ok || 0}/${d.total_productos || 0} productos OK${d.productos_error > 0 ? ` &nbsp;·&nbsp; ${d.productos_error} con error (${d.productos_error_lista || ''})` : ''}</span>
+                </div>`;
+                setTimeout(() => prog.classList.add('hidden'), 2000);
+            } else if (d.estado === 'error') {
+                clearInterval(cargaPollHandle);
+                prog.classList.add('hidden');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-upload"></i> <span>CARGAR A CONTIFICO</span>';
+                btn.style.opacity = '1';
+                status.innerHTML = `<div class="cuadrar-status-error"><i class="fas fa-exclamation-triangle"></i> Error: ${d.error_msg || 'desconocido'}. Puedes reintentar.</div>`;
+            }
+
+            // Timeout 15 min (la carga de muchos productos es lenta)
+            if (intentos > 180) {
+                clearInterval(cargaPollHandle);
+                progMsg.textContent = 'Tiempo de espera excedido. Verifica que el worker este corriendo en PC FINANZAS.';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-upload"></i> <span>CARGAR A CONTIFICO</span>';
+                btn.style.opacity = '1';
+            }
+        } catch (e) {
+            console.error('poll carga error:', e);
+        }
+    }, 5000);
 }
 
 // ==================== ADMIN USUARIOS ====================

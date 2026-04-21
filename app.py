@@ -3202,10 +3202,12 @@ def diferencias_semana(semana_id):
         """, (local, fecha_inicio, fecha_fin))
         diferencias = cur.fetchall()
 
-        # Serializar datos
+        # Serializar datos — costo incluye 20% por costos indirectos (no visible al usuario)
+        FACTOR_COSTO_INDIRECTO = 1.20
         for d in diferencias:
             d['diferencia'] = float(d['diferencia']) if d['diferencia'] else 0
-            d['costo_unitario'] = float(d['costo_unitario']) if d['costo_unitario'] else 0
+            costo_base = float(d['costo_unitario']) if d['costo_unitario'] else 0
+            d['costo_unitario'] = round(costo_base * FACTOR_COSTO_INDIRECTO, 4)
             if d.get('detalle_diario'):
                 for dd in d['detalle_diario']:
                     dd['fecha'] = str(dd['fecha'])
@@ -3322,7 +3324,7 @@ def asignar_semana(semana_id):
 
             for persona in asig.get('personas', []):
                 cantidad = persona.get('cantidad', 0)
-                costo = asig.get('costo_unitario', 0)
+                costo = asig.get('costo_unitario', 0)  # ya viene con 20% desde frontend
                 monto = float(cantidad) * float(costo) if cantidad and costo else 0
                 cur.execute("""
                     INSERT INTO inventario_diario.asignacion_semanal_personas
@@ -3846,6 +3848,230 @@ def cruce_op_fechas():
     finally:
         if conn:
             release_db(conn)
+
+
+# ============================================================
+# MODULO: Carga Toma Fisica a Contifico
+# ============================================================
+# Flujo: Panel web -> POST /solicitar -> tarea pendiente
+#        Worker PC FINANZAS -> GET /pendientes-carga (cada 15s) -> toma tarea
+#        Worker abre Contifico, llena formulario toma fisica -> POST /resultado-carga
+#        Panel web -> GET /estado-carga/<id> (polling) -> muestra resultado
+#        UNIQUE(bodega, fecha_toma) -> no permite cargar dos veces
+
+@app.route('/api/carga-contifico/verificar', methods=['GET'])
+def carga_contifico_verificar():
+    """Verifica si ya existe una carga completada para bodega+fecha."""
+    bodega = request.args.get('bodega')
+    fecha = request.args.get('fecha')
+    if not bodega or not fecha:
+        return jsonify({'error': 'bodega y fecha requeridos'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, estado, solicitado_at, timestamp_fin, total_productos, productos_ok, productos_error
+            FROM inventario_diario.carga_contifico_ejecuciones
+            WHERE bodega = %s AND fecha_toma = %s
+        """, (bodega, fecha))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'existe': False, 'cargado': False})
+        return jsonify({
+            'existe': True,
+            'cargado': row['estado'] == 'completado',
+            'estado': row['estado'],
+            'id': row['id'],
+            'solicitado_at': row['solicitado_at'].isoformat() if row['solicitado_at'] else None,
+            'timestamp_fin': row['timestamp_fin'].isoformat() if row['timestamp_fin'] else None,
+            'total_productos': row['total_productos'],
+            'productos_ok': row['productos_ok'],
+            'productos_error': row['productos_error'],
+        })
+    except Exception as e:
+        print(f"Error en /api/carga-contifico/verificar: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/carga-contifico/solicitar', methods=['POST'])
+def carga_contifico_solicitar():
+    """Crea tarea de carga. Si ya esta completada, rechaza. Si esta en error, permite reintentar."""
+    data = request.json or {}
+    bodega = data.get('bodega')
+    fecha_toma = data.get('fecha_toma')
+    usuario = data.get('usuario', 'panel')
+
+    if bodega not in ('bodega_principal', 'materia_prima', 'planta'):
+        return jsonify({'error': 'bodega invalida'}), 400
+    if not fecha_toma:
+        return jsonify({'error': 'fecha_toma requerida'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, estado FROM inventario_diario.carga_contifico_ejecuciones
+            WHERE bodega = %s AND fecha_toma = %s
+        """, (bodega, fecha_toma))
+        existente = cur.fetchone()
+
+        if existente:
+            if existente['estado'] == 'completado':
+                return jsonify({'error': 'Ya fue cargado a Contifico para esta fecha y bodega', 'ya_cargado': True}), 409
+            if existente['estado'] in ('pendiente', 'en_proceso'):
+                return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
+            # Estado error: resetear para reintentar
+            cur.execute("""
+                UPDATE inventario_diario.carga_contifico_ejecuciones
+                SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
+                    worker_lock=NULL, error_msg=NULL, timestamp_inicio=NULL, timestamp_fin=NULL,
+                    total_productos=NULL, productos_ok=NULL, productos_error=NULL, productos_error_lista=NULL
+                WHERE id = %s
+            """, (usuario, existente['id']))
+            conn.commit()
+            return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
+
+        # No existe: crear nueva
+        cur.execute("""
+            INSERT INTO inventario_diario.carga_contifico_ejecuciones
+            (bodega, fecha_toma, estado, solicitado_por, solicitado_at)
+            VALUES (%s, %s, 'pendiente', %s, NOW())
+            RETURNING id
+        """, (bodega, fecha_toma, usuario))
+        new_id = cur.fetchone()['id']
+        conn.commit()
+        return jsonify({'id': new_id, 'estado': 'pendiente'})
+    except Exception as e:
+        print(f"Error en /api/carga-contifico/solicitar: {e}")
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/carga-contifico/pendientes', methods=['GET'])
+def carga_contifico_pendientes():
+    """Llamado por el worker. Devuelve tareas pendientes de carga y las marca en_proceso."""
+    token = request.headers.get('X-Worker-Token')
+    if token != WORKER_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+
+    worker_id = request.args.get('worker_id', 'pc-finanzas')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE inventario_diario.carga_contifico_ejecuciones
+            SET estado = 'en_proceso', worker_lock = %s, timestamp_inicio = NOW()
+            WHERE id IN (
+                SELECT id FROM inventario_diario.carga_contifico_ejecuciones
+                WHERE estado = 'pendiente'
+                ORDER BY solicitado_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id, bodega, fecha_toma, solicitado_por
+        """, (worker_id,))
+        rows = cur.fetchall()
+        conn.commit()
+        return jsonify([{
+            'id': r['id'],
+            'bodega': r['bodega'],
+            'fecha_toma': r['fecha_toma'].isoformat() if r['fecha_toma'] else None,
+            'tipo': 'carga_contifico',
+        } for r in rows])
+    except Exception as e:
+        print(f"Error en /api/carga-contifico/pendientes: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/carga-contifico/resultado', methods=['POST'])
+def carga_contifico_resultado():
+    """Llamado por el worker al terminar la carga."""
+    token = request.headers.get('X-Worker-Token')
+    if token != WORKER_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+
+    data = request.json or {}
+    ejec_id = data.get('id')
+    estado = data.get('estado', 'completado')
+    error_msg = data.get('error_msg')
+
+    if not ejec_id:
+        return jsonify({'error': 'id requerido'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE inventario_diario.carga_contifico_ejecuciones
+            SET estado = %s, timestamp_fin = NOW(),
+                total_productos = %s, productos_ok = %s,
+                productos_error = %s, productos_error_lista = %s,
+                error_msg = %s
+            WHERE id = %s
+        """, (
+            estado,
+            data.get('total_productos'),
+            data.get('productos_ok'),
+            data.get('productos_error'),
+            data.get('productos_error_lista'),
+            error_msg,
+            ejec_id
+        ))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        print(f"Error en /api/carga-contifico/resultado: {e}")
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/carga-contifico/estado/<int:ejec_id>', methods=['GET'])
+def carga_contifico_estado(ejec_id):
+    """Polling desde el panel."""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, bodega, fecha_toma, estado, solicitado_at,
+                   timestamp_inicio, timestamp_fin, error_msg,
+                   total_productos, productos_ok, productos_error, productos_error_lista
+            FROM inventario_diario.carga_contifico_ejecuciones WHERE id = %s
+        """, (ejec_id,))
+        r = cur.fetchone()
+        if not r:
+            return jsonify({'error': 'no encontrado'}), 404
+        return jsonify({
+            'id': r['id'],
+            'bodega': r['bodega'],
+            'fecha_toma': r['fecha_toma'].isoformat() if r['fecha_toma'] else None,
+            'estado': r['estado'],
+            'solicitado_at': r['solicitado_at'].isoformat() if r['solicitado_at'] else None,
+            'timestamp_inicio': r['timestamp_inicio'].isoformat() if r['timestamp_inicio'] else None,
+            'timestamp_fin': r['timestamp_fin'].isoformat() if r['timestamp_fin'] else None,
+            'error_msg': r['error_msg'],
+            'total_productos': r['total_productos'],
+            'productos_ok': r['productos_ok'],
+            'productos_error': r['productos_error'],
+            'productos_error_lista': r['productos_error_lista'],
+        })
+    except Exception as e:
+        print(f"Error en /api/carga-contifico/estado: {e}")
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
 
 
 # ==================== ADMIN USUARIOS ====================
