@@ -6939,10 +6939,17 @@ async function cuadrarSolicitar() {
             body: JSON.stringify({
                 bodega, fecha_toma: fecha,
                 fecha_corte_contifico: fechaCorte,
-                usuario: state.usuario?.username || 'panel'
+                usuario: state.usuario?.username || 'panel',
+                rol: state.usuario?.rol || ''
             })
         });
         const data = await r.json();
+        if (r.status === 409) {
+            prog.classList.add('hidden');
+            btn.disabled = false;
+            status.innerHTML = `<div class="cuadrar-status-error"><i class="fas fa-lock"></i> ${data.error || 'Ya fue ejecutado'}</div>`;
+            return;
+        }
         if (!r.ok) throw new Error(data.error || 'Error solicitando');
         progMsg.textContent = `Tarea creada (id ${data.id}). Esperando worker...`;
         progBar.style.width = '15%';
@@ -7121,7 +7128,8 @@ async function cargaSolicitar() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 bodega, fecha_toma: fecha,
-                usuario: state.usuario?.username || 'panel'
+                usuario: state.usuario?.username || 'panel',
+                rol: state.usuario?.rol || ''
             })
         });
         const data = await r.json();

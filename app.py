@@ -3564,13 +3564,14 @@ WORKER_TOKEN = os.environ.get('CRUCE_WORKER_TOKEN', 'worker-foodix-2026-7K3xR9pL
 def cruce_op_solicitar():
     """Llamado desde el panel cuando el usuario presiona CUADRAR.
     Crea una tarea pendiente que el worker tomara.
-    Si ya existe una en estado terminal (completado/error), la resetea.
+    Si ya existe completado, solo admin puede re-ejecutar.
     Si ya hay una pendiente o en proceso, devuelve esa misma."""
     data = request.json or {}
     bodega = data.get('bodega')
     fecha_toma = data.get('fecha_toma')
     fecha_corte = data.get('fecha_corte_contifico') or fecha_toma  # por defecto = fecha_toma
     usuario = data.get('usuario', 'panel')
+    rol = data.get('rol', '')
 
     if bodega not in ('bodega_principal', 'materia_prima', 'planta'):
         return jsonify({'error': 'bodega invalida'}), 400
@@ -3593,8 +3594,27 @@ def cruce_op_solicitar():
             # Ya se esta procesando, devolver la misma
             return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
 
+        if existente and existente['estado'] == 'completado':
+            # Solo admin puede re-ejecutar un cruce ya completado
+            if rol != 'admin':
+                return jsonify({'error': 'Este cruce ya fue ejecutado. Solo el administrador puede re-ejecutarlo.', 'ya_completado': True}), 409
+            # Admin: resetear
+            cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (existente['id'],))
+            cur.execute("""
+                UPDATE inventario_diario.cruce_operativo_ejecuciones
+                SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
+                    fecha_corte_contifico=%s,
+                    worker_lock=NULL, error_msg=NULL,
+                    timestamp_descarga=NULL, timestamp_cruce=NULL,
+                    total_productos_toma=NULL, total_productos_contifico=NULL,
+                    total_cruzados=NULL, total_con_diferencia=NULL, valor_total_dif=NULL
+                WHERE id = %s
+            """, (usuario, fecha_corte, existente['id']))
+            conn.commit()
+            return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
+
         if existente:
-            # Existe pero esta en estado terminal (completado/error): resetear
+            # Estado error: cualquiera puede reintentar
             cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (existente['id'],))
             cur.execute("""
                 UPDATE inventario_diario.cruce_operativo_ejecuciones
@@ -3928,11 +3948,12 @@ def carga_contifico_verificar():
 
 @app.route('/api/carga-contifico/solicitar', methods=['POST'])
 def carga_contifico_solicitar():
-    """Crea tarea de carga. Si ya esta completada, rechaza. Si esta en error, permite reintentar."""
+    """Crea tarea de carga. Si ya esta completada, solo admin puede re-ejecutar."""
     data = request.json or {}
     bodega = data.get('bodega')
     fecha_toma = data.get('fecha_toma')
     usuario = data.get('usuario', 'panel')
+    rol = data.get('rol', '')
 
     if bodega not in ('bodega_principal', 'materia_prima', 'planta'):
         return jsonify({'error': 'bodega invalida'}), 400
@@ -3951,7 +3972,18 @@ def carga_contifico_solicitar():
 
         if existente:
             if existente['estado'] == 'completado':
-                return jsonify({'error': 'Ya fue cargado a Contifico para esta fecha y bodega', 'ya_cargado': True}), 409
+                if rol != 'admin':
+                    return jsonify({'error': 'Ya fue cargado a Contifico. Solo el administrador puede re-ejecutar.', 'ya_cargado': True}), 409
+                # Admin: resetear para re-ejecutar
+                cur.execute("""
+                    UPDATE inventario_diario.carga_contifico_ejecuciones
+                    SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
+                        worker_lock=NULL, error_msg=NULL, timestamp_inicio=NULL, timestamp_fin=NULL,
+                        total_productos=NULL, productos_ok=NULL, productos_error=NULL, productos_error_lista=NULL
+                    WHERE id = %s
+                """, (usuario, existente['id']))
+                conn.commit()
+                return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
             if existente['estado'] in ('pendiente', 'en_proceso'):
                 return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
             # Estado error: resetear para reintentar
