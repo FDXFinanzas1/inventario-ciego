@@ -7029,6 +7029,8 @@ function cuadrarPollEstado(ejecId) {
                         if (hasta.value < fechaToma) hasta.value = fechaToma;
                     }
                     cargarCruceOperativo();
+                    // Recargar fechas de carga a Contifico (nueva fecha con cruce disponible)
+                    cargaCargarFechas();
                     prog.classList.add('hidden');
                     // Abrir automaticamente el detalle
                     verCruceDetalle(ejecId);
