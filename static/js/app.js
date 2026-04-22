@@ -7103,6 +7103,8 @@ async function cargaVerificarEstado() {
 
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-upload"></i> <span>CARGAR A CONTIFICO</span>';
+    btn.style.background = 'linear-gradient(135deg, #27ae60, #2ecc71)';
+    btn.style.opacity = '1';
     status.innerHTML = '';
     prog.classList.add('hidden');
 
@@ -7111,9 +7113,17 @@ async function cargaVerificarEstado() {
         const data = await r.json();
 
         if (data.cargado) {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-check-circle"></i> <span>YA CARGADO</span>';
-            btn.style.opacity = '0.6';
+            const esAdmin = state.usuario?.rol === 'admin';
+            if (esAdmin) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo"></i> <span>RE-CARGAR</span>';
+                btn.style.opacity = '1';
+                btn.style.background = 'linear-gradient(135deg, #d97706, #f59e0b)';
+            } else {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-check-circle"></i> <span>YA CARGADO</span>';
+                btn.style.opacity = '0.6';
+            }
             const fechaFin = data.timestamp_fin ? new Date(data.timestamp_fin).toLocaleString('es-EC') : '';
             status.innerHTML = `<div class="cuadrar-status-ok">
                 <i class="fas fa-check-circle"></i>
@@ -7143,7 +7153,11 @@ async function cargaSolicitar() {
     if (!fecha) { alert('Selecciona una fecha'); return; }
 
     const bodNombres = {bodega_principal:'Bodega Principal', materia_prima:'Materia Prima', planta:'Planta de Produccion'};
-    if (!confirm(`Va a cargar la toma fisica de ${bodNombres[bodega] || bodega} del ${fecha} a Contifico.\n\nEste proceso NO se puede deshacer.\n\nContinuar?`)) return;
+    const esRecarga = btn.textContent.includes('RE-CARGAR');
+    const msgConfirm = esRecarga
+        ? `ATENCION: Esta toma ya fue cargada previamente.\n\nVa a RE-CARGAR la toma fisica de ${bodNombres[bodega] || bodega} del ${fecha} a Contifico.\n\nEsto creara un DUPLICADO en Contifico.\n\nContinuar?`
+        : `Va a cargar la toma fisica de ${bodNombres[bodega] || bodega} del ${fecha} a Contifico.\n\nEste proceso NO se puede deshacer.\n\nContinuar?`;
+    if (!confirm(msgConfirm)) return;
 
     btn.disabled = true;
     status.innerHTML = '';
