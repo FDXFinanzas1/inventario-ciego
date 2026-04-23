@@ -99,6 +99,10 @@
                     <i class="fas fa-calendar-week"></i>
                     <span>Semanal</span>
                 </button>
+                <button class="nav-btn" data-view="evaluacion" style="display:none;">
+                    <i class="fas fa-clipboard-check"></i>
+                    <span>Evaluacion</span>
+                </button>
                 <button class="nav-btn" data-view="correccion" style="display:none;">
                     <i class="fas fa-edit"></i>
                     <span>Corregir</span>
@@ -389,8 +393,11 @@
                             </div>
                         </div>
                         <div class="chart-card chart-card-full">
-                            <div class="chart-card-header">
-                                <i class="fas fa-chart-line"></i> Tendencia de Diferencias (ultimos 30 dias)
+                            <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                <span><i class="fas fa-chart-line"></i> Tendencia de Diferencias</span>
+                                <select id="tendencia-motivo-filter" onchange="actualizarTendenciaMotivo()" style="height:30px; border:1px solid #e2e8f0; border-radius:6px; padding:0 8px; font-size:12px; color:#475569; max-width:220px;">
+                                    <option value="">Todos los motivos</option>
+                                </select>
                             </div>
                             <div class="chart-card-body chart-card-body-line">
                                 <canvas id="chart-tendencia-temporal"></canvas>
@@ -977,6 +984,78 @@
                     <div id="sem-resumen-personas" class="hidden">
                         <h3><i class="fas fa-users"></i> Resumen por Persona</h3>
                         <div id="sem-resumen-contenido"></div>
+                    </div>
+
+                </div>
+
+                <!-- Vista Evaluacion Cualitativa -->
+                <div id="view-evaluacion" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-clipboard-check"></i> Evaluacion Cualitativa de Lideres</h2>
+                    </div>
+
+                    <!-- Filtros -->
+                    <div class="obs-filtros">
+                        <div class="obs-filtro-grupo">
+                            <label for="eval-bodega">Local</label>
+                            <select id="eval-bodega" class="obs-filtro-input">
+                                <option value="">-- Seleccionar --</option>
+                                <option value="real_audiencia">Real Audiencia</option>
+                                <option value="floreana">Floreana</option>
+                                <option value="portugal">Portugal</option>
+                                <option value="santo_cachon_real">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                            </select>
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label for="eval-semana">Semana del</label>
+                            <input type="date" id="eval-semana" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo" style="justify-content:flex-end;">
+                            <label>&nbsp;</label>
+                            <span id="eval-semana-rango" style="font-size:13px;font-weight:600;color:var(--primary);padding:8px 0;"></span>
+                        </div>
+                        <button class="btn-obs-cargar" onclick="evalModuloCargar()">
+                            <i class="fas fa-search"></i> Cargar
+                        </button>
+                    </div>
+
+                    <!-- Formulario de evaluacion -->
+                    <div id="eval-formulario" class="hidden" style="margin-top:16px;">
+                        <div class="cuadrar-card" style="border-left-color:#8b5cf6;">
+                            <div class="cuadrar-header" style="background:linear-gradient(135deg,#7c3aed,#8b5cf6);">
+                                <div class="cuadrar-header-icon" style="background:rgba(255,255,255,0.2);"><i class="fas fa-star"></i></div>
+                                <div class="cuadrar-header-text">
+                                    <h3 id="eval-titulo-local">Evaluacion semanal</h3>
+                                    <p>Califica el desempeno del lider en 5 dimensiones (1 a 5 estrellas)</p>
+                                </div>
+                            </div>
+                            <div style="padding:20px;">
+                                <div id="eval-preguntas"></div>
+                                <div id="eval-resultado" style="margin-top:16px;"></div>
+                                <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:16px;">
+                                    <button class="btn-obs-cargar" style="background:#7c3aed;" onclick="guardarEvalSemanal()">
+                                        <i class="fas fa-save"></i> Guardar Evaluacion
+                                    </button>
+                                </div>
+                                <div id="eval-status" style="margin-top:8px;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ranking de la semana -->
+                    <div id="eval-ranking-card" class="cuadrar-card" style="border-left-color:#f59e0b; margin-top:16px;">
+                        <div class="cuadrar-header" style="background:linear-gradient(135deg,#d97706,#f59e0b);">
+                            <div class="cuadrar-header-icon" style="background:rgba(255,255,255,0.2);"><i class="fas fa-trophy"></i></div>
+                            <div class="cuadrar-header-text">
+                                <h3>Ranking de la semana</h3>
+                                <p>Comparativo entre todos los locales</p>
+                            </div>
+                        </div>
+                        <div style="padding:20px;" id="eval-ranking-body">
+                            <div style="text-align:center; color:#94a3b8; padding:20px;"><i class="fas fa-trophy" style="font-size:30px;"></i><p>Selecciona una semana para ver el ranking</p></div>
+                        </div>
                     </div>
                 </div>
 

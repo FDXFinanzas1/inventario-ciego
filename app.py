@@ -57,7 +57,7 @@ def _get_pool():
     global _connection_pool
     if _connection_pool is None:
         _connection_pool = SimpleConnectionPool(
-            minconn=1, maxconn=5,
+            minconn=2, maxconn=15,
             **DB_CONFIG, cursor_factory=RealDictCursor
         )
     return _connection_pool
@@ -652,12 +652,33 @@ def guardar_observacion():
 
 # ==================== REPORTE MOTIVOS ====================
 
+@app.route('/api/reportes/motivos-lista', methods=['GET'])
+def reporte_motivos_lista():
+    """Devuelve lista de motivos unicos disponibles."""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT motivo FROM inventario_diario.inventario_ciego_conteos
+            WHERE motivo IS NOT NULL AND motivo != ''
+            ORDER BY motivo
+        """)
+        motivos = [r['motivo'] for r in cur.fetchall()]
+        return jsonify(motivos)
+    except Exception as e:
+        return jsonify([])
+    finally:
+        if conn: release_db(conn)
+
+
 @app.route('/api/reportes/motivos', methods=['GET'])
 def reporte_motivos():
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
     bodegas = request.args.getlist('bodega')
     bodegas = [b for b in bodegas if b]
+    producto = request.args.get('producto', '')
 
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta requeridos'}), 400
@@ -700,6 +721,9 @@ def reporte_motivos():
               AND motivo IS NOT NULL AND motivo != ''
         """
         params1 = [fecha_desde, fecha_hasta]
+        if producto:
+            query1 += " AND codigo = %s"
+            params1.append(producto)
         if len(bodegas) == 1:
             query1 += " AND local = %s"
             params1.append(bodegas[0])
@@ -719,6 +743,9 @@ def reporte_motivos():
               AND motivo IS NOT NULL AND motivo != ''
         """
         params2 = [fecha_desde, fecha_hasta]
+        if producto:
+            query2 += " AND codigo = %s"
+            params2.append(producto)
         if len(bodegas) == 1:
             query2 += " AND local = %s"
             params2.append(bodegas[0])
@@ -1084,6 +1111,176 @@ def cargar_inventario():
     finally:
         if conn:
             release_db(conn)
+
+@app.route('/api/inventario/generar-conteo-operativo', methods=['POST'])
+def generar_conteo_operativo():
+    """Crea tarea para que el worker descargue stock de Contifico y genere conteo.
+    - Bodega Principal: 8 fijos + 5 aleatorios semanales
+    - Materia Prima / Planta: 10 aleatorios semanales
+    Body: {bodega, fecha}"""
+    data = request.json or {}
+    bodega = data.get('bodega')
+    fecha = data.get('fecha')
+
+    BODEGAS_VALIDAS = ('bodega_principal', 'materia_prima', 'planta')
+    if bodega not in BODEGAS_VALIDAS:
+        return jsonify({'error': 'bodega invalida'}), 400
+    if not fecha:
+        return jsonify({'error': 'fecha requerida'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Verificar si ya existen productos para esta fecha+bodega
+        cur.execute("""
+            SELECT COUNT(*) as n FROM inventario_diario.inventario_ciego_conteos
+            WHERE fecha = %s AND local = %s
+        """, (fecha, bodega))
+        ya_existe = cur.fetchone()['n']
+        if ya_existe > 0:
+            return jsonify({'error': f'Ya existen {ya_existe} productos para {bodega} en {fecha}. No se puede regenerar.', 'ya_existe': True}), 409
+
+        # Crear tarea para el worker
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventario_diario.conteo_operativo_tareas (
+                id SERIAL PRIMARY KEY,
+                bodega VARCHAR(50) NOT NULL,
+                fecha DATE NOT NULL,
+                estado VARCHAR(20) DEFAULT 'pendiente',
+                solicitado_at TIMESTAMP DEFAULT NOW(),
+                worker_lock VARCHAR(50),
+                timestamp_inicio TIMESTAMP,
+                timestamp_fin TIMESTAMP,
+                total_productos INT,
+                fijos INT,
+                aleatorios INT,
+                error_msg TEXT,
+                UNIQUE(bodega, fecha)
+            )
+        """)
+        conn.commit()
+
+        # Verificar si ya hay tarea pendiente/en_proceso
+        cur.execute("""
+            SELECT id, estado FROM inventario_diario.conteo_operativo_tareas
+            WHERE bodega = %s AND fecha = %s
+        """, (bodega, fecha))
+        existente = cur.fetchone()
+        if existente:
+            if existente['estado'] in ('pendiente', 'en_proceso'):
+                return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
+            if existente['estado'] == 'completado':
+                return jsonify({'error': 'Ya se genero el conteo para esta fecha', 'ya_existe': True}), 409
+            # Error: resetear
+            cur.execute("""
+                UPDATE inventario_diario.conteo_operativo_tareas
+                SET estado='pendiente', solicitado_at=NOW(), worker_lock=NULL, error_msg=NULL,
+                    timestamp_inicio=NULL, timestamp_fin=NULL, total_productos=NULL
+                WHERE id = %s
+            """, (existente['id'],))
+            conn.commit()
+            return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
+
+        cur.execute("""
+            INSERT INTO inventario_diario.conteo_operativo_tareas (bodega, fecha)
+            VALUES (%s, %s) RETURNING id
+        """, (bodega, fecha))
+        new_id = cur.fetchone()['id']
+        conn.commit()
+        return jsonify({'id': new_id, 'estado': 'pendiente'})
+    except Exception as e:
+        print(f"Error en generar-conteo-operativo: {e}")
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/conteo-op/pendientes', methods=['GET'])
+def conteo_op_pendientes():
+    """Worker toma tareas de conteo operativo."""
+    token = request.headers.get('X-Worker-Token')
+    if token != WORKER_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+    worker_id = request.args.get('worker_id', 'pc-finanzas')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE inventario_diario.conteo_operativo_tareas
+            SET estado = 'en_proceso', worker_lock = %s, timestamp_inicio = NOW()
+            WHERE id IN (
+                SELECT id FROM inventario_diario.conteo_operativo_tareas
+                WHERE estado = 'pendiente' ORDER BY solicitado_at ASC LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id, bodega, fecha
+        """, (worker_id,))
+        rows = cur.fetchall()
+        conn.commit()
+        return jsonify([{
+            'id': r['id'], 'bodega': r['bodega'],
+            'fecha': r['fecha'].isoformat() if r['fecha'] else None,
+            'tipo': 'conteo_operativo',
+        } for r in rows])
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/conteo-op/resultado', methods=['POST'])
+def conteo_op_resultado():
+    """Worker reporta resultado del conteo operativo."""
+    token = request.headers.get('X-Worker-Token')
+    if token != WORKER_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+    data = request.json or {}
+    ejec_id = data.get('id')
+    estado = data.get('estado', 'completado')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE inventario_diario.conteo_operativo_tareas
+            SET estado = %s, timestamp_fin = NOW(),
+                total_productos = %s, fijos = %s, aleatorios = %s, error_msg = %s
+            WHERE id = %s
+        """, (estado, data.get('total_productos'), data.get('fijos'), data.get('aleatorios'),
+              data.get('error_msg'), ejec_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/conteo-op/estado/<int:ejec_id>', methods=['GET'])
+def conteo_op_estado(ejec_id):
+    """Polling del panel."""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM inventario_diario.conteo_operativo_tareas WHERE id = %s", (ejec_id,))
+        r = cur.fetchone()
+        if not r: return jsonify({'error': 'no encontrado'}), 404
+        return jsonify({
+            'id': r['id'], 'bodega': r['bodega'], 'estado': r['estado'],
+            'total_productos': r['total_productos'], 'fijos': r['fijos'],
+            'aleatorios': r['aleatorios'], 'error_msg': r['error_msg'],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
 
 @app.route('/api/historico', methods=['GET'])
 def historico():
@@ -1703,13 +1900,33 @@ def reporte_tendencias_temporal():
     bodegas = request.args.getlist('bodega')
     bodegas = [b for b in bodegas if b]
     dias = request.args.get('dias', 30, type=int)
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    motivo = request.args.get('motivo', '')
+    producto = request.args.get('producto', '')
 
     conn = None
     try:
         conn = get_db()
         cur = conn.cursor()
 
-        query = """
+        if fecha_desde and fecha_hasta:
+            where_fecha = "fecha >= %s AND fecha <= %s"
+            params = [fecha_desde, fecha_hasta]
+        else:
+            where_fecha = "fecha >= CURRENT_DATE - %s"
+            params = [dias]
+
+        motivo_filter = ""
+        if motivo:
+            motivo_filter = " AND motivo = %s"
+            params.append(motivo)
+
+        if producto:
+            motivo_filter += " AND codigo = %s"
+            params.append(producto)
+
+        query = f"""
             SELECT
                 fecha,
                 local,
@@ -1717,9 +1934,8 @@ def reporte_tendencias_temporal():
                     AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
                     THEN 1 END) as total_con_diferencia
             FROM inventario_diario.inventario_ciego_conteos
-            WHERE fecha >= CURRENT_DATE - %s
+            WHERE {where_fecha}{motivo_filter}
         """
-        params = [dias]
 
         if len(bodegas) == 1:
             query += " AND local = %s"
@@ -4134,6 +4350,194 @@ def carga_contifico_estado(ejec_id):
         return jsonify({'error': str(e)[:200]}), 500
     finally:
         if conn: release_db(conn)
+
+
+# ============================================================
+# MODULO: Evaluacion Semanal por Local
+# ============================================================
+
+EVAL_LOCALES = [
+    {'id': 'real_audiencia', 'nombre': 'Chios Real Audiencia'},
+    {'id': 'floreana', 'nombre': 'Chios Floreana'},
+    {'id': 'portugal', 'nombre': 'Chios Portugal'},
+    {'id': 'santo_cachon_real', 'nombre': 'Santo Cachon Real'},
+    {'id': 'santo_cachon_portugal', 'nombre': 'Santo Cachon Portugal'},
+    {'id': 'simon_bolon', 'nombre': 'Simon Bolon'},
+]
+
+@app.route('/api/eval/categorias', methods=['GET'])
+def eval_categorias():
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT id, nombre, descripcion, orden, criterios FROM inventario_diario.eval_categorias WHERE activa = TRUE ORDER BY orden")
+        return jsonify(cur.fetchall())
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/eval/locales', methods=['GET'])
+def eval_locales():
+    return jsonify(EVAL_LOCALES)
+
+
+@app.route('/api/eval/guardar', methods=['POST'])
+def eval_guardar():
+    """Guarda evaluacion semanal. Body: {local, semana_inicio, semana_fin, evaluaciones: [{categoria_id, puntaje, comentario}], evaluado_por}"""
+    data = request.json or {}
+    local = data.get('local')
+    semana_inicio = data.get('semana_inicio')
+    semana_fin = data.get('semana_fin')
+    evaluaciones = data.get('evaluaciones', [])
+    evaluado_por = data.get('evaluado_por', 'admin')
+
+    if not local or not semana_inicio or not evaluaciones:
+        return jsonify({'error': 'local, semana_inicio y evaluaciones requeridos'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        guardados = 0
+        for ev in evaluaciones:
+            cur.execute("""
+                INSERT INTO inventario_diario.eval_semanal
+                (local, semana_inicio, semana_fin, categoria_id, puntaje, comentario, evaluado_por, evaluado_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (local, semana_inicio, categoria_id)
+                DO UPDATE SET puntaje = EXCLUDED.puntaje, comentario = EXCLUDED.comentario,
+                              evaluado_por = EXCLUDED.evaluado_por, evaluado_at = NOW()
+            """, (local, semana_inicio, semana_fin, ev['categoria_id'], ev['puntaje'], ev.get('comentario', ''), evaluado_por))
+            guardados += 1
+        conn.commit()
+        return jsonify({'ok': True, 'guardados': guardados})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/eval/semana', methods=['GET'])
+def eval_semana():
+    """Obtiene evaluaciones de una semana. Params: semana_inicio, local (opcional)"""
+    semana = request.args.get('semana_inicio')
+    local = request.args.get('local')
+    if not semana:
+        return jsonify({'error': 'semana_inicio requerido'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        if local:
+            cur.execute("""
+                SELECT e.id, e.local, e.categoria_id, c.nombre as categoria, e.puntaje, e.comentario, e.evaluado_por, e.evaluado_at
+                FROM inventario_diario.eval_semanal e
+                JOIN inventario_diario.eval_categorias c ON c.id = e.categoria_id
+                WHERE e.semana_inicio = %s AND e.local = %s
+                ORDER BY c.orden
+            """, (semana, local))
+        else:
+            cur.execute("""
+                SELECT e.id, e.local, e.categoria_id, c.nombre as categoria, e.puntaje, e.comentario, e.evaluado_por, e.evaluado_at
+                FROM inventario_diario.eval_semanal e
+                JOIN inventario_diario.eval_categorias c ON c.id = e.categoria_id
+                WHERE e.semana_inicio = %s
+                ORDER BY e.local, c.orden
+            """, (semana,))
+        return jsonify(cur.fetchall())
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/eval/ranking', methods=['GET'])
+def eval_ranking():
+    """Ranking de locales por promedio. Params: semana_inicio (opcional, default ultima disponible), ultimas_n (semanas a promediar, default 1)"""
+    semana = request.args.get('semana_inicio')
+    ultimas_n = int(request.args.get('ultimas_n', '1'))
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        if semana:
+            cur.execute("""
+                SELECT local, ROUND(AVG(puntaje)::numeric, 2) as promedio, COUNT(DISTINCT categoria_id) as categorias_evaluadas
+                FROM inventario_diario.eval_semanal
+                WHERE semana_inicio = %s
+                GROUP BY local ORDER BY promedio DESC
+            """, (semana,))
+        else:
+            cur.execute("""
+                SELECT local, ROUND(AVG(puntaje)::numeric, 2) as promedio, COUNT(DISTINCT semana_inicio) as semanas
+                FROM inventario_diario.eval_semanal
+                WHERE semana_inicio >= (
+                    SELECT MAX(semana_inicio) - interval '%s weeks' FROM inventario_diario.eval_semanal
+                )
+                GROUP BY local ORDER BY promedio DESC
+            """ % max(1, ultimas_n))
+        return jsonify(cur.fetchall())
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/eval/tendencia', methods=['GET'])
+def eval_tendencia():
+    """Tendencia historica por local. Params: local (opcional), limite (semanas, default 12)"""
+    local = request.args.get('local')
+    limite = int(request.args.get('limite', '12'))
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        if local:
+            cur.execute("""
+                SELECT semana_inicio, ROUND(AVG(puntaje)::numeric, 2) as promedio
+                FROM inventario_diario.eval_semanal
+                WHERE local = %s
+                GROUP BY semana_inicio ORDER BY semana_inicio DESC LIMIT %s
+            """, (local, limite))
+        else:
+            cur.execute("""
+                SELECT local, semana_inicio, ROUND(AVG(puntaje)::numeric, 2) as promedio
+                FROM inventario_diario.eval_semanal
+                GROUP BY local, semana_inicio ORDER BY semana_inicio DESC, promedio DESC
+                LIMIT %s
+            """, (limite * 6,))
+        return jsonify(cur.fetchall())
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/eval/semanas-disponibles', methods=['GET'])
+def eval_semanas_disponibles():
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT semana_inicio, semana_fin
+            FROM inventario_diario.eval_semanal
+            ORDER BY semana_inicio DESC LIMIT 52
+        """)
+        return jsonify(cur.fetchall())
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/evaluacion')
+def evaluacion_page():
+    return render_template('evaluacion.html')
 
 
 # ==================== ADMIN USUARIOS ====================

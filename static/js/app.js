@@ -136,7 +136,7 @@ async function cargarDashboard() {
         const prodParam = producto ? `&producto=${encodeURIComponent(producto)}` : '';
         const [resDash, resTend] = await Promise.all([
             fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`),
-            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?dias=30${bodegaParam}`)
+            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`)
         ]);
 
         if (resDash.ok && resTend.ok) {
@@ -149,11 +149,12 @@ async function cargarDashboard() {
             renderChartProductosFallan(datosDash.top_descuadre);
             renderChartDiferenciasBodega(datosDash.bodegas);
             renderChartTendenciaTemporal(datosTend);
+            _cargarMotivosDropdown();
             renderTopDescuadre(datosDash.top_descuadre);
 
             // Cargar motivos por separado para no bloquear el resto
             try {
-                const resMotivos = await fetch(`${CONFIG.API_URL}/api/reportes/motivos?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}`);
+                const resMotivos = await fetch(`${CONFIG.API_URL}/api/reportes/motivos?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`);
                 const datosMotivos = resMotivos.ok ? await resMotivos.json() : [];
                 renderChartMotivos(datosMotivos);
             } catch(e) { console.log('Error cargando motivos:', e); }
@@ -477,6 +478,59 @@ function renderTopDescuadre(items) {
             <td style="font-weight:700;color:#123450;">$${p.valor_descuadre.toFixed(2)}</td>
         </tr>`;
     }).join('');
+}
+
+async function actualizarTendenciaMotivo() {
+    const sel = document.getElementById('tendencia-motivo-filter');
+    if (!sel) return;
+    const motivo = sel.value || '';
+    const fechaDesde = document.getElementById('dash-fecha-desde')?.value || '';
+    const fechaHasta = document.getElementById('dash-fecha-hasta')?.value || '';
+    const marca = document.getElementById('dash-marca')?.value || '';
+    const bodega = document.getElementById('dash-bodega')?.value || '';
+
+    if (!fechaDesde || !fechaHasta) return;
+
+    let bodegaParam = '';
+    if (bodega) {
+        bodegaParam = '&bodega=' + bodega;
+    } else if (marca && MARCAS_BODEGAS && MARCAS_BODEGAS[marca]) {
+        bodegaParam = MARCAS_BODEGAS[marca].map(function(b) { return '&bodega=' + b; }).join('');
+    }
+
+    var motivoParam = motivo ? '&motivo=' + encodeURIComponent(motivo) : '';
+    var url = CONFIG.API_URL + '/api/reportes/tendencias-temporal?fecha_desde=' + fechaDesde + '&fecha_hasta=' + fechaHasta + bodegaParam + motivoParam;
+
+    try {
+        var r = await fetch(url);
+        if (r.ok) {
+            var datos = await r.json();
+            renderChartTendenciaTemporal(datos);
+        }
+    } catch(e) { console.error('Error actualizando tendencia por motivo:', e); }
+}
+
+function _cargarMotivosDropdown(datos) {
+    const sel = document.getElementById('tendencia-motivo-filter');
+    if (!sel) return;
+    // Extraer motivos unicos de los datos del dashboard (motivos ya cargados)
+    const valorActual = sel.value;
+    // No resetear si ya tiene opciones cargadas por otro medio
+    if (sel.options.length <= 1) {
+        // Cargar motivos desde endpoint
+        fetch(`${CONFIG.API_URL}/api/reportes/motivos-lista`)
+            .then(r => r.json())
+            .then(motivos => {
+                sel.innerHTML = '<option value="">Todos los motivos</option>';
+                if (Array.isArray(motivos)) {
+                    motivos.forEach(m => {
+                        if (m) sel.innerHTML += `<option value="${m}">${m}</option>`;
+                    });
+                }
+                if (valorActual) sel.value = valorActual;
+            })
+            .catch(() => {});
+    }
 }
 
 function renderChartTendenciaTemporal(datos) {
@@ -910,7 +964,7 @@ function showMainScreen() {
 
     // Mostrar/ocultar nav segun modulos asignados al usuario
     const userModulos = (state.user && state.user.modulos) || [];
-    const isAdmin = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+    const isAdmin = _esAdmin();
 
     document.querySelectorAll('.nav-btn[data-view]').forEach(btn => {
         const mod = btn.dataset.view;
@@ -1003,6 +1057,19 @@ function cambiarVista(viewName) {
         semanalInit();
     }
 
+    // Auto-inicializar evaluacion al entrar
+    if (viewName === 'evaluacion') {
+        const evalFecha = document.getElementById('eval-semana');
+        if (!evalFecha.value) {
+            const hoy = new Date();
+            const d = new Date(hoy);
+            const dia = d.getDay();
+            const diff = dia === 0 ? -6 : 1 - dia;
+            d.setDate(d.getDate() + diff);
+            evalFecha.value = d.toISOString().split('T')[0];
+        }
+    }
+
     // Auto-cargar usuarios y roles al entrar
     if (viewName === 'usuarios') {
         usuariosCargar();
@@ -1022,7 +1089,7 @@ function cambiarVista(viewName) {
         }
         // Filtrar bodegas del dashboard según permisos del usuario
         // Admin y Supervisor ven todos los locales
-        const esAdminDash = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
+        const esAdminDash = _esAdminOSupervisor();
         if (!esAdminDash) {
             const userBodegas = state.user?.bodegas || [];
             const dashBodega = document.getElementById('dash-bodega');
@@ -1135,8 +1202,13 @@ async function consultarInventario() {
             }
 
             if (data.productos.length === 0) {
-                showToast('No hay datos para esta fecha y bodega', 'warning');
-                renderProductosVacio();
+                const bodegasOperativas = ['bodega_principal', 'materia_prima', 'planta'];
+                if (bodegasOperativas.includes(local)) {
+                    renderProductosVacioOperativo(local, fecha);
+                } else {
+                    showToast('No hay datos para esta fecha y bodega', 'warning');
+                    renderProductosVacio();
+                }
                 return;
             }
 
@@ -1663,7 +1735,7 @@ function initObservaciones() {
 
     // Llenar bodegas si está vacío
     if (selectBodega.options.length <= 1) {
-        const esAdminObs = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
+        const esAdminObs = _esAdminOSupervisor();
         const userBodegas = state.user?.bodegas || [];
         CONFIG.BODEGAS.forEach(b => {
             if (esAdminObs || userBodegas.includes(b.id)) {
@@ -1772,7 +1844,7 @@ function renderObservaciones() {
 
     const todosConteo = [...productosConDif, ...productosGestionados];
     // Admin y Supervisor pueden justificar (marcar corregido)
-    const esAdmin = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
+    const esAdmin = _esAdminOSupervisor();
 
     let html = '';
 
@@ -3005,6 +3077,94 @@ function renderProductosVacio() {
     if (obsContainer) obsContainer.innerHTML = '';
     const asigContainer = document.getElementById('asignaciones-container');
     if (asigContainer) asigContainer.innerHTML = '';
+}
+
+function renderProductosVacioOperativo(bodega, fecha) {
+    const NOMBRES = {bodega_principal:'Bodega Principal', materia_prima:'Materia Prima', planta:'Planta de Produccion'};
+    const container = document.getElementById('productos-list');
+    container.innerHTML = `
+        <div class="empty-state" style="padding:40px;">
+            <i class="fas fa-dice" style="font-size:40px; color:var(--primary); margin-bottom:12px;"></i>
+            <p style="margin-bottom:16px;">No hay productos cargados para <b>${NOMBRES[bodega] || bodega}</b> en esta fecha.</p>
+            <button class="btn-obs-cargar" style="background:var(--primary);" onclick="generarConteoOperativo('${bodega}', '${fecha}')">
+                <i class="fas fa-random"></i> Generar 10 productos aleatorios
+            </button>
+            <p style="margin-top:8px; font-size:12px; color:var(--text-light);">Se seleccionaran 10 productos al azar del catalogo de Contifico</p>
+        </div>
+    `;
+    document.getElementById('productos-total').textContent = '0';
+    document.getElementById('productos-contados').textContent = '0';
+}
+
+let _conteoOpPollHandle = null;
+
+async function generarConteoOperativo(bodega, fecha) {
+    const container = document.getElementById('productos-list');
+    container.innerHTML = `
+        <div style="text-align:center; padding:30px;">
+            <i class="fas fa-spinner fa-spin" style="font-size:28px; color:var(--primary);"></i>
+            <p style="margin-top:12px; font-weight:600;" id="conteo-op-msg">Solicitando descarga de Contifico...</p>
+            <p style="font-size:12px; color:var(--text-light);">El worker en PC FINANZAS descargara el stock actual</p>
+        </div>`;
+
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/inventario/generar-conteo-operativo`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ bodega, fecha })
+        });
+        const data = await r.json();
+
+        if (r.status === 409) {
+            showToast(data.error || 'Ya existen productos para esta fecha', 'warning');
+            document.getElementById('btn-consultar').click();
+            return;
+        }
+        if (!r.ok) throw new Error(data.error || 'Error generando');
+
+        // Polling para esperar al worker
+        const msgEl = document.getElementById('conteo-op-msg');
+        if (msgEl) msgEl.textContent = `Tarea creada (id ${data.id}). Esperando worker...`;
+        conteoOpPollEstado(data.id);
+    } catch(e) {
+        showToast('Error: ' + e.message, 'error');
+        renderProductosVacioOperativo(bodega, fecha);
+    }
+}
+
+function conteoOpPollEstado(ejecId) {
+    let intentos = 0;
+    if (_conteoOpPollHandle) clearInterval(_conteoOpPollHandle);
+
+    _conteoOpPollHandle = setInterval(async () => {
+        intentos++;
+        const msgEl = document.getElementById('conteo-op-msg');
+        try {
+            const r = await fetch(`${CONFIG.API_URL}/api/conteo-op/estado/${ejecId}`);
+            const d = await r.json();
+
+            if (d.estado === 'pendiente') {
+                if (msgEl) msgEl.textContent = `Esperando worker... (${intentos * 5}s)`;
+            } else if (d.estado === 'en_proceso') {
+                if (msgEl) msgEl.textContent = `Worker descargando stock de Contifico...`;
+            } else if (d.estado === 'completado') {
+                clearInterval(_conteoOpPollHandle);
+                showToast(`Conteo generado: ${d.fijos || 0} fijos + ${d.aleatorios || 0} aleatorios`, 'success');
+                document.getElementById('btn-consultar').click();
+            } else if (d.estado === 'error') {
+                clearInterval(_conteoOpPollHandle);
+                showToast('Error: ' + (d.error_msg || 'desconocido'), 'error');
+                const bodega = document.getElementById('bodega-select').value;
+                const fecha = document.getElementById('fecha-conteo').value;
+                renderProductosVacioOperativo(bodega, fecha);
+            }
+
+            if (intentos > 120) {
+                clearInterval(_conteoOpPollHandle);
+                if (msgEl) msgEl.textContent = 'Tiempo excedido. Verifica que el worker este corriendo.';
+            }
+        } catch(e) { console.error('poll conteo-op error:', e); }
+    }, 5000);
 }
 
 // ==================== PRODUCTOS ====================
@@ -5530,7 +5690,7 @@ let _semanalDiferencias = []; // diferencias de la semana actual
 
 function semanalInit() {
     const sel = document.getElementById('sem-bodega');
-    const esAdminOSupervisor = state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
+    const esAdminOSupervisor = _esAdminOSupervisor();
 
     // Si no es admin ni supervisor, filtrar bodegas: solo mostrar las asignadas al usuario
     if (sel && !esAdminOSupervisor) {
@@ -5714,7 +5874,7 @@ function semanalRenderSemanas(semanas) {
 
     let html = '<h3 class="sem-seccion-titulo"><i class="fas fa-list"></i> Semanas de esta Bodega</h3><div class="sem-cards-grid">';
 
-    const esAdminSem = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+    const esAdminSem = _esAdmin();
 
     semanas.forEach(s => {
         const esCerrada = s.estado === 'cerrada';
@@ -6823,7 +6983,7 @@ async function semanalCargarPendientes() {
             return;
         }
         alertaEl.classList.remove('hidden');
-        const esAdminPend = state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+        const esAdminPend = _esAdmin();
         let html = '<div class="sem-alerta-header-v2"><i class="fas fa-clock"></i> Semanas sin cerrar</div><div class="sem-pendientes-lista">';
         data.forEach(s => {
             const ini = _semanalFormatFecha(s.fecha_inicio);
@@ -6899,6 +7059,302 @@ function cruceBodegaGlobalCambio() {
 function getCruceBodegaGlobal() {
     const sel = document.getElementById('cruce-bodega-global');
     return sel ? sel.value : 'bodega_principal';
+}
+
+// ============================================================
+// EVALUACION CUALITATIVA DEL LIDER (dentro de Semanal)
+// ============================================================
+let _evalCategorias = null;
+
+function _evalParseCriterios(str) {
+    if (!str) return {};
+    const r = {};
+    str.split('|').forEach(c => {
+        const m = c.match(/^(\d+):\s*(.+)$/);
+        if (m) r[parseInt(m[1])] = m[2].trim();
+    });
+    return r;
+}
+
+function evalModuloCargar() {
+    const bodega = document.getElementById('eval-bodega').value;
+    const fechaRaw = document.getElementById('eval-semana').value;
+    if (!bodega) { showToast('Selecciona un local', 'error'); return; }
+    if (!fechaRaw) { showToast('Selecciona una fecha', 'error'); return; }
+    // Ajustar a lunes
+    const d = new Date(fechaRaw + 'T12:00:00');
+    const dia = d.getDay();
+    const diff = dia === 0 ? -6 : 1 - dia;
+    d.setDate(d.getDate() + diff);
+    const lunes = d.toISOString().split('T')[0];
+    document.getElementById('eval-semana').value = lunes;
+    const fin = new Date(d);
+    fin.setDate(fin.getDate() + 6);
+    document.getElementById('eval-semana-rango').textContent = `${lunes} al ${fin.toISOString().split('T')[0]}`;
+
+    _evalCurrentLocal = bodega;
+    _evalCurrentSemanaInicio = lunes;
+    _evalCurrentSemanaFin = fin.toISOString().split('T')[0];
+    evalSemanalCargar();
+}
+
+let _evalCurrentLocal = null;
+let _evalCurrentSemanaInicio = null;
+let _evalCurrentSemanaFin = null;
+
+async function evalSemanalCargar() {
+    const bodega = _evalCurrentLocal || (_semanalSemanaActual && _semanalSemanaActual.local);
+    const semanaInicio = _evalCurrentSemanaInicio || (_semanalSemanaActual && _semanalSemanaActual.fecha_inicio);
+    if (!bodega || !semanaInicio) return;
+
+    const formulario = document.getElementById('eval-formulario');
+    if (formulario) formulario.classList.remove('hidden');
+
+    // Cargar categorias (cache)
+    if (!_evalCategorias) {
+        try {
+            const r = await fetch(`${CONFIG.API_URL}/api/eval/categorias`);
+            _evalCategorias = await r.json();
+        } catch(e) { return; }
+    }
+
+    // Titulo
+    const LOCALES_EVAL = {'real_audiencia':'Real Audiencia','floreana':'Floreana','portugal':'Portugal','santo_cachon_real':'Santo Cachon Real','santo_cachon_portugal':'Santo Cachon Portugal','simon_bolon':'Simon Bolon'};
+    const tituloEl = document.getElementById('eval-titulo-local');
+    if (tituloEl) tituloEl.textContent = `Evaluacion - ${LOCALES_EVAL[bodega] || bodega}`;
+
+    // Cargar evaluacion existente
+    let existentes = {};
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/eval/semana?semana_inicio=${semanaInicio}&local=${bodega}`);
+        const data = await r.json();
+        if (Array.isArray(data)) data.forEach(d => { existentes[d.categoria_id] = d; });
+    } catch(e) {}
+
+    // Render preguntas
+    const container = document.getElementById('eval-preguntas');
+    container.innerHTML = _evalCategorias.map((cat, idx) => {
+        const ex = existentes[cat.id];
+        const puntaje = ex ? ex.puntaje : 0;
+        const comentario = ex ? (ex.comentario || '') : '';
+        const criterios = _evalParseCriterios(cat.criterios);
+        const criterioActual = puntaje > 0 ? criterios[puntaje] : '';
+
+        return `
+        <div style="padding:14px 0; ${idx > 0 ? 'border-top:1px solid #e2e8f0;' : ''}">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:250px;">
+                    <div style="font-weight:600; color:#1e293b; font-size:14px;">P${idx+1}. ${cat.nombre}</div>
+                    <div style="font-size:12px; color:#94a3b8; margin-top:3px;">${cat.descripcion || ''}</div>
+                </div>
+                <div style="text-align:right;">
+                    <div class="eval-stars" data-evalcat="${cat.id}" style="display:flex; gap:4px;">
+                        ${[1,2,3,4,5].map(n => `
+                            <span class="eval-star ${n <= puntaje ? 'eval-star-active' : ''}"
+                                  data-val="${n}"
+                                  onclick="evalSetStar(${cat.id}, ${n})"
+                                  onmouseenter="evalPreviewStar(${cat.id}, ${n})"
+                                  onmouseleave="evalClearPreview(${cat.id})"
+                                  style="font-size:22px; cursor:pointer; color:${n <= puntaje ? '#f59e0b' : '#e2e8f0'}; transition:all 0.15s; user-select:none;">
+                                <i class="fas fa-star"></i>
+                            </span>
+                        `).join('')}
+                    </div>
+                    <div id="eval-criterio-${cat.id}" style="font-size:11px; color:#64748b; margin-top:3px; max-width:280px; text-align:right; min-height:14px;">
+                        ${criterioActual}
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top:6px;">
+                <input type="text" id="eval-comment-${cat.id}" value="${escapeHtml(comentario)}"
+                       placeholder="Comentario opcional..."
+                       style="width:100%; border:1px solid #e2e8f0; border-radius:6px; padding:6px 10px; font-size:13px; color:#475569;">
+            </div>
+        </div>`;
+    }).join('');
+
+    // Mostrar resultado si ya evaluado
+    evalActualizarResultado();
+
+    // Cargar ranking
+    evalCargarRanking(semanaInicio);
+}
+
+function evalSetStar(catId, val) {
+    const container = document.querySelector(`.eval-stars[data-evalcat="${catId}"]`);
+    container.querySelectorAll('.eval-star').forEach(s => {
+        const v = parseInt(s.dataset.val);
+        s.style.color = v <= val ? '#f59e0b' : '#e2e8f0';
+        s.classList.toggle('eval-star-active', v <= val);
+    });
+    const cat = _evalCategorias.find(c => c.id === catId);
+    const criterios = cat ? _evalParseCriterios(cat.criterios) : {};
+    const desc = document.getElementById(`eval-criterio-${catId}`);
+    if (desc) desc.textContent = criterios[val] || '';
+    evalActualizarResultado();
+}
+
+function evalPreviewStar(catId, val) {
+    const container = document.querySelector(`.eval-stars[data-evalcat="${catId}"]`);
+    container.querySelectorAll('.eval-star').forEach(s => {
+        const v = parseInt(s.dataset.val);
+        if (!s.classList.contains('eval-star-active')) {
+            s.style.color = v <= val ? '#fcd34d' : '#e2e8f0';
+        }
+    });
+    const cat = _evalCategorias.find(c => c.id === catId);
+    const criterios = cat ? _evalParseCriterios(cat.criterios) : {};
+    const desc = document.getElementById(`eval-criterio-${catId}`);
+    if (desc) desc.textContent = criterios[val] || '';
+}
+
+function evalClearPreview(catId) {
+    const container = document.querySelector(`.eval-stars[data-evalcat="${catId}"]`);
+    container.querySelectorAll('.eval-star').forEach(s => {
+        const v = parseInt(s.dataset.val);
+        s.style.color = s.classList.contains('eval-star-active') ? '#f59e0b' : '#e2e8f0';
+    });
+    // Restaurar criterio activo
+    const activas = container.querySelectorAll('.eval-star-active').length;
+    const cat = _evalCategorias.find(c => c.id === catId);
+    const criterios = cat ? _evalParseCriterios(cat.criterios) : {};
+    const desc = document.getElementById(`eval-criterio-${catId}`);
+    if (desc) desc.textContent = activas > 0 ? (criterios[activas] || '') : '';
+}
+
+function evalActualizarResultado() {
+    if (!_evalCategorias) return;
+    let total = 0, evaluadas = 0;
+    _evalCategorias.forEach(cat => {
+        const container = document.querySelector(`.eval-stars[data-evalcat="${cat.id}"]`);
+        if (!container) return;
+        const activas = container.querySelectorAll('.eval-star-active').length;
+        if (activas > 0) { total += activas; evaluadas++; }
+    });
+
+    const resEl = document.getElementById('eval-resultado');
+    if (evaluadas === 0) { resEl.innerHTML = ''; return; }
+
+    let calificacion, color, icon;
+    if (total >= 21) { calificacion = 'Excelente gestion'; color = '#059669'; icon = '🟢'; }
+    else if (total >= 15) { calificacion = 'Buen desempeno'; color = '#2563eb'; icon = '🔵'; }
+    else if (total >= 8) { calificacion = 'Gestion aceptable'; color = '#d97706'; icon = '🟡'; }
+    else { calificacion = 'Gestion critica'; color = '#dc2626'; icon = '🔴'; }
+
+    resEl.innerHTML = `
+        <div style="background:${color}10; border:1px solid ${color}30; border-radius:10px; padding:14px 18px; display:flex; align-items:center; gap:14px;">
+            <span style="font-size:28px;">${icon}</span>
+            <div>
+                <div style="font-weight:700; color:${color}; font-size:18px;">${total} / 25</div>
+                <div style="font-size:13px; color:${color}; font-weight:500;">${calificacion}</div>
+            </div>
+            <div style="margin-left:auto; font-size:12px; color:#94a3b8;">${evaluadas}/${_evalCategorias.length} categorias</div>
+        </div>`;
+}
+
+async function guardarEvalSemanal() {
+    if (!_evalCategorias) return;
+    const bodega = _evalCurrentLocal || (_semanalSemanaActual && _semanalSemanaActual.local);
+    const semanaInicio = _evalCurrentSemanaInicio || (_semanalSemanaActual && _semanalSemanaActual.fecha_inicio);
+    const semanaFin = _evalCurrentSemanaFin || (_semanalSemanaActual && _semanalSemanaActual.fecha_fin);
+    if (!bodega || !semanaInicio) { showToast('Selecciona local y semana', 'error'); return; }
+
+    const evaluaciones = [];
+    let faltantes = 0;
+    _evalCategorias.forEach(cat => {
+        const container = document.querySelector(`.eval-stars[data-evalcat="${cat.id}"]`);
+        if (!container) return;
+        const activas = container.querySelectorAll('.eval-star-active').length;
+        const comentario = document.getElementById(`eval-comment-${cat.id}`)?.value || '';
+        if (activas === 0) { faltantes++; return; }
+        evaluaciones.push({ categoria_id: cat.id, puntaje: activas, comentario });
+    });
+
+    if (faltantes > 0) {
+        showToast(`Falta calificar ${faltantes} pregunta(s)`, 'error');
+        return;
+    }
+
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/eval/guardar`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                local: bodega, semana_inicio: semanaInicio, semana_fin: semanaFin,
+                evaluaciones, evaluado_por: state.usuario?.username || 'admin'
+            })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error);
+        showToast('Evaluacion guardada', 'success');
+        document.getElementById('eval-status').innerHTML =
+            `<div style="color:#059669; font-size:13px;"><i class="fas fa-check-circle"></i> Guardado correctamente</div>`;
+        evalCargarRanking(semanaInicio);
+    } catch(e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function evalCargarRanking(semanaInicio) {
+    const container = document.getElementById('eval-ranking-body');
+    try {
+        const [rankRes, detRes] = await Promise.all([
+            fetch(`${CONFIG.API_URL}/api/eval/ranking?semana_inicio=${semanaInicio}`),
+            fetch(`${CONFIG.API_URL}/api/eval/semana?semana_inicio=${semanaInicio}`)
+        ]);
+        const ranking = await rankRes.json();
+        const detalle = await detRes.json();
+
+        if (!Array.isArray(ranking) || ranking.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;"><i class="fas fa-trophy" style="font-size:30px;"></i><p>Sin evaluaciones para esta semana</p></div>';
+            return;
+        }
+
+        const detPorLocal = {};
+        if (Array.isArray(detalle)) detalle.forEach(d => {
+            if (!detPorLocal[d.local]) detPorLocal[d.local] = [];
+            detPorLocal[d.local].push(d);
+        });
+
+        const LOCALES_NOMBRES = {
+            'real_audiencia': 'Chios Real Audiencia', 'floreana': 'Chios Floreana', 'portugal': 'Chios Portugal',
+            'santo_cachon_real': 'Santo Cachon Real', 'santo_cachon_portugal': 'Santo Cachon Portugal', 'simon_bolon': 'Simon Bolon'
+        };
+
+        container.innerHTML = ranking.map((r, i) => {
+            const pos = i + 1;
+            const prom = parseFloat(r.promedio);
+            const total = Math.round(prom * 5);
+            const pct = (prom / 5 * 100).toFixed(0);
+            const nombre = LOCALES_NOMBRES[r.local] || r.local;
+            const cats = detPorLocal[r.local] || [];
+
+            let calColor, calIcon;
+            if (total >= 21) { calColor = '#059669'; calIcon = '🟢'; }
+            else if (total >= 15) { calColor = '#2563eb'; calIcon = '🔵'; }
+            else if (total >= 8) { calColor = '#d97706'; calIcon = '🟡'; }
+            else { calColor = '#dc2626'; calIcon = '🔴'; }
+
+            const medallas = ['🥇','🥈','🥉'];
+
+            return `
+            <div style="display:flex; align-items:center; gap:14px; padding:12px 0; ${i > 0 ? 'border-top:1px solid #f1f5f9;' : ''}">
+                <div style="font-size:20px; width:30px; text-align:center;">${medallas[i] || `<span style="color:#94a3b8; font-size:14px; font-weight:600;">${pos}</span>`}</div>
+                <div style="flex:1;">
+                    <div style="font-weight:600; color:#1e293b;">${nombre}</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+                        ${cats.map(c => `<span style="font-size:11px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:2px 6px;">${c.categoria.split(' ')[0]}: ${'★'.repeat(c.puntaje)}<span style="color:#e2e8f0;">${'★'.repeat(5-c.puntaje)}</span></span>`).join('')}
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:22px; font-weight:700; color:${calColor};">${prom.toFixed(1)}</div>
+                    <div style="font-size:11px; color:#94a3b8;">/ 5.0</div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        console.error(e);
+    }
 }
 
 // CUADRAR - Solicitar nuevo cruce operativo (boton + worker)
@@ -7595,6 +8051,18 @@ function _puede(modulo, accion) {
     const perms = user.permisos;
     if (!perms || !perms[modulo]) return false;
     return perms[modulo][accion] === true;
+}
+
+// Helper: retorna true si el usuario EFECTIVO (respetando impersonacion) es admin
+function _esAdmin() {
+    if (state._impersonando) return state._impersonando.rol === 'admin';
+    return state.user && (state.user.rol === 'admin' || state.user.username === 'admin');
+}
+
+// Helper: retorna true si el usuario EFECTIVO es admin o supervisor
+function _esAdminOSupervisor() {
+    if (state._impersonando) return state._impersonando.rol === 'admin' || state._impersonando.rol === 'supervisor';
+    return state.user && (state.user.rol === 'admin' || state.user.rol === 'supervisor' || state.user.username === 'admin');
 }
 
 // ==================== IMPERSONACION (solo admin) ====================
