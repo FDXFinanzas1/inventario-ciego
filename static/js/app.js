@@ -1202,7 +1202,7 @@ async function consultarInventario() {
             }
 
             if (data.productos.length === 0) {
-                const bodegasOperativas = ['bodega_principal', 'materia_prima', 'planta'];
+                const bodegasOperativas = ['bodega_principal', 'materia_prima'];
                 if (bodegasOperativas.includes(local)) {
                     renderProductosVacioOperativo(local, fecha);
                 } else {

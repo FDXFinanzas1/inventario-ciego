@@ -1122,7 +1122,7 @@ def generar_conteo_operativo():
     bodega = data.get('bodega')
     fecha = data.get('fecha')
 
-    BODEGAS_VALIDAS = ('bodega_principal', 'materia_prima', 'planta')
+    BODEGAS_VALIDAS = ('bodega_principal', 'materia_prima')
     if bodega not in BODEGAS_VALIDAS:
         return jsonify({'error': 'bodega invalida'}), 400
     if not fecha:
