@@ -986,6 +986,12 @@ function showMainScreen() {
 
 // ==================== NAVEGACION ====================
 
+function toggleModule(moduleName) {
+    const mod = document.querySelector(`.nav-module[data-module="${moduleName}"]`);
+    if (!mod) return;
+    mod.classList.toggle('collapsed');
+}
+
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebar-overlay');

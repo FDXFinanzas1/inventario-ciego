@@ -5716,6 +5716,35 @@ tr.cruce-solo-cont { background: #F1F5F9; }
 /* ============================================================
    CUADRAR - Bloque de solicitud de cruce operativo
    ============================================================ */
+/* Sidebar - Modulos colapsables */
+.nav-module { margin-bottom: 2px; }
+.nav-module-header {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border: none; background: none; cursor: pointer;
+    color: #94a3b8; font-size: 13px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; transition: all 0.2s;
+}
+.nav-module-header:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
+.nav-module-header i:first-child { font-size: 14px; width: 20px; text-align: center; }
+.nav-module-header span { flex: 1; text-align: left; }
+.nav-module-arrow { font-size: 10px; transition: transform 0.2s; }
+.nav-module.collapsed .nav-module-arrow { transform: rotate(-90deg); }
+.nav-module.collapsed .nav-module-items { display: none !important; }
+.nav-module-items { padding-left: 12px; }
+.nav-module-items .nav-btn { font-size: 13px; padding: 8px 12px; }
+.nav-module-items .nav-btn i { font-size: 13px; }
+.nav-module-empty {
+    padding: 10px 16px; color: #64748b; font-size: 12px; font-style: italic;
+}
+.nav-module-empty i { margin-right: 6px; }
+.nav-module-separator {
+    height: 1px; background: rgba(255,255,255,0.1); margin: 8px 12px;
+}
+@media (max-width: 640px) {
+    .nav-module-header { padding: 10px 14px; font-size: 12px; }
+    .nav-module-items .nav-btn { padding: 8px 10px; font-size: 12px; }
+}
+
 /* Sub-tabs del cruce operativo */
 .cruce-subtabs {
     display: flex;
