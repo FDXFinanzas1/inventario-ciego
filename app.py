@@ -4543,7 +4543,7 @@ def evaluacion_page():
 # ============================================================
 # MODULO: DEPOSITOS (lee desde AirTable)
 # ============================================================
-AIRTABLE_DEPOSITOS_TOKEN = os.environ.get('AIRTABLE_DEPOSITOS_TOKEN', '')
+AIRTABLE_DEPOSITOS_TOKEN = os.environ.get('AIRTABLE_DEPOSITOS_TOKEN', '') or os.environ.get('AIRTABLE_TOKEN', '')
 AIRTABLE_DEPOSITOS_BASE = 'apppZXgUChlBLbVpR'
 AIRTABLE_DEPOSITOS_TABLE = 'tbldo5QTH6bBpgYbx'
 AIRTABLE_TIENDAS_TABLE = 'tblxloBdnbdsGcuKR'
