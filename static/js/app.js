@@ -977,6 +977,16 @@ function showMainScreen() {
         }
     });
 
+    // Mostrar items de modulos pero dejar colapsados (el usuario abre lo que necesita)
+    document.querySelectorAll('.nav-module').forEach(mod => {
+        const items = mod.querySelector('.nav-module-items');
+        if (items) {
+            // Hacer visibles los items internos pero colapsar el modulo
+            items.style.display = '';
+            mod.classList.add('collapsed');
+        }
+    });
+
     // Recargar bodegas filtradas segun usuario
     cargarBodegas();
 
@@ -985,6 +995,35 @@ function showMainScreen() {
 }
 
 // ==================== NAVEGACION ====================
+
+// ==================== DASHBOARD GENERAL ====================
+function dashGeneralTab(modulo) {
+    document.querySelectorAll('.dash-general-panel').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.cruce-subtab').forEach(t => t.classList.remove('active'));
+    const panel = document.getElementById(`dash-panel-${modulo}`);
+    if (panel) panel.style.display = '';
+    const tab = document.querySelector(`.cruce-subtab[data-subtab="dash-${modulo === 'inventario' ? 'inv' : modulo}"]`);
+    if (tab) tab.classList.add('active');
+
+    // Auto-cargar con mes actual
+    const hoy = new Date();
+    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+    const hoyStr = hoy.toISOString().split('T')[0];
+
+    if (modulo === 'depositos') {
+        const dEl = document.getElementById('dep-dash-desde');
+        const hEl = document.getElementById('dep-dash-hasta');
+        if (dEl && !dEl.value) dEl.value = primerDia;
+        if (hEl && !hEl.value) hEl.value = hoyStr;
+        depCargarDashboard();
+    }
+    if (modulo === 'inventario') {
+        const dEl = document.getElementById('dash-fecha-desde');
+        const hEl = document.getElementById('dash-fecha-hasta');
+        if (dEl && !dEl.value) dEl.value = primerDia;
+        if (hEl && !hEl.value) hEl.value = hoyStr;
+    }
+}
 
 function toggleModule(moduleName) {
     const mod = document.querySelector(`.nav-module[data-module="${moduleName}"]`);
@@ -1061,6 +1100,31 @@ function cambiarVista(viewName) {
     // Auto-inicializar semanal al entrar
     if (viewName === 'semanal') {
         semanalInit();
+    }
+
+    // Auto-inicializar dashboard general
+    if (viewName === 'dashboard-general') {
+        dashGeneralTab('inventario');
+    }
+
+    // Auto-inicializar depositos al entrar
+    if (viewName === 'dep-pendientes') { depCargarPendientes(); }
+    if (viewName === 'dep-respaldo') { depCargarSinRespaldo(); }
+    if (viewName === 'dep-historial' || viewName === 'dep-descuadres') {
+        const hoy = new Date();
+        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+        const hoyStr = hoy.toISOString().split('T')[0];
+        const prefijos = {'dep-historial':'dep-fecha','dep-descuadres':'dep-desc'};
+        const pref = prefijos[viewName];
+        if (pref) {
+            const dEl = document.getElementById(`${pref}-desde`);
+            const hEl = document.getElementById(`${pref}-hasta`);
+            if (dEl && !dEl.value) dEl.value = primerDiaMes;
+            if (hEl && !hEl.value) hEl.value = hoyStr;
+        }
+        // Auto-cargar
+        if (viewName === 'dep-historial') depCargarHistorial();
+        if (viewName === 'dep-descuadres') depCargarDescuadres();
     }
 
     // Auto-inicializar evaluacion al entrar
@@ -7361,6 +7425,955 @@ async function evalCargarRanking(semanaInicio) {
     } catch(e) {
         console.error(e);
     }
+}
+
+// ============================================================
+// MODULO DEPOSITOS
+// ============================================================
+
+let _depCache = {};
+let _depListaActual = [];
+
+async function depCargarPendientes() {
+    const container = document.getElementById('dep-sidebar-list');
+    const estado = document.getElementById('dep-pend-estado')?.value || '';
+    container.innerHTML = '<div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+
+    try {
+        // Cargar mes actual por defecto
+        const hoy = new Date();
+        const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+        const hoyStr = hoy.toISOString().split('T')[0];
+
+        // Por defecto solo pendientes de verificar (no retirados ni aprobados)
+        const estadoFiltro = estado || 'Valor pendiente Verificar';
+        let url = `${CONFIG.API_URL}/api/depositos/listar?fecha_desde=${primerDia}&fecha_hasta=${hoyStr}&estado=${encodeURIComponent(estadoFiltro)}`;
+
+        const r = await fetch(url);
+        const data = await r.json();
+        _depListaActual = data.depositos || [];
+        _depListaActual.forEach(d => { _depCache[d.id] = d; });
+
+        depRenderSidebar(_depListaActual);
+    } catch(e) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${e.message}</p></div>`;
+    }
+}
+
+function depRenderSidebar(deps) {
+    const container = document.getElementById('dep-sidebar-list');
+    if (deps.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:30px;"><i class="fas fa-check-circle" style="color:var(--success);"></i><p>Sin depositos</p></div>';
+        return;
+    }
+
+    // Agrupar por local
+    const grupos = {};
+    deps.forEach(d => {
+        const local = d.local || 'Sin local';
+        if (!grupos[local]) grupos[local] = [];
+        grupos[local].push(d);
+    });
+
+    let html = '';
+    for (const [local, items] of Object.entries(grupos)) {
+        html += `<div class="dep-sidebar-group">
+            <div class="dep-sidebar-group-header"><i class="fas fa-store" style="margin-right:6px;opacity:0.6;"></i>${local}</div>`;
+        items.forEach(d => {
+            const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+            html += `
+            <div class="dep-sidebar-item" data-depid="${d.id}" onclick="depSeleccionar('${d.id}')">
+                <div class="dep-sidebar-item-fecha">${fechaCorta}</div>
+                <div class="dep-sidebar-item-local">${d.local}</div>
+                <div class="dep-sidebar-item-resp">${d.responsable || ''}</div>
+                <div class="dep-sidebar-item-monto">$${(d.monto_contado||0).toFixed(2)}</div>
+            </div>`;
+        });
+        html += '</div>';
+    }
+    container.innerHTML = html;
+
+    // Auto-seleccionar el primero
+    if (deps.length > 0) depSeleccionar(deps[0].id);
+}
+
+function depFiltrarSidebar() {
+    const buscar = (document.getElementById('dep-buscar')?.value || '').toLowerCase();
+    if (!buscar) {
+        depRenderSidebar(_depListaActual);
+        return;
+    }
+    const filtrados = _depListaActual.filter(d =>
+        (d.local || '').toLowerCase().includes(buscar) ||
+        (d.responsable || '').toLowerCase().includes(buscar) ||
+        String(d.secuencia || '').includes(buscar)
+    );
+    depRenderSidebar(filtrados);
+}
+
+function depSeleccionar(id) {
+    // Highlight en sidebar
+    document.querySelectorAll('.dep-sidebar-item').forEach(el => el.classList.remove('active'));
+    const item = document.querySelector(`.dep-sidebar-item[data-depid="${id}"]`);
+    if (item) item.classList.add('active');
+
+    const d = _depCache[id];
+    if (!d) return;
+
+    depRenderDetalle(d);
+}
+
+function depRenderDetalle(d, targetId) {
+    const panel = document.getElementById(targetId || 'dep-detalle');
+    const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+    const esCuadra = d.cuadre === 'Cuadra';
+
+    // Estado badge
+    const estadoMap = {
+        'Valor pendiente Verificar': {bg:'#fef3c7',color:'#92400e',text:'Pendiente Verificar'},
+        'Valor retirado por líder': {bg:'#dbeafe',color:'#1e40af',text:'Retirado por Lider'},
+        'Enviado a Contabilidad': {bg:'#e0e7ff',color:'#3730a3',text:'Enviado a Contabilidad'},
+        'Aprobado por Contabilidad': {bg:'#d1fae5',color:'#065f46',text:'Aprobado'},
+    };
+    const est = estadoMap[d.estado] || {bg:'#f1f5f9',color:'#64748b',text:d.estado||'Sin estado'};
+
+    // Evidencias
+    const evidencias = (d.evidencias || []).map(e => `
+        <div class="dep-evidencia-item">
+            <a href="${e.url}" target="_blank"><img src="${e.thumb || e.url}"></a>
+            <div class="dep-evidencia-item-name">${e.filename || 'Imagen'}</div>
+        </div>
+    `).join('');
+
+    // Verificacion
+    let verificacionHtml = '';
+    if (d.estado === 'Valor pendiente Verificar' || !d.estado) {
+        verificacionHtml = `
+        <div class="dep-verificacion">
+            <h4>Verificacion de Conteo <span style="background:${est.bg};color:${est.color};padding:4px 12px;border-radius:20px;font-size:12px;">${est.text}</span></h4>
+            <div class="dep-verif-field">
+                <div class="dep-verif-label">Monto A Recibir</div>
+                <div class="dep-verif-value"><input type="number" id="dep-inp-monto" step="0.01" placeholder="Ingrese el monto contado" style="width:200px;height:36px;border:1px solid var(--border);border-radius:8px;padding:0 12px;font-size:15px;font-weight:700;"></div>
+            </div>
+            <div class="dep-verif-field">
+                <div class="dep-verif-label">Diferencia</div>
+                <div class="dep-verif-value" id="dep-dif-preview" style="font-weight:700;color:#94a3b8;">--</div>
+            </div>
+            <div class="dep-verif-field">
+                <div class="dep-verif-label">Testigo de Conteo</div>
+                <div class="dep-verif-value">
+                    <select id="dep-inp-testigo" style="width:100%;max-width:300px;height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;" data-type="record-link">
+                        <option value="">-- Seleccionar testigo --</option>
+                    </select>
+                </div>
+            </div>
+            <div class="dep-verif-field">
+                <div class="dep-verif-label">Observacion</div>
+                <div class="dep-verif-value">
+                    <select id="dep-inp-obs" style="height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;min-width:250px;">
+                        <option>No existe Observación</option>
+                        <option>Diferencias entre efectivo y papeleta</option>
+                        <option>Diferencia en conteo</option>
+                        <option>Papeletas incompletas</option>
+                        <option>Papeletas con error en el llenado</option>
+                        <option>Se detecta billete falso</option>
+                        <option>No existe evidencia fotográfica</option>
+                        <option>Registro tardio en sistema</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="dep-acciones">
+            <button onclick="depAccionVerificar('${d.id}')" style="padding:10px 28px;background:linear-gradient(135deg,var(--primary),#2563eb);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;box-shadow:0 3px 10px rgba(37,99,235,0.25);">
+                <i class="fas fa-check" style="margin-right:6px;"></i>Verificar y Retirar
+            </button>
+        </div>`;
+    } else if (d.estado === 'Valor retirado por líder') {
+        verificacionHtml = `
+        <div class="dep-verificacion">
+            <h4>Verificacion de Conteo <span style="background:${est.bg};color:${est.color};padding:4px 12px;border-radius:20px;font-size:12px;">${est.text}</span></h4>
+            <div class="dep-verif-field"><div class="dep-verif-label">Monto A Recibir</div><div class="dep-verif-value" style="font-weight:700;">$${(d.monto_recibir||0).toFixed(2)}</div></div>
+            <div class="dep-verif-field"><div class="dep-verif-label">Diferencia</div><div class="dep-verif-value" style="font-weight:700;color:${esCuadra ? '#059669' : '#dc2626'};">${d.diferencia != null ? '$' + Math.abs(d.diferencia).toFixed(2) : '-'} ${d.cuadre ? '(' + d.cuadre + ')' : ''}</div></div>
+            <div class="dep-verif-field"><div class="dep-verif-label">Observacion</div><div class="dep-verif-value">${d.observacion || '-'}</div></div>
+        </div>
+        <div class="dep-acciones">
+            <button onclick="depAccionEnviar('${d.id}')" style="padding:10px 28px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;box-shadow:0 3px 10px rgba(37,99,235,0.25);">
+                <i class="fas fa-paper-plane" style="margin-right:6px;"></i>Enviar a Contabilidad
+            </button>
+        </div>`;
+    } else if (d.estado === 'Enviado a Contabilidad') {
+        // Evidencia del deposito bancario
+        const evDeposito = (d.evidencias_deposito || []).map(e =>
+            `<div class="dep-evidencia-item"><a href="${e.url}" target="_blank"><img src="${e.thumb || e.url}"></a><div class="dep-evidencia-item-name">${e.filename || 'Comprobante'}</div></div>`
+        ).join('') || '<span style="color:var(--text-light);font-size:13px;">Sin comprobante adjunto</span>';
+
+        verificacionHtml = `
+        <div class="dep-verificacion">
+            <h4>Verificacion de Conteo <span style="background:${est.bg};color:${est.color};padding:4px 12px;border-radius:20px;font-size:12px;">${est.text}</span></h4>
+            <div class="dep-verif-field"><div class="dep-verif-label">Monto A Recibir</div><div class="dep-verif-value" style="font-weight:700;">$${(d.monto_recibir||0).toFixed(2)}</div></div>
+            <div class="dep-verif-field"><div class="dep-verif-label">Diferencia</div><div class="dep-verif-value" style="font-weight:700;color:${esCuadra ? '#059669' : '#dc2626'};">${d.diferencia != null ? '$' + Math.abs(d.diferencia).toFixed(2) : '-'} (${d.cuadre || '-'})</div></div>
+            <div class="dep-verif-field"><div class="dep-verif-label">Observacion</div><div class="dep-verif-value">${d.observacion || '-'}</div></div>
+        </div>
+        <div class="dep-verificacion" style="margin-top:12px;border-color:var(--success);">
+            <h4><i class="fas fa-receipt" style="margin-right:6px;color:var(--success);"></i>Comprobante de Deposito Bancario</h4>
+            <div style="margin-bottom:16px;">${evDeposito}</div>
+            <div class="dep-verif-field">
+                <div class="dep-verif-label">Calificacion</div>
+                <div class="dep-verif-value">
+                    <select id="dep-inp-calificacion" style="height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;min-width:200px;">
+                        <option value="Deposito a tiempo">Deposito a tiempo</option>
+                        <option value="Deposito tardio">Deposito tardio</option>
+                        <option value="Deposito con inconsistencias">Deposito con inconsistencias</option>
+                    </select>
+                </div>
+            </div>
+            <div class="dep-verif-field">
+                <div class="dep-verif-label">Observacion Contabilidad</div>
+                <div class="dep-verif-value">
+                    <input type="text" id="dep-inp-obs-contab" placeholder="Observacion adicional (opcional)" style="width:100%;max-width:400px;height:36px;border:1px solid var(--border);border-radius:8px;padding:0 12px;font-size:13px;">
+                </div>
+            </div>
+        </div>
+        <div class="dep-acciones">
+            <button onclick="depAccionAprobar('${d.id}')" style="padding:10px 28px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;box-shadow:0 3px 10px rgba(5,150,105,0.25);">
+                <i class="fas fa-check-double" style="margin-right:6px;"></i>Aprobar Deposito
+            </button>
+        </div>`;
+    } else {
+        // Aprobado - solo lectura
+        const evDeposito = (d.evidencias_deposito || []).map(e =>
+            `<div class="dep-evidencia-item"><a href="${e.url}" target="_blank"><img src="${e.thumb || e.url}"></a><div class="dep-evidencia-item-name">${e.filename || 'Comprobante'}</div></div>`
+        ).join('');
+
+        verificacionHtml = `
+        <div class="dep-verificacion">
+            <h4>Verificacion de Conteo <span style="background:${est.bg};color:${est.color};padding:4px 12px;border-radius:20px;font-size:12px;">${est.text}</span></h4>
+            <div class="dep-verif-field"><div class="dep-verif-label">Monto A Recibir</div><div class="dep-verif-value" style="font-weight:700;">$${(d.monto_recibir||0).toFixed(2)}</div></div>
+            <div class="dep-verif-field"><div class="dep-verif-label">Diferencia</div><div class="dep-verif-value" style="font-weight:700;color:${esCuadra ? '#059669' : '#dc2626'};">${d.diferencia != null ? '$' + Math.abs(d.diferencia).toFixed(2) : '-'} (${d.cuadre || '-'})</div></div>
+            <div class="dep-verif-field"><div class="dep-verif-label">Observacion</div><div class="dep-verif-value">${d.observacion || '-'}</div></div>
+        </div>
+        ${evDeposito ? `
+        <div class="dep-verificacion" style="margin-top:12px;border-color:var(--success);">
+            <h4><i class="fas fa-receipt" style="margin-right:6px;color:var(--success);"></i>Comprobante de Deposito Bancario</h4>
+            <div>${evDeposito}</div>
+        </div>` : ''}`;
+    }
+
+    panel.innerHTML = `
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,var(--bg-light),var(--bg-white));">
+        <div>
+            <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:600;letter-spacing:0.5px;">Secuencia de Caja</div>
+            <div style="font-size:26px;font-weight:800;color:var(--primary);">#${d.secuencia || '-'}</div>
+            <div style="font-size:13px;color:var(--text-gray);margin-top:2px;">${fechaCorta}</div>
+        </div>
+        <div style="text-align:right;">
+            <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:600;">Monto Contado</div>
+            <div style="font-size:24px;font-weight:800;color:var(--text-dark);">$${(d.monto_contado||0).toFixed(2)}</div>
+            <span style="background:${est.bg};color:${est.color};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;">${est.text}</span>
+        </div>
+    </div>
+    <div style="padding:16px 24px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="padding:12px;background:var(--bg-light);border-radius:var(--radius-sm);border:1px solid var(--border-light);">
+                <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:6px;"><i class="fas fa-calendar" style="margin-right:4px;"></i>Fecha</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text-dark);">${fechaCorta}</div>
+            </div>
+            <div style="padding:12px;background:var(--bg-light);border-radius:var(--radius-sm);border:1px solid var(--border-light);">
+                <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:6px;"><i class="fas fa-file-alt" style="margin-right:4px;"></i>Papeletas</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text-dark);">${d.num_depositos || 0} deposito(s)</div>
+            </div>
+        </div>
+
+        <div style="margin-top:12px;padding:14px;background:var(--bg-light);border-radius:var(--radius-sm);border:1px solid var(--border-light);">
+            <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:6px;"><i class="fas fa-store" style="margin-right:4px;"></i>Local</div>
+            <div style="font-size:15px;font-weight:700;color:var(--text-dark);">${d.local}</div>
+            ${d.local_ubicacion ? `<div style="font-size:12px;color:var(--text-gray);margin-top:2px;"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:var(--accent);"></i>${d.local_ubicacion}</div>` : ''}
+        </div>
+
+        <div style="margin-top:12px;padding:14px;background:var(--bg-light);border-radius:var(--radius-sm);border:1px solid var(--border-light);">
+            <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:6px;"><i class="fas fa-user" style="margin-right:4px;"></i>Responsable de Caja</div>
+            <div style="font-size:15px;font-weight:700;color:var(--text-dark);">${d.responsable || '-'}</div>
+            ${d.responsable_ingreso ? `<div style="font-size:12px;color:var(--text-gray);margin-top:2px;">Fecha Ingreso: ${d.responsable_ingreso}</div>` : ''}
+        </div>
+
+        ${evidencias ? `
+        <div style="margin-top:16px;">
+            <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:8px;"><i class="fas fa-camera" style="margin-right:4px;"></i>Evidencia</div>
+            <div class="dep-evidencia-grid">${evidencias}</div>
+        </div>` : ''}
+    </div>
+    ${verificacionHtml}`;
+
+    // Cargar trabajadores para testigo
+    const selTestigo = document.getElementById('dep-inp-testigo');
+    if (selTestigo && selTestigo.options.length <= 1) {
+        fetch(`${CONFIG.API_URL}/api/depositos/trabajadores`)
+            .then(r => r.json())
+            .then(trabajadores => {
+                selTestigo.innerHTML = '<option value="">-- Seleccionar testigo --</option>' +
+                    trabajadores.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('');
+            }).catch(() => {});
+    }
+
+    // Listener para calcular diferencia en tiempo real
+    const inp = document.getElementById('dep-inp-monto');
+    if (inp) {
+        inp.addEventListener('input', () => {
+            const montoRecibir = parseFloat(inp.value) || 0;
+            const dif = (d.monto_contado || 0) - montoRecibir;
+            const difEl = document.getElementById('dep-dif-preview');
+            if (difEl) {
+                difEl.textContent = '$' + Math.abs(dif).toFixed(2) + (Math.abs(dif) < 0.01 ? ' (Cuadra)' : ' (Descuadra)');
+                difEl.style.color = Math.abs(dif) < 0.01 ? '#059669' : '#dc2626';
+            }
+        });
+    }
+}
+
+let _depHistLista = [];
+
+async function depCargarHistorial() {
+    const desde = document.getElementById('dep-fecha-desde').value;
+    const hasta = document.getElementById('dep-fecha-hasta').value;
+    const cuadre = document.getElementById('dep-hist-cuadre')?.value || '';
+    if (!desde || !hasta) { showToast('Selecciona fechas', 'error'); return; }
+    const container = document.getElementById('dep-hist-sidebar-list');
+    container.innerHTML = '<div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+    try {
+        let url = `${CONFIG.API_URL}/api/depositos/listar?fecha_desde=${desde}&fecha_hasta=${hasta}`;
+        if (cuadre) url += `&cuadre=${cuadre}`;
+        const r = await fetch(url);
+        const data = await r.json();
+        _depHistLista = data.depositos || [];
+        _depHistLista.forEach(d => { _depCache[d.id] = d; });
+        depRenderHistSidebar(_depHistLista);
+    } catch(e) { container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${e.message}</p></div>`; }
+}
+
+function depRenderHistSidebar(deps) {
+    const container = document.getElementById('dep-hist-sidebar-list');
+    if (deps.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:30px;"><i class="fas fa-inbox"></i><p>Sin depositos</p></div>';
+        return;
+    }
+    const grupos = {};
+    deps.forEach(d => {
+        const local = d.local || 'Sin local';
+        if (!grupos[local]) grupos[local] = [];
+        grupos[local].push(d);
+    });
+    let html = '';
+    for (const [local, items] of Object.entries(grupos)) {
+        html += `<div class="dep-sidebar-group"><div class="dep-sidebar-group-header"><i class="fas fa-store" style="margin-right:6px;opacity:0.6;"></i>${local} (${items.length})</div>`;
+        items.forEach(d => {
+            const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+            const cuadreIcon = d.cuadre === 'Cuadra' ? '<i class="fas fa-check-circle" style="color:#059669;font-size:10px;margin-left:4px;"></i>' : d.cuadre === 'Descuadra' ? '<i class="fas fa-times-circle" style="color:#dc2626;font-size:10px;margin-left:4px;"></i>' : '';
+            html += `<div class="dep-sidebar-item" data-depid="${d.id}" onclick="depSeleccionarHist('${d.id}')">
+                <div class="dep-sidebar-item-fecha">${fechaCorta}${cuadreIcon}</div>
+                <div class="dep-sidebar-item-local">${d.local}</div>
+                <div class="dep-sidebar-item-resp">${d.responsable || ''}</div>
+                <div class="dep-sidebar-item-monto">$${(d.monto_contado||0).toFixed(2)}</div>
+            </div>`;
+        });
+        html += '</div>';
+    }
+    container.innerHTML = html;
+    if (deps.length > 0) depSeleccionarHist(deps[0].id);
+}
+
+function depFiltrarHistSidebar() {
+    const buscar = (document.getElementById('dep-hist-buscar')?.value || '').toLowerCase();
+    if (!buscar) { depRenderHistSidebar(_depHistLista); return; }
+    const filtrados = _depHistLista.filter(d =>
+        (d.local || '').toLowerCase().includes(buscar) ||
+        (d.responsable || '').toLowerCase().includes(buscar) ||
+        String(d.secuencia || '').includes(buscar)
+    );
+    depRenderHistSidebar(filtrados);
+}
+
+function depSeleccionarHist(id) {
+    document.querySelectorAll('#dep-hist-sidebar-list .dep-sidebar-item').forEach(el => el.classList.remove('active'));
+    const item = document.querySelector(`#dep-hist-sidebar-list .dep-sidebar-item[data-depid="${id}"]`);
+    if (item) item.classList.add('active');
+    const d = _depCache[id];
+    if (!d) return;
+    depRenderDetalle(d, 'dep-hist-detalle');
+}
+
+let _depDescLista = [];
+
+async function depCargarDescuadres() {
+    const desde = document.getElementById('dep-desc-desde').value;
+    const hasta = document.getElementById('dep-desc-hasta').value;
+    if (!desde || !hasta) { showToast('Selecciona fechas', 'error'); return; }
+    const container = document.getElementById('dep-desc-sidebar-list');
+    container.innerHTML = '<div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/listar?fecha_desde=${desde}&fecha_hasta=${hasta}&cuadre=Descuadra`);
+        const data = await r.json();
+        _depDescLista = data.depositos || [];
+        _depDescLista.forEach(d => { _depCache[d.id] = d; });
+
+        if (_depDescLista.length === 0) {
+            container.innerHTML = '<div class="empty-state" style="padding:30px;color:var(--success);"><i class="fas fa-check-circle"></i><p>Sin descuadres</p></div>';
+            return;
+        }
+
+        const grupos = {};
+        _depDescLista.forEach(d => { const l = d.local || 'Sin local'; if (!grupos[l]) grupos[l] = []; grupos[l].push(d); });
+        let html = '';
+        for (const [local, items] of Object.entries(grupos)) {
+            html += `<div class="dep-sidebar-group"><div class="dep-sidebar-group-header" style="background:#fef2f2;color:#991b1b;"><i class="fas fa-exclamation-triangle" style="margin-right:6px;opacity:0.6;"></i>${local} (${items.length})</div>`;
+            items.forEach(d => {
+                const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+                html += `<div class="dep-sidebar-item" data-depid="${d.id}" onclick="depSeleccionarDesc('${d.id}')" style="border-left:3px solid #dc2626;">
+                    <div class="dep-sidebar-item-fecha">${fechaCorta} <i class="fas fa-times-circle" style="color:#dc2626;font-size:10px;"></i></div>
+                    <div class="dep-sidebar-item-local">${d.local}</div>
+                    <div class="dep-sidebar-item-resp">${d.responsable || ''}</div>
+                    <div class="dep-sidebar-item-monto" style="color:#dc2626;">-$${Math.abs(d.diferencia||0).toFixed(2)}</div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+        container.innerHTML = html;
+        if (_depDescLista.length > 0) depSeleccionarDesc(_depDescLista[0].id);
+    } catch(e) { container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${e.message}</p></div>`; }
+}
+
+// ===== SUBIR RESPALDO =====
+let _depRespLista = [];
+
+async function depCargarSinRespaldo() {
+    const container = document.getElementById('dep-resp-sidebar-list');
+    container.innerHTML = '<div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+    try {
+        const hoy = new Date();
+        const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/listar?fecha_desde=${primerDia}&fecha_hasta=${hoy.toISOString().split('T')[0]}&estado=${encodeURIComponent('Valor retirado por líder')}`);
+        const data = await r.json();
+        _depRespLista = data.depositos || [];
+        _depRespLista.forEach(d => { _depCache[d.id] = d; });
+
+        if (_depRespLista.length === 0) {
+            container.innerHTML = '<div class="empty-state" style="padding:30px;color:var(--success);"><i class="fas fa-check-circle"></i><p>Todos los depositos tienen respaldo</p></div>';
+            return;
+        }
+
+        const grupos = {};
+        _depRespLista.forEach(d => { const l = d.local || 'Sin local'; if (!grupos[l]) grupos[l] = []; grupos[l].push(d); });
+        let html = '';
+        for (const [local, items] of Object.entries(grupos)) {
+            html += `<div class="dep-sidebar-group"><div class="dep-sidebar-group-header"><i class="fas fa-store" style="margin-right:6px;opacity:0.6;"></i>${local}</div>`;
+            items.forEach(d => {
+                const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+                html += `<div class="dep-sidebar-item" data-depid="${d.id}" onclick="depSeleccionarResp('${d.id}')">
+                    <div class="dep-sidebar-item-fecha">${fechaCorta} <i class="fas fa-upload" style="color:#d97706;font-size:10px;"></i></div>
+                    <div class="dep-sidebar-item-local">${d.local}</div>
+                    <div class="dep-sidebar-item-resp">${d.responsable || ''}</div>
+                    <div class="dep-sidebar-item-monto">$${(d.monto_contado||0).toFixed(2)}</div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+        container.innerHTML = html;
+        if (_depRespLista.length > 0) depSeleccionarResp(_depRespLista[0].id);
+    } catch(e) { container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${e.message}</p></div>`; }
+}
+
+function depSeleccionarResp(id) {
+    document.querySelectorAll('#dep-resp-sidebar-list .dep-sidebar-item').forEach(el => el.classList.remove('active'));
+    const item = document.querySelector(`#dep-resp-sidebar-list .dep-sidebar-item[data-depid="${id}"]`);
+    if (item) item.classList.add('active');
+    const d = _depCache[id];
+    if (!d) return;
+
+    const panel = document.getElementById('dep-resp-detalle');
+    const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+    const evidencias = (d.evidencias || []).map(e =>
+        `<div class="dep-evidencia-item"><a href="${e.url}" target="_blank"><img src="${e.thumb || e.url}"></a><div class="dep-evidencia-item-name">${e.filename || 'Imagen'}</div></div>`
+    ).join('');
+
+    panel.innerHTML = `
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border-light);background:linear-gradient(135deg,var(--bg-light),var(--bg-white));">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:600;">Secuencia</div>
+                <div style="font-size:22px;font-weight:800;color:var(--primary);">#${d.secuencia || '-'}</div>
+                <div style="font-size:13px;color:var(--text-gray);margin-top:2px;"><i class="fas fa-store" style="margin-right:4px;"></i>${d.local} &nbsp;·&nbsp; ${fechaCorta}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:20px;font-weight:800;color:var(--text-dark);">$${(d.monto_contado||0).toFixed(2)}</div>
+                <div style="font-size:12px;color:var(--text-gray);">${d.responsable || ''}</div>
+            </div>
+        </div>
+    </div>
+    <div style="padding:16px 24px;">
+        ${evidencias ? `
+        <div style="margin-bottom:16px;">
+            <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:8px;"><i class="fas fa-camera" style="margin-right:4px;"></i>Evidencia del efectivo</div>
+            <div class="dep-evidencia-grid">${evidencias}</div>
+        </div>` : ''}
+
+        <div style="padding:20px;background:var(--bg-light);border-radius:var(--radius);border:2px dashed var(--border);text-align:center;">
+            <div style="font-size:14px;font-weight:600;color:var(--text-dark);margin-bottom:8px;"><i class="fas fa-file-upload" style="margin-right:6px;color:var(--primary);"></i>Subir respaldo del deposito bancario</div>
+            <div style="font-size:12px;color:var(--text-gray);margin-bottom:16px;">Foto de la papeleta o comprobante del banco</div>
+            <input type="file" id="dep-resp-file" accept="image/*" style="display:none;" onchange="depPreviewRespaldo()">
+            <button onclick="document.getElementById('dep-resp-file').click()" style="padding:10px 24px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:13px;">
+                <i class="fas fa-camera" style="margin-right:6px;"></i>Seleccionar foto
+            </button>
+            <div id="dep-resp-preview" style="margin-top:12px;"></div>
+        </div>
+
+        <div style="margin-top:16px;text-align:right;">
+            <button id="dep-btn-subir" onclick="depSubirRespaldo('${d.id}')" disabled style="padding:10px 28px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:var(--radius-sm);font-weight:600;cursor:pointer;font-size:14px;opacity:0.5;">
+                <i class="fas fa-upload" style="margin-right:6px;"></i>Subir y Enviar a Contabilidad
+            </button>
+        </div>
+    </div>`;
+}
+
+function depPreviewRespaldo() {
+    const file = document.getElementById('dep-resp-file').files[0];
+    const preview = document.getElementById('dep-resp-preview');
+    const btn = document.getElementById('dep-btn-subir');
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        preview.innerHTML = `<img src="${e.target.result}" style="max-width:200px;max-height:200px;border-radius:8px;border:2px solid var(--success);margin-top:8px;">
+            <div style="font-size:12px;color:var(--success);margin-top:4px;"><i class="fas fa-check-circle"></i> ${file.name}</div>`;
+        btn.disabled = false;
+        btn.style.opacity = '1';
+    };
+    reader.readAsDataURL(file);
+}
+
+async function depSubirRespaldo(recordId) {
+    const file = document.getElementById('dep-resp-file').files[0];
+    if (!file) { showToast('Selecciona una foto', 'error'); return; }
+    const btn = document.getElementById('dep-btn-subir');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Subiendo...';
+    try {
+        const formData = new FormData();
+        formData.append('id', recordId);
+        formData.append('archivo', file);
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/subir-respaldo`, {
+            method: 'POST', body: formData
+        });
+        const data = await r.json();
+        if (r.ok) {
+            showToast('Respaldo subido y enviado a contabilidad', 'success');
+            document.getElementById('dep-resp-detalle').innerHTML = '<div class="dep-detalle-empty"><i class="fas fa-check-circle" style="font-size:40px;color:var(--success);"></i><p style="margin-top:12px;color:var(--success);font-weight:600;">Enviado correctamente</p></div>';
+            depCargarSinRespaldo();
+        } else { showToast(data.error || 'Error', 'error'); }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-upload" style="margin-right:6px;"></i>Subir y Enviar a Contabilidad';
+}
+
+function depSeleccionarDesc(id) {
+    document.querySelectorAll('#dep-desc-sidebar-list .dep-sidebar-item').forEach(el => el.classList.remove('active'));
+    const item = document.querySelector(`#dep-desc-sidebar-list .dep-sidebar-item[data-depid="${id}"]`);
+    if (item) item.classList.add('active');
+    const d = _depCache[id];
+    if (!d) return;
+    depRenderDetalle(d, 'dep-desc-detalle');
+}
+
+async function depCargarDashboard() {
+    const desde = document.getElementById('dep-dash-desde').value;
+    const hasta = document.getElementById('dep-dash-hasta').value;
+    if (!desde || !hasta) { showToast('Selecciona fechas', 'error'); return; }
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/resumen?fecha_desde=${desde}&fecha_hasta=${hasta}`);
+        const data = await r.json();
+
+        const pctCuadre = data.total_depositos > 0 ? ((data.cuadran / data.total_depositos) * 100).toFixed(1) : 0;
+
+        document.getElementById('dep-dash-stats').innerHTML = `
+            <div class="dashboard-stat-card">
+                <div class="stat-icon" style="background:rgba(37,99,235,0.1);color:#2563eb;"><i class="fas fa-receipt"></i></div>
+                <div class="stat-info"><div class="stat-valor">${data.total_depositos}</div><div class="stat-label">Total Depositos</div></div>
+            </div>
+            <div class="dashboard-stat-card">
+                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:#059669;"><i class="fas fa-dollar-sign"></i></div>
+                <div class="stat-info"><div class="stat-valor">$${(data.total_depositado||0).toLocaleString('es-EC',{minimumFractionDigits:2})}</div><div class="stat-label">Total Depositado</div></div>
+            </div>
+            <div class="dashboard-stat-card">
+                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:#059669;"><i class="fas fa-chart-line"></i></div>
+                <div class="stat-info"><div class="stat-valor">${pctCuadre}%</div><div class="stat-label">Tasa de Cuadre</div></div>
+            </div>
+            <div class="dashboard-stat-card">
+                <div class="stat-icon" style="background:rgba(220,38,38,0.1);color:#dc2626;"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="stat-info"><div class="stat-valor">${data.descuadres} <span style="font-size:12px;color:#94a3b8;font-weight:400;">/ ${data.total_depositos}</span></div><div class="stat-label">Descuadres</div></div>
+            </div>
+        `;
+
+        // Grafico doughnut cuadre vs descuadre + tabla por local
+        const locales = Object.entries(data.por_local || {}).sort((a,b) => b[1].monto - a[1].monto);
+
+        document.getElementById('dep-dash-locales').innerHTML = `
+            <div class="dashboard-charts-grid" style="margin-top:4px;">
+                <div class="chart-card">
+                    <div class="chart-card-header"><i class="fas fa-chart-pie"></i> Estado de Cuadre</div>
+                    <div class="chart-card-body" style="display:flex;align-items:center;justify-content:center;">
+                        <canvas id="dep-chart-cuadre"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-header"><i class="fas fa-chart-bar"></i> Monto por Local</div>
+                    <div class="chart-card-body">
+                        <canvas id="dep-chart-locales"></canvas>
+                    </div>
+                </div>
+            </div>
+            ${locales.length ? `
+            <div class="chart-card" style="margin-top:16px;">
+                <div class="chart-card-header"><i class="fas fa-store"></i> Detalle por Local</div>
+                <div style="padding:16px; overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#f8fafc;">
+                                <th style="text-align:left;padding:10px 14px;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;border-bottom:2px solid #e2e8f0;">Local</th>
+                                <th style="text-align:center;padding:10px 14px;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;border-bottom:2px solid #e2e8f0;">Depositos</th>
+                                <th style="text-align:right;padding:10px 14px;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;border-bottom:2px solid #e2e8f0;">Monto Total</th>
+                                <th style="text-align:center;padding:10px 14px;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;border-bottom:2px solid #e2e8f0;">Descuadres</th>
+                                <th style="text-align:center;padding:10px 14px;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;border-bottom:2px solid #e2e8f0;">Cumplimiento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${locales.map(([local, info]) => {
+                                const pct = info.depositos > 0 ? (((info.depositos - info.descuadres) / info.depositos) * 100).toFixed(0) : 100;
+                                const barColor = pct >= 90 ? '#059669' : pct >= 70 ? '#d97706' : '#dc2626';
+                                return `
+                                <tr style="border-bottom:1px solid #f1f5f9;">
+                                    <td style="padding:12px 14px;font-weight:600;color:var(--text-dark);"><i class="fas fa-store" style="margin-right:8px;color:var(--primary);opacity:0.5;"></i>${local}</td>
+                                    <td style="padding:12px 14px;text-align:center;color:#475569;">${info.depositos}</td>
+                                    <td style="padding:12px 14px;text-align:right;font-weight:700;color:var(--text-dark);">$${info.monto.toLocaleString('es-EC',{minimumFractionDigits:2})}</td>
+                                    <td style="padding:12px 14px;text-align:center;"><span style="background:${info.descuadres > 0 ? '#fef2f2' : '#ecfdf5'};color:${info.descuadres > 0 ? '#dc2626' : '#059669'};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;">${info.descuadres}</span></td>
+                                    <td style="padding:12px 14px;text-align:center;">
+                                        <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
+                                            <div style="flex:1;max-width:80px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;">
+                                                <div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px;"></div>
+                                            </div>
+                                            <span style="font-size:12px;font-weight:600;color:${barColor};">${pct}%</span>
+                                        </div>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>` : ''}
+        `;
+
+        // Renderizar graficos
+        if (typeof Chart !== 'undefined') {
+            // Doughnut cuadre
+            destroyChart('dep-cuadre');
+            const ctxD = document.getElementById('dep-chart-cuadre');
+            if (ctxD) {
+                chartInstances['dep-cuadre'] = new Chart(ctxD, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Cuadran', 'Descuadran', 'Pendientes'],
+                        datasets: [{
+                            data: [data.cuadran, data.descuadres, data.pendientes || 0],
+                            backgroundColor: ['#059669', '#dc2626', '#d97706'],
+                            borderWidth: 0,
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        cutout: '65%',
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: {size: 12} } },
+                        }
+                    }
+                });
+            }
+
+            // Barras por local
+            destroyChart('dep-locales');
+            const ctxL = document.getElementById('dep-chart-locales');
+            if (ctxL && locales.length) {
+                chartInstances['dep-locales'] = new Chart(ctxL, {
+                    type: 'bar',
+                    data: {
+                        labels: locales.map(l => l[0].replace(/\(.*\)/, '').trim()),
+                        datasets: [{
+                            label: 'Monto depositado',
+                            data: locales.map(l => l[1].monto),
+                            backgroundColor: CHART_COLORS_ALPHA.slice(0, locales.length),
+                            borderColor: CHART_COLORS.slice(0, locales.length),
+                            borderWidth: 1,
+                            borderRadius: 6,
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { font: {size: 10} } },
+                            y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v.toLocaleString() } }
+                        }
+                    }
+                });
+            }
+        }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+function _depRenderCard(d, mostrarAprobar) {
+    const esCuadra = d.cuadre === 'Cuadra';
+    const borderColor = esCuadra ? '#059669' : '#dc2626';
+    const cuadreBg = esCuadra ? 'background:linear-gradient(135deg,#ecfdf5,#d1fae5);color:#065f46;' : 'background:linear-gradient(135deg,#fef2f2,#fee2e2);color:#991b1b;';
+    const estadoMap = {
+        'Aprobado por Contabilidad': {bg:'#ecfdf5',color:'#059669',icon:'fa-check-circle',text:'Aprobado'},
+        'Enviado a Contabilidad': {bg:'#eff6ff',color:'#2563eb',icon:'fa-paper-plane',text:'Enviado'},
+        'Valor pendiente Verificar': {bg:'#fef3c7',color:'#d97706',icon:'fa-clock',text:'Pendiente'},
+    };
+    const est = estadoMap[d.estado] || {bg:'#f1f5f9',color:'#64748b',icon:'fa-question',text:d.estado||'Sin estado'};
+
+    const evidencias = (d.evidencias || []).map(e =>
+        `<a href="${e.url}" target="_blank" style="display:inline-block;margin:3px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.1);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><img src="${e.thumb || e.url}" style="width:70px;height:70px;object-fit:cover;display:block;"></a>`
+    ).join('');
+
+    const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+
+    return `
+    <div class="dep-card" style="background:var(--bg-white);border:1px solid var(--border);border-left:5px solid ${borderColor};border-radius:12px;margin-bottom:12px;overflow:hidden;transition:box-shadow 0.2s;cursor:pointer;" onclick="_depCache['${d.id}'] && depAbrirDetalle(_depCache['${d.id}'])" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='none'"
+        <div style="padding:18px 20px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+                <div style="flex:1;min-width:200px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <i class="fas fa-store" style="color:var(--primary);font-size:14px;"></i>
+                        <span style="font-weight:700;color:var(--text-dark);font-size:15px;">${d.local}</span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+                        <span style="background:#f1f5f9;padding:4px 10px;border-radius:6px;font-size:12px;color:#475569;"><i class="fas fa-calendar" style="margin-right:4px;opacity:0.6;"></i>${fechaCorta}</span>
+                        <span style="background:#f1f5f9;padding:4px 10px;border-radius:6px;font-size:12px;color:#475569;"><i class="fas fa-hashtag" style="margin-right:4px;opacity:0.6;"></i>Seq ${d.secuencia || '-'}</span>
+                        <span style="background:#f1f5f9;padding:4px 10px;border-radius:6px;font-size:12px;color:#475569;"><i class="fas fa-file-alt" style="margin-right:4px;opacity:0.6;"></i>${d.num_depositos || 0} papeleta(s)</span>
+                    </div>
+                </div>
+                <div style="text-align:right;min-width:160px;">
+                    <div style="font-size:24px;font-weight:800;color:var(--text-dark);letter-spacing:-0.5px;">$${(d.monto_contado||0).toLocaleString('es-EC',{minimumFractionDigits:2})}</div>
+                    <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;">
+                        <span style="background:${est.bg};color:${est.color};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;"><i class="fas ${est.icon}" style="margin-right:3px;"></i>${est.text}</span>
+                        <span style="${cuadreBg}padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;">${esCuadra ? '<i class="fas fa-check" style="margin-right:3px;"></i>' : '<i class="fas fa-times" style="margin-right:3px;"></i>'}${d.cuadre || '-'}</span>
+                    </div>
+                </div>
+            </div>
+            ${d.diferencia && d.diferencia !== 0 ? `
+            <div style="margin-top:12px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fecaca;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+                <i class="fas fa-exclamation-circle" style="color:#dc2626;font-size:16px;"></i>
+                <div>
+                    <span style="color:#991b1b;font-weight:700;font-size:14px;">Diferencia: $${Math.abs(d.diferencia).toFixed(2)}</span>
+                    <span style="color:#b91c1c;font-size:12px;margin-left:8px;">Contado: $${(d.monto_contado||0).toFixed(2)} vs Recibir: $${(d.monto_recibir||0).toFixed(2)}</span>
+                </div>
+            </div>` : ''}
+            ${d.observacion && d.observacion !== 'No existe Observación' ? `
+            <div style="margin-top:10px;background:#f8fafc;border-radius:8px;padding:8px 12px;font-size:12px;color:#475569;">
+                <i class="fas fa-comment-dots" style="margin-right:6px;color:var(--primary);"></i>${d.observacion}
+            </div>` : ''}
+            ${evidencias ? `
+            <div style="margin-top:12px;">
+                <div style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;margin-bottom:6px;"><i class="fas fa-camera" style="margin-right:4px;"></i>Evidencia</div>
+                <div style="display:flex;flex-wrap:wrap;">${evidencias}</div>
+            </div>` : ''}
+            ${mostrarAprobar ? `
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:8px;">
+                <button style="background:none;border:1px solid #dc2626;color:#dc2626;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;" onclick="depRechazar('${d.id}',this)"><i class="fas fa-times"></i> Rechazar</button>
+                <button style="background:linear-gradient(135deg,#059669,#10b981);border:none;color:#fff;padding:8px 22px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,0.3);" onclick="depAprobar('${d.id}',this)"><i class="fas fa-check"></i> Aprobar</button>
+            </div>` : ''}
+        </div>
+    </div>`;
+}
+
+function depAbrirDetalle(d) {
+    const modal = document.getElementById('dep-modal');
+    const body = document.getElementById('dep-modal-body');
+
+    const esCuadra = d.cuadre === 'Cuadra';
+    const estados = ['Valor pendiente Verificar', 'Valor retirado por líder', 'Enviado a Contabilidad', 'Aprobado por Contabilidad'];
+    const estadoIdx = estados.indexOf(d.estado);
+    const iconosEstado = ['fa-file-alt', 'fa-user-check', 'fa-paper-plane', 'fa-check-double'];
+    const nombresEstado = ['Registrado', 'Verificado', 'Enviado', 'Aprobado'];
+
+    const timeline = estados.map((e, i) => {
+        const activo = i <= estadoIdx;
+        const actual = i === estadoIdx;
+        return `<div style="flex:1;text-align:center;">
+            <div style="width:36px;height:36px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;
+                background:${activo ? (actual ? 'var(--primary)' : '#059669') : '#e2e8f0'};
+                color:${activo ? '#fff' : '#94a3b8'};font-size:14px;transition:all 0.3s;">
+                <i class="fas ${iconosEstado[i]}"></i>
+            </div>
+            <div style="font-size:10px;margin-top:4px;font-weight:${actual ? '700' : '500'};color:${activo ? 'var(--text-dark)' : '#94a3b8'};">${nombresEstado[i]}</div>
+        </div>`;
+    }).join(`<div style="flex:0.5;display:flex;align-items:center;padding-bottom:18px;"><div style="height:2px;width:100%;background:${estadoIdx > 0 ? '#059669' : '#e2e8f0'};"></div></div>`);
+
+    const evidencias = (d.evidencias || []).map(e =>
+        `<a href="${e.url}" target="_blank"><img src="${e.thumb || e.url}" style="width:120px;height:120px;object-fit:cover;border-radius:10px;border:2px solid var(--border);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"></a>`
+    ).join('');
+
+    const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+
+    // Determinar acciones disponibles
+    let acciones = '';
+    if (d.estado === 'Valor pendiente Verificar' || !d.estado) {
+        acciones = `
+        <div style="margin-top:20px;padding:20px;background:#f8fafc;border-radius:12px;border:1px solid var(--border);">
+            <h4 style="margin-bottom:12px;color:var(--primary);"><i class="fas fa-user-check" style="margin-right:6px;"></i>Verificacion del Lider</h4>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                <div style="flex:1;min-width:150px;">
+                    <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;">Monto a Recibir</label>
+                    <input type="number" id="dep-monto-recibir" step="0.01" placeholder="0.00" value="${d.monto_contado||''}"
+                        style="width:100%;height:40px;border:1px solid var(--border);border-radius:8px;padding:0 12px;font-size:16px;font-weight:700;">
+                </div>
+                <div style="flex:1;min-width:150px;">
+                    <label style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;">Observacion</label>
+                    <select id="dep-observacion" style="width:100%;height:40px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;">
+                        <option>No existe Observación</option>
+                        <option>Faltante de efectivo</option>
+                        <option>Sobrante de efectivo</option>
+                        <option>Error en secuencia</option>
+                        <option>Deposito incompleto</option>
+                    </select>
+                </div>
+                <button onclick="depAccionVerificar('${d.id}')" style="height:40px;padding:0 24px;background:linear-gradient(135deg,var(--primary),#2563eb);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">
+                    <i class="fas fa-check"></i> Verificar y Retirar
+                </button>
+            </div>
+        </div>`;
+    } else if (d.estado === 'Valor retirado por líder') {
+        acciones = `
+        <div style="margin-top:20px;text-align:center;">
+            <button onclick="depAccionEnviar('${d.id}')" style="padding:12px 32px;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">
+                <i class="fas fa-paper-plane" style="margin-right:6px;"></i> Enviar a Contabilidad
+            </button>
+        </div>`;
+    } else if (d.estado === 'Enviado a Contabilidad') {
+        acciones = `
+        <div style="margin-top:20px;display:flex;gap:12px;justify-content:center;">
+            <button onclick="depAccionAprobar('${d.id}')" style="padding:12px 32px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;box-shadow:0 4px 12px rgba(5,150,105,0.3);">
+                <i class="fas fa-check-double" style="margin-right:6px;"></i> Aprobar Deposito
+            </button>
+        </div>`;
+    }
+
+    body.innerHTML = `
+    <div style="padding:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+                <div style="font-size:12px;color:#94a3b8;text-transform:uppercase;font-weight:600;">Secuencia</div>
+                <div style="font-size:28px;font-weight:800;color:var(--text-dark);">#${d.secuencia || '-'}</div>
+            </div>
+            <button onclick="document.getElementById('dep-modal').classList.add('hidden')" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;padding:4px;"><i class="fas fa-times"></i></button>
+        </div>
+
+        <!-- Timeline -->
+        <div style="display:flex;align-items:flex-start;margin:20px 0;padding:16px;background:#f8fafc;border-radius:12px;">
+            ${timeline}
+        </div>
+
+        <!-- Info principal -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+            <div style="background:#f8fafc;border-radius:10px;padding:14px;">
+                <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:600;"><i class="fas fa-store" style="margin-right:4px;"></i>Local</div>
+                <div style="font-size:15px;font-weight:600;color:var(--text-dark);margin-top:4px;">${d.local}</div>
+            </div>
+            <div style="background:#f8fafc;border-radius:10px;padding:14px;">
+                <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:600;"><i class="fas fa-calendar" style="margin-right:4px;"></i>Fecha</div>
+                <div style="font-size:15px;font-weight:600;color:var(--text-dark);margin-top:4px;">${fechaCorta}</div>
+            </div>
+        </div>
+
+        <!-- Montos -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px;">
+            <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:#2563eb;text-transform:uppercase;font-weight:600;">Monto Contado</div>
+                <div style="font-size:22px;font-weight:800;color:#1e40af;margin-top:4px;">$${(d.monto_contado||0).toFixed(2)}</div>
+            </div>
+            <div style="background:linear-gradient(135deg,${d.monto_recibir ? '#ecfdf5' : '#f8fafc'},${d.monto_recibir ? '#d1fae5' : '#f1f5f9'});border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:${d.monto_recibir ? '#059669' : '#94a3b8'};text-transform:uppercase;font-weight:600;">Monto a Recibir</div>
+                <div style="font-size:22px;font-weight:800;color:${d.monto_recibir ? '#065f46' : '#94a3b8'};margin-top:4px;">${d.monto_recibir ? '$' + d.monto_recibir.toFixed(2) : 'Pendiente'}</div>
+            </div>
+            <div style="background:linear-gradient(135deg,${esCuadra || !d.cuadre ? '#f8fafc' : '#fef2f2'},${esCuadra || !d.cuadre ? '#f1f5f9' : '#fee2e2'});border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:${!d.cuadre ? '#94a3b8' : esCuadra ? '#059669' : '#dc2626'};text-transform:uppercase;font-weight:600;">Diferencia</div>
+                <div style="font-size:22px;font-weight:800;color:${!d.cuadre ? '#94a3b8' : esCuadra ? '#059669' : '#dc2626'};margin-top:4px;">${d.diferencia !== undefined ? '$' + Math.abs(d.diferencia).toFixed(2) : '-'}</div>
+            </div>
+        </div>
+
+        <!-- Info adicional -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            <div style="font-size:13px;color:#475569;"><i class="fas fa-file-alt" style="margin-right:6px;color:var(--primary);"></i><b>${d.num_depositos || 0}</b> papeleta(s)</div>
+            ${d.responsable_email ? `<div style="font-size:13px;color:#475569;"><i class="fas fa-envelope" style="margin-right:6px;color:var(--primary);"></i>${d.responsable_email}</div>` : ''}
+        </div>
+        ${d.observacion && d.observacion !== 'No existe Observación' ? `<div style="margin-top:10px;background:#fef3c7;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;"><i class="fas fa-comment-dots" style="margin-right:6px;"></i>${d.observacion}</div>` : ''}
+
+        <!-- Evidencias -->
+        ${evidencias ? `
+        <div style="margin-top:16px;">
+            <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;margin-bottom:8px;"><i class="fas fa-camera" style="margin-right:4px;"></i>Evidencia fotografica</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">${evidencias}</div>
+        </div>` : ''}
+
+        ${acciones}
+    </div>`;
+
+    modal.classList.remove('hidden');
+}
+
+async function depAccionVerificar(recordId) {
+    const monto = document.getElementById('dep-inp-monto').value;
+    const obs = document.getElementById('dep-inp-obs').value;
+    const testigo = document.getElementById('dep-inp-testigo')?.value || '';
+    if (!monto) { showToast('Ingresa el monto a recibir', 'error'); return; }
+    if (!testigo.trim()) { showToast('Ingresa el nombre del testigo', 'error'); return; }
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/verificar-lider`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: recordId, monto_recibir: parseFloat(monto), observacion: obs, testigo: testigo})
+        });
+        const data = await r.json();
+        if (r.ok) {
+            showToast(`Verificado — ${data.cuadre || 'OK'}`, 'success');
+            try { document.getElementById('dep-modal')?.classList.add('hidden'); } catch(e2) {}
+            depCargarPendientes();
+        } else { showToast(data.error || 'Error', 'error'); }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function depAccionEnviar(recordId) {
+    if (!confirm('Enviar este deposito a Contabilidad?')) return;
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/enviar-contabilidad`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: recordId})
+        });
+        if (r.ok) {
+            showToast('Enviado a Contabilidad', 'success');
+            document.getElementById('dep-modal').classList.add('hidden');
+            depCargarPendientes();
+        } else { showToast('Error al enviar', 'error'); }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function depAccionAprobar(recordId) {
+    if (!confirm('Aprobar este deposito?')) return;
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/aprobar`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: recordId})
+        });
+        if (r.ok) {
+            showToast('Deposito aprobado', 'success');
+            document.getElementById('dep-modal').classList.add('hidden');
+            depCargarPendientes();
+        } else { showToast('Error al aprobar', 'error'); }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 // CUADRAR - Solicitar nuevo cruce operativo (boton + worker)

@@ -4540,6 +4540,490 @@ def evaluacion_page():
     return render_template('evaluacion.html')
 
 
+# ============================================================
+# MODULO: DEPOSITOS (lee desde AirTable)
+# ============================================================
+AIRTABLE_DEPOSITOS_TOKEN = os.environ.get('AIRTABLE_DEPOSITOS_TOKEN', '')
+AIRTABLE_DEPOSITOS_BASE = 'apppZXgUChlBLbVpR'
+AIRTABLE_DEPOSITOS_TABLE = 'tbldo5QTH6bBpgYbx'
+AIRTABLE_TIENDAS_TABLE = 'tblxloBdnbdsGcuKR'
+
+_tiendas_cache = {}
+_tiendas_cache_ts = 0
+_responsables_cache = {}
+_responsables_cache_ts = 0
+
+AIRTABLE_RESPONSABLES_TABLE = 'tblR8NOjmbp70LmTK'
+
+def _at_headers():
+    return {'Authorization': f'Bearer {AIRTABLE_DEPOSITOS_TOKEN}'}
+
+def _cargar_tiendas():
+    global _tiendas_cache, _tiendas_cache_ts
+    import time as _t
+    if _tiendas_cache and (_t.time() - _tiendas_cache_ts) < 600:
+        return _tiendas_cache
+    try:
+        import requests as req
+        all_recs = []
+        offset = None
+        while True:
+            params = {'pageSize': 100, 'fields[]': ['Código', 'Marca', 'Ubicación']}
+            if offset: params['offset'] = offset
+            r = req.get(f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_TIENDAS_TABLE}',
+                headers=_at_headers(), params=params, timeout=15)
+            if r.status_code != 200: break
+            data = r.json()
+            all_recs.extend(data.get('records', []))
+            offset = data.get('offset')
+            if not offset: break
+        for rec in all_recs:
+            _tiendas_cache[rec['id']] = {
+                'codigo': rec['fields'].get('Código', rec['id']),
+                'ubicacion': rec['fields'].get('Ubicación', ''),
+                'marca': rec['fields'].get('Marca', ''),
+            }
+        _tiendas_cache_ts = _t.time()
+    except Exception as e:
+        print(f'Error cargando tiendas: {e}')
+    return _tiendas_cache
+
+def _cargar_responsables():
+    global _responsables_cache, _responsables_cache_ts
+    import time as _t
+    if _responsables_cache and (_t.time() - _responsables_cache_ts) < 600:
+        return _responsables_cache
+    try:
+        import requests as req
+        all_recs = []
+        offset = None
+        while True:
+            params = {'pageSize': 100, 'fields[]': ['Nombre', 'Fecha Ingreso', 'Cargo']}
+            if offset: params['offset'] = offset
+            r = req.get(f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_RESPONSABLES_TABLE}',
+                headers=_at_headers(), params=params, timeout=15)
+            if r.status_code != 200: break
+            data = r.json()
+            all_recs.extend(data.get('records', []))
+            offset = data.get('offset')
+            if not offset: break
+        for rec in all_recs:
+            _responsables_cache[rec['id']] = {
+                'nombre': rec['fields'].get('Nombre', ''),
+                'fecha_ingreso': rec['fields'].get('Fecha Ingreso', ''),
+                'cargo': rec['fields'].get('Cargo', ''),
+            }
+        _responsables_cache_ts = _t.time()
+    except Exception as e:
+        print(f'Error cargando responsables: {e}')
+    return _responsables_cache
+
+def _resolver_local(local_ids):
+    if not local_ids:
+        return 'Sin local'
+    tiendas = _cargar_tiendas()
+    nombres = [tiendas.get(lid, {}).get('codigo', lid) if isinstance(tiendas.get(lid), dict) else tiendas.get(lid, lid) for lid in local_ids]
+    return ', '.join(nombres)
+
+def _resolver_local_detalle(local_ids):
+    if not local_ids:
+        return {'codigo': 'Sin local', 'ubicacion': '', 'marca': ''}
+    tiendas = _cargar_tiendas()
+    t = tiendas.get(local_ids[0], {})
+    if isinstance(t, str):
+        return {'codigo': t, 'ubicacion': '', 'marca': ''}
+    return t
+
+def _resolver_responsable(resp_ids):
+    if not resp_ids:
+        return {'nombre': 'Sin responsable', 'fecha_ingreso': '', 'cargo': ''}
+    responsables = _cargar_responsables()
+    return responsables.get(resp_ids[0], {'nombre': resp_ids[0], 'fecha_ingreso': '', 'cargo': ''})
+
+
+# Cache de depositos: {clave: {data, timestamp}}
+_depositos_cache = {}
+_DEPOSITOS_CACHE_TTL = 300  # 5 minutos
+
+def _depositos_cache_key(fecha_desde, fecha_hasta, estado, cuadre):
+    return f'{fecha_desde}|{fecha_hasta}|{estado}|{cuadre}'
+
+def _invalidar_cache_depositos():
+    """Limpia todo el cache de depositos (llamar al hacer una accion)."""
+    global _depositos_cache
+    _depositos_cache = {}
+
+
+@app.route('/api/depositos/listar', methods=['GET'])
+def depositos_listar():
+    """Lista depositos desde AirTable con filtros. Cache de 5 minutos."""
+    import requests as req
+    import time as _t
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    estado = request.args.get('estado', '')
+    cuadre = request.args.get('cuadre', '')
+
+    # Verificar cache
+    cache_key = _depositos_cache_key(fecha_desde, fecha_hasta, estado, cuadre)
+    cached = _depositos_cache.get(cache_key)
+    if cached and (_t.time() - cached['ts']) < _DEPOSITOS_CACHE_TTL:
+        return jsonify(cached['data'])
+
+    try:
+        # Construir formula de filtro
+        filtros = []
+        if fecha_desde:
+            filtros.append(f"IS_AFTER({{Fecha}}, '{fecha_desde}')")
+        if fecha_hasta:
+            filtros.append(f"IS_BEFORE({{Fecha}}, DATEADD('{fecha_hasta}', 1, 'day'))")
+        if estado:
+            filtros.append(f"{{Estado}} = '{estado}'")
+        if cuadre:
+            filtros.append(f"{{Estado De Cuadre}} = '{cuadre}'")
+
+        params = {
+            'pageSize': 100,
+            'sort[0][field]': 'Fecha',
+            'sort[0][direction]': 'desc',
+            'fields[]': ['Fecha', 'Local', 'Responsable De Caja', 'Monto Contado',
+                         'Monto A Recibir', 'Diferencia Contado Vs. Recibido',
+                         'Secuencia De Caja', 'Número De Depósitos', 'Estado',
+                         'Estado De Cuadre', 'Observación', 'Evidencia', 'Evidencia Del Déposito',
+                         'Fecha Creación', 'Correo (from Responsable De Caja)'],
+        }
+        if filtros:
+            params['filterByFormula'] = 'AND(' + ','.join(filtros) + ')'
+
+        all_records = []
+        offset = None
+        while True:
+            if offset:
+                params['offset'] = offset
+            r = req.get(f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}',
+                headers=_at_headers(), params=params, timeout=20)
+            if r.status_code != 200:
+                return jsonify({'error': f'AirTable error: {r.status_code}'}), 500
+            data = r.json()
+            all_records.extend(data.get('records', []))
+            offset = data.get('offset')
+            if not offset or len(all_records) >= 500:
+                break
+
+        # Pre-cargar caches
+        _cargar_tiendas()
+        _cargar_responsables()
+
+        # Resolver locales
+        resultado = []
+        for rec in all_records:
+            f = rec['fields']
+            evidencias = []
+            for att in (f.get('Evidencia', [])):
+                if isinstance(att, dict):
+                    thumb = att.get('thumbnails', {}).get('large', {}).get('url', '')
+                    evidencias.append({'url': att.get('url', ''), 'thumb': thumb, 'filename': att.get('filename', '')})
+            evidencias_deposito = []
+            for att in (f.get('Evidencia Del Déposito', [])):
+                if isinstance(att, dict):
+                    thumb = att.get('thumbnails', {}).get('large', {}).get('url', '')
+                    evidencias_deposito.append({'url': att.get('url', ''), 'thumb': thumb, 'filename': att.get('filename', '')})
+
+            local_det = _resolver_local_detalle(f.get('Local', []))
+            resp_det = _resolver_responsable(f.get('Responsable De Caja', []))
+
+            resultado.append({
+                'id': rec['id'],
+                'fecha': f.get('Fecha'),
+                'local': local_det.get('codigo', ''),
+                'local_ubicacion': local_det.get('ubicacion', ''),
+                'local_marca': local_det.get('marca', ''),
+                'responsable': resp_det.get('nombre', ''),
+                'responsable_ingreso': resp_det.get('fecha_ingreso', ''),
+                'responsable_cargo': resp_det.get('cargo', ''),
+                'monto_contado': f.get('Monto Contado', 0),
+                'monto_recibir': f.get('Monto A Recibir', 0),
+                'diferencia': f.get('Diferencia Contado Vs. Recibido', 0),
+                'secuencia': f.get('Secuencia De Caja'),
+                'num_depositos': f.get('Número De Depósitos'),
+                'estado': f.get('Estado', ''),
+                'cuadre': f.get('Estado De Cuadre', ''),
+                'observacion': f.get('Observación', ''),
+                'evidencias': evidencias,
+                'evidencias_deposito': evidencias_deposito,
+                'fecha_creacion': f.get('Fecha Creación'),
+                'responsable_email': (f.get('Correo (from Responsable De Caja)', [None]) or [None])[0],
+            })
+
+        response_data = {'depositos': resultado, 'total': len(resultado)}
+        # Guardar en cache
+        import time as _t2
+        _depositos_cache[cache_key] = {'data': response_data, 'ts': _t2.time()}
+        return jsonify(response_data)
+    except Exception as e:
+        print(f'Error en depositos_listar: {e}')
+        return jsonify({'error': str(e)[:200]}), 500
+
+
+@app.route('/api/depositos/resumen', methods=['GET'])
+def depositos_resumen():
+    """Resumen/KPIs de depositos. Cache 5 min."""
+    import requests as req
+    import time as _t
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+
+    cache_key = f'resumen|{fecha_desde}|{fecha_hasta}'
+    cached = _depositos_cache.get(cache_key)
+    if cached and (_t.time() - cached['ts']) < _DEPOSITOS_CACHE_TTL:
+        return jsonify(cached['data'])
+
+    try:
+        filtros = []
+        if fecha_desde:
+            filtros.append(f"IS_AFTER({{Fecha}}, '{fecha_desde}')")
+        if fecha_hasta:
+            filtros.append(f"IS_BEFORE({{Fecha}}, DATEADD('{fecha_hasta}', 1, 'day'))")
+
+        params = {
+            'pageSize': 100,
+            'fields[]': ['Fecha', 'Local', 'Monto Contado', 'Monto A Recibir',
+                         'Diferencia Contado Vs. Recibido', 'Estado', 'Estado De Cuadre'],
+        }
+        if filtros:
+            params['filterByFormula'] = 'AND(' + ','.join(filtros) + ')'
+
+        all_records = []
+        offset = None
+        while True:
+            if offset:
+                params['offset'] = offset
+            r = req.get(f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}',
+                headers=_at_headers(), params=params, timeout=20)
+            if r.status_code != 200:
+                break
+            data = r.json()
+            all_records.extend(data.get('records', []))
+            offset = data.get('offset')
+            if not offset:
+                break
+
+        total_depositado = 0
+        total_recibido = 0
+        total_diferencia = 0
+        descuadres = 0
+        cuadran = 0
+        por_local = {}
+        pendientes = 0
+
+        for rec in all_records:
+            f = rec['fields']
+            monto = f.get('Monto Contado', 0) or 0
+            recibido = f.get('Monto A Recibir', 0) or 0
+            dif = f.get('Diferencia Contado Vs. Recibido', 0) or 0
+            total_depositado += monto
+            total_recibido += recibido
+            total_diferencia += abs(dif)
+
+            if f.get('Estado De Cuadre') == 'Descuadra':
+                descuadres += 1
+            elif f.get('Estado De Cuadre') == 'Cuadra':
+                cuadran += 1
+
+            if f.get('Estado') not in ('Aprobado por Contabilidad',):
+                pendientes += 1
+
+            local = _resolver_local(f.get('Local', []))
+            if local not in por_local:
+                por_local[local] = {'monto': 0, 'depositos': 0, 'descuadres': 0}
+            por_local[local]['monto'] += monto
+            por_local[local]['depositos'] += 1
+            if f.get('Estado De Cuadre') == 'Descuadra':
+                por_local[local]['descuadres'] += 1
+
+        response_data = {
+            'total_depositos': len(all_records),
+            'total_depositado': round(total_depositado, 2),
+            'total_recibido': round(total_recibido, 2),
+            'total_diferencia': round(total_diferencia, 2),
+            'cuadran': cuadran,
+            'descuadres': descuadres,
+            'pendientes': pendientes,
+            'por_local': por_local,
+        }
+        _depositos_cache[cache_key] = {'data': response_data, 'ts': _t.time()}
+        return jsonify(response_data)
+    except Exception as e:
+        print(f'Error en depositos_resumen: {e}')
+        return jsonify({'error': str(e)[:200]}), 500
+
+
+@app.route('/api/depositos/trabajadores', methods=['GET'])
+def depositos_trabajadores():
+    """Lista trabajadores para el selector de testigo. Cache largo."""
+    responsables = _cargar_responsables()
+    lista = [{'id': k, 'nombre': v.get('nombre', '')} for k, v in responsables.items() if v.get('nombre')]
+    lista.sort(key=lambda x: x['nombre'])
+    return jsonify(lista)
+
+
+@app.route('/api/depositos/verificar-lider', methods=['POST'])
+def depositos_verificar_lider():
+    """Lider verifica: pone monto a recibir, calcula cuadre, marca retirado."""
+    _invalidar_cache_depositos()
+    import requests as req
+    data = request.json or {}
+    record_id = data.get('id')
+    monto_recibir = data.get('monto_recibir')
+    observacion = data.get('observacion', 'No existe Observación')
+    testigo_id = data.get('testigo', '')
+
+    if not record_id or monto_recibir is None:
+        return jsonify({'error': 'id y monto_recibir requeridos'}), 400
+
+    try:
+        fields = {
+            'Estado': 'Valor retirado por líder',
+            'Monto A Recibir': float(monto_recibir),
+            'Fecha De Revisión líder': datetime.now().isoformat(),
+            'Observación': observacion,
+        }
+        if testigo_id:
+            fields['Testigo de conteo'] = [testigo_id]
+        # Calcular cuadre
+        r_get = req.get(
+            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
+            headers=_at_headers(), params={'fields[]': ['Monto Contado']}, timeout=15)
+        if r_get.status_code == 200:
+            monto_contado = r_get.json().get('fields', {}).get('Monto Contado', 0) or 0
+            diferencia = float(monto_contado) - float(monto_recibir)
+            fields['Estado De Cuadre'] = 'Cuadra' if abs(diferencia) < 0.01 else 'Descuadra'
+
+        r = req.patch(
+            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
+            headers={**_at_headers(), 'Content-Type': 'application/json'},
+            json={'fields': fields}, timeout=15)
+        if r.status_code == 200:
+            return jsonify({'ok': True, 'cuadre': fields.get('Estado De Cuadre', '')})
+        return jsonify({'error': f'AirTable: {r.status_code} {r.text[:100]}'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+
+
+@app.route('/api/depositos/enviar-contabilidad', methods=['POST'])
+def depositos_enviar_contabilidad():
+    """Marca como enviado a contabilidad."""
+    _invalidar_cache_depositos()
+    import requests as req
+    data = request.json or {}
+    record_id = data.get('id')
+    if not record_id:
+        return jsonify({'error': 'id requerido'}), 400
+    try:
+        r = req.patch(
+            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
+            headers={**_at_headers(), 'Content-Type': 'application/json'},
+            json={'fields': {
+                'Estado': 'Enviado a Contabilidad',
+                'Fecha Envío A Contabilidad': datetime.now().isoformat(),
+            }}, timeout=15)
+        if r.status_code == 200:
+            return jsonify({'ok': True})
+        return jsonify({'error': f'AirTable: {r.status_code}'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+
+
+@app.route('/api/depositos/subir-respaldo', methods=['POST'])
+def depositos_subir_respaldo():
+    """Sube foto de respaldo: guarda en servidor + envia URL a AirTable."""
+    _invalidar_cache_depositos()
+    import requests as req
+
+    record_id = request.form.get('id')
+    if not record_id:
+        return jsonify({'error': 'id requerido'}), 400
+
+    archivo = request.files.get('archivo')
+    if not archivo:
+        return jsonify({'error': 'archivo requerido'}), 400
+
+    try:
+        contenido = archivo.read()
+        filename = archivo.filename
+
+        # 1. Guardar archivo en el servidor
+        import os
+        temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+        os.makedirs(temp_dir, exist_ok=True)
+        safe_name = filename.replace(' ', '_').replace('/', '_')
+        temp_path = os.path.join(temp_dir, f'{record_id}_{safe_name}')
+        with open(temp_path, 'wb') as f:
+            f.write(contenido)
+
+        # 2. Construir URL publica (en produccion usa Render URL)
+        app_url = os.environ.get('APP_URL', request.host_url.rstrip('/'))
+        img_url = f'{app_url}/static/uploads/{record_id}_{safe_name}'
+
+        # 3. Obtener attachments existentes
+        r_get = req.get(
+            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
+            headers=_at_headers(),
+            params={'fields[]': ['Evidencia Del Déposito']},
+            timeout=15,
+        )
+        existentes = []
+        if r_get.status_code == 200:
+            for a in r_get.json().get('fields', {}).get('Evidencia Del Déposito', []):
+                if isinstance(a, dict) and a.get('url'):
+                    existentes.append({'url': a['url']})
+
+        existentes.append({'url': img_url})
+
+        # 4. Actualizar AirTable
+        r2 = req.patch(
+            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
+            headers={**_at_headers(), 'Content-Type': 'application/json'},
+            json={'fields': {
+                'Evidencia Del Déposito': existentes,
+                'Estado': 'Enviado a Contabilidad',
+                'Fecha Envío A Contabilidad': datetime.now().isoformat(),
+            }},
+            timeout=15,
+        )
+        print(f'AirTable patch: {r2.status_code} {r2.text[:200]}')
+        if r2.status_code == 200:
+            return jsonify({'ok': True})
+        return jsonify({'error': f'AirTable: {r2.status_code} {r2.text[:200]}'}), 500
+    except Exception as e:
+        print(f'Error subiendo respaldo: {e}')
+        return jsonify({'error': str(e)[:200]}), 500
+
+
+@app.route('/api/depositos/aprobar', methods=['POST'])
+def depositos_aprobar():
+    """Aprueba un deposito (contabilidad)."""
+    _invalidar_cache_depositos()
+    import requests as req
+    data = request.json or {}
+    record_id = data.get('id')
+    if not record_id:
+        return jsonify({'error': 'id requerido'}), 400
+    try:
+        r = req.patch(
+            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
+            headers={**_at_headers(), 'Content-Type': 'application/json'},
+            json={'fields': {
+                'Estado': 'Aprobado por Contabilidad',
+                'Fecha Aprobado Por Contabilidad': datetime.now().isoformat(),
+            }}, timeout=15)
+        if r.status_code == 200:
+            return jsonify({'ok': True})
+        return jsonify({'error': f'AirTable: {r.status_code}'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+
+
 # ==================== ADMIN USUARIOS ====================
 
 SMTP_CONFIG = {

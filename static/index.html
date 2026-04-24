@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GOTI - Control Contable | FOODIX</title>
+    <title>GFC - Control Contable | FOODIX</title>
     <link rel="stylesheet" href="css/styles.css?v=20260317a">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -44,7 +44,7 @@
                         <i class="fas fa-bars"></i>
                     </button>
                     <i class="fas fa-boxes-stacked"></i>
-                    <span>GOTI - Control Contable</span>
+                    <span>GFC - Control Contable</span>
                 </div>
                 <div class="header-right">
                     <select id="btn-impersonar" style="display:none;font-size:12px;padding:2px 6px;border-radius:6px;border:1px solid #475569;background:#1e293b;color:#94a3b8;margin-right:8px;max-width:180px;cursor:pointer;" title="Ver como otro usuario">
@@ -66,6 +66,12 @@
 
             <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
             <nav class="sidebar" id="sidebar">
+                <!-- DASHBOARD GENERAL -->
+                <button class="nav-btn" data-view="dashboard-general" style="display:none;background:linear-gradient(135deg,rgba(37,99,235,0.1),rgba(5,150,105,0.05));border-bottom:1px solid var(--border-light);margin-bottom:4px;font-weight:600;">
+                    <i class="fas fa-tachometer-alt" style="color:#2563eb;"></i>
+                    <span>Dashboard</span>
+                </button>
+
                 <!-- MODULO: INVENTARIO -->
                 <div class="nav-module" data-module="inventario">
                     <button class="nav-module-header" onclick="toggleModule('inventario')">
@@ -86,10 +92,7 @@
                             <i class="fas fa-history"></i>
                             <span>Historico</span>
                         </button>
-                        <button class="nav-btn" data-view="dashboard" style="display:none;">
-                            <i class="fas fa-chart-pie"></i>
-                            <span>Dashboard</span>
-                        </button>
+                        <!-- Dashboard movido a Dashboard General -->
                         <button class="nav-btn" data-view="cruce" style="display:none;">
                             <i class="fas fa-exchange-alt"></i>
                             <span>Cruce Operativo</span>
@@ -121,7 +124,23 @@
                         <i class="fas fa-chevron-down nav-module-arrow"></i>
                     </button>
                     <div class="nav-module-items" style="display:none;">
-                        <div class="nav-module-empty"><i class="fas fa-clock"></i> Proximamente</div>
+                        <button class="nav-btn" data-view="dep-pendientes" style="display:none;">
+                            <i class="fas fa-clock"></i>
+                            <span>Pendientes</span>
+                        </button>
+                        <button class="nav-btn" data-view="dep-historial" style="display:none;">
+                            <i class="fas fa-list"></i>
+                            <span>Historial</span>
+                        </button>
+                        <button class="nav-btn" data-view="dep-respaldo" style="display:none;">
+                            <i class="fas fa-upload"></i>
+                            <span>Subir Respaldo</span>
+                        </button>
+                        <button class="nav-btn" data-view="dep-descuadres" style="display:none;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span>Descuadres</span>
+                        </button>
+                        <!-- Dashboard movido a Dashboard General -->
                     </div>
                 </div>
 
@@ -354,130 +373,8 @@
                 </div>
 
                 <!-- Vista Dashboard -->
-                <div id="view-dashboard" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-chart-pie"></i> Dashboard Gerencial</h2>
-                    </div>
-
-                    <div class="filtros-dashboard">
-                        <div class="form-group">
-                            <label><i class="fas fa-calendar"></i> Desde</label>
-                            <input type="date" id="dash-fecha-desde">
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-calendar"></i> Hasta</label>
-                            <input type="date" id="dash-fecha-hasta">
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-store"></i> Marca</label>
-                            <select id="dash-marca" onchange="filtrarBodegasPorMarca()">
-                                <option value="">Todas las marcas</option>
-                                <option value="chios">Chios Burger</option>
-                                <option value="santo_cachon">Santo Cachon</option>
-                                <option value="simon_bolon">Simon Bolon</option>
-                                <option value="operaciones">Operaciones</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-warehouse"></i> Bodega</label>
-                            <select id="dash-bodega">
-                                <option value="">Todas las bodegas</option>
-                                <option value="real_audiencia" data-marca="chios">Real Audiencia</option>
-                                <option value="floreana" data-marca="chios">Floreana</option>
-                                <option value="portugal" data-marca="chios">Portugal</option>
-                                <option value="santo_cachon_real" data-marca="santo_cachon">Santo Cachon Real</option>
-                                <option value="santo_cachon_portugal" data-marca="santo_cachon">Santo Cachon Portugal</option>
-                                <option value="simon_bolon" data-marca="simon_bolon">Simon Bolon</option>
-                                <option value="bodega_principal" data-marca="operaciones">Bodega Principal</option>
-                                <option value="materia_prima" data-marca="operaciones">Materia Prima</option>
-                                <option value="planta" data-marca="operaciones">Planta de Produccion</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-box"></i> Producto</label>
-                            <select id="dash-producto" style="height:36px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;background:var(--bg-white);color:var(--text-dark);outline:none;min-width:200px;max-width:300px;">
-                                <option value="">Todos los productos</option>
-                            </select>
-                        </div>
-                        <button id="btn-cargar-dashboard" class="btn-secondary">
-                            <i class="fas fa-sync-alt"></i> Actualizar
-                        </button>
-                    </div>
-
-                    <div id="dashboard-stats" class="dashboard-stats-grid">
-                        <!-- KPIs gerenciales -->
-                    </div>
-
-                    <div id="dashboard-valor-resumen" style="margin:12px 0;"></div>
-
-                    <div class="dashboard-charts-grid">
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-bullseye"></i> Exactitud del Inventario
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-exactitud"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-exclamation-circle"></i> Productos que mas Fallan
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-productos-fallan"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-dollar-sign"></i> Descuadre en Valor ($)
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-diferencias-bodega"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-tags"></i> Motivos mas Frecuentes
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-motivos"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-card chart-card-full">
-                            <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                                <span><i class="fas fa-chart-line"></i> Tendencia de Diferencias</span>
-                                <select id="tendencia-motivo-filter" onchange="actualizarTendenciaMotivo()" style="height:30px; border:1px solid #e2e8f0; border-radius:6px; padding:0 8px; font-size:12px; color:#475569; max-width:220px;">
-                                    <option value="">Todos los motivos</option>
-                                </select>
-                            </div>
-                            <div class="chart-card-body chart-card-body-line">
-                                <canvas id="chart-tendencia-temporal"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="chart-card chart-card-full" style="margin-top:12px;">
-                        <div class="chart-card-header">
-                            <i class="fas fa-exclamation-circle"></i> Top 10 Productos con Mayor Descuadre en Valor
-                        </div>
-                        <div class="chart-card-body" style="padding:0;">
-                            <div style="overflow-x:auto;">
-                                <table class="usuarios-tabla" id="dash-top-table" style="margin:0;width:100%;">
-                                    <thead>
-                                        <tr>
-                                            <th>Codigo</th>
-                                            <th>Producto</th>
-                                            <th>Diferencia</th>
-                                            <th>Costo Unit.</th>
-                                            <th>Valor Descuadre</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="dash-top-tbody"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- view-dashboard redirige al dashboard general -->
+                <div id="view-dashboard" class="view" style="display:none;"></div>
 
                 <!-- Vista Bajas Directas (solo admin) -->
                 <div id="view-bajas" class="view">
@@ -1106,6 +1003,271 @@
                         </div>
                         <div style="padding:20px;" id="eval-ranking-body">
                             <div style="text-align:center; color:#94a3b8; padding:20px;"><i class="fas fa-trophy" style="font-size:30px;"></i><p>Selecciona una semana para ver el ranking</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ DASHBOARD GENERAL ============ -->
+                <div id="view-dashboard-general" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-tachometer-alt"></i> Dashboard General</h2>
+                    </div>
+
+                    <!-- Selector de modulo -->
+                    <div class="cruce-subtabs" style="margin-top:12px;">
+                        <button class="cruce-subtab active" data-subtab="dash-inv" onclick="dashGeneralTab('inventario')">
+                            <i class="fas fa-boxes"></i> Inventario
+                        </button>
+                        <button class="cruce-subtab" data-subtab="dash-dep" onclick="dashGeneralTab('depositos')">
+                            <i class="fas fa-money-bill-wave"></i> Depositos
+                        </button>
+                        <button class="cruce-subtab" data-subtab="dash-cuadres" onclick="dashGeneralTab('cuadres')">
+                            <i class="fas fa-cash-register"></i> Cuadres
+                        </button>
+                        <button class="cruce-subtab" data-subtab="dash-delivery" onclick="dashGeneralTab('delivery')">
+                            <i class="fas fa-motorcycle"></i> Delivery
+                        </button>
+                        <button class="cruce-subtab" data-subtab="dash-facturas" onclick="dashGeneralTab('facturas')">
+                            <i class="fas fa-file-invoice-dollar"></i> Facturas
+                        </button>
+                    </div>
+
+                    <!-- CONTENIDO: INVENTARIO -->
+                    <div id="dash-panel-inventario" class="dash-general-panel">
+                        <div class="obs-filtros">
+                            <div class="obs-filtro-grupo">
+                                <label>Desde</label>
+                                <input type="date" id="dash-fecha-desde" class="obs-filtro-input">
+                            </div>
+                            <div class="obs-filtro-grupo">
+                                <label>Hasta</label>
+                                <input type="date" id="dash-fecha-hasta" class="obs-filtro-input">
+                            </div>
+                            <div class="obs-filtro-grupo">
+                                <label>Marca</label>
+                                <select id="dash-marca" class="obs-filtro-input" onchange="filtrarBodegasPorMarca()">
+                                    <option value="">Todas</option>
+                                    <option value="chios">Chios Burger</option>
+                                    <option value="cachon">Santo Cachon</option>
+                                    <option value="simon">Simon Bolon</option>
+                                    <option value="operaciones">Operaciones</option>
+                                </select>
+                            </div>
+                            <div class="obs-filtro-grupo">
+                                <label>Bodega</label>
+                                <select id="dash-bodega" class="obs-filtro-input">
+                                    <option value="">Todas las bodegas</option>
+                                </select>
+                            </div>
+                            <div class="obs-filtro-grupo">
+                                <label>Producto</label>
+                                <select id="dash-producto" class="obs-filtro-input" style="max-width:200px;">
+                                    <option value="">Todos</option>
+                                </select>
+                            </div>
+                            <button id="btn-cargar-dashboard" class="btn-obs-cargar" onclick="cargarDashboard()">
+                                <i class="fas fa-sync-alt"></i> Actualizar
+                            </button>
+                        </div>
+                        <div id="dashboard-stats" class="dashboard-stats-grid"></div>
+                        <div id="dashboard-valor-resumen" style="margin-top:12px;"></div>
+                        <div class="dashboard-charts-grid" style="margin-top:16px;">
+                            <div class="chart-card">
+                                <div class="chart-card-header"><i class="fas fa-bullseye"></i> Exactitud por Bodega</div>
+                                <div class="chart-card-body"><canvas id="chart-exactitud"></canvas></div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-card-header"><i class="fas fa-sort-amount-down"></i> Top Productos con Mayor Descuadre</div>
+                                <div class="chart-card-body"><canvas id="chart-productos-fallan"></canvas></div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-card-header"><i class="fas fa-chart-bar"></i> Diferencias por Bodega</div>
+                                <div class="chart-card-body"><canvas id="chart-diferencias-bodega"></canvas></div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-card-header"><i class="fas fa-fire"></i> Motivos mas Frecuentes</div>
+                                <div class="chart-card-body"><canvas id="chart-motivos"></canvas></div>
+                            </div>
+                            <div class="chart-card chart-card-full">
+                                <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                    <span><i class="fas fa-chart-line"></i> Tendencia de Diferencias</span>
+                                    <select id="tendencia-motivo-filter" onchange="actualizarTendenciaMotivo()" style="height:30px; border:1px solid #e2e8f0; border-radius:6px; padding:0 8px; font-size:12px; color:#475569; max-width:220px;">
+                                        <option value="">Todos los motivos</option>
+                                    </select>
+                                </div>
+                                <div class="chart-card-body chart-card-body-line">
+                                    <canvas id="chart-tendencia-temporal"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-card chart-card-full" style="margin-top:12px;">
+                            <div class="chart-card-header"><i class="fas fa-list-ol"></i> Top 10 Productos con Mayor Descuadre en Valor</div>
+                            <div style="padding:12px;"><div id="top-descuadre-table"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- CONTENIDO: DEPOSITOS -->
+                    <div id="dash-panel-depositos" class="dash-general-panel" style="display:none;">
+                        <div class="obs-filtros">
+                            <div class="obs-filtro-grupo">
+                                <label>Desde</label>
+                                <input type="date" id="dep-dash-desde" class="obs-filtro-input">
+                            </div>
+                            <div class="obs-filtro-grupo">
+                                <label>Hasta</label>
+                                <input type="date" id="dep-dash-hasta" class="obs-filtro-input">
+                            </div>
+                            <button class="btn-obs-cargar" onclick="depCargarDashboard()">
+                                <i class="fas fa-sync-alt"></i> Actualizar
+                            </button>
+                        </div>
+                        <div id="dep-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                        <div id="dep-dash-locales" style="margin-top:16px;"></div>
+                    </div>
+
+                    <!-- CONTENIDO: CUADRES (proximamente) -->
+                    <div id="dash-panel-cuadres" class="dash-general-panel" style="display:none;">
+                        <div class="empty-state" style="padding:60px;"><i class="fas fa-cash-register" style="font-size:40px;"></i><p style="margin-top:12px;">Modulo de Cuadres de Caja - Proximamente</p></div>
+                    </div>
+
+                    <!-- CONTENIDO: DELIVERY (proximamente) -->
+                    <div id="dash-panel-delivery" class="dash-general-panel" style="display:none;">
+                        <div class="empty-state" style="padding:60px;"><i class="fas fa-motorcycle" style="font-size:40px;"></i><p style="margin-top:12px;">Modulo de Delivery - Proximamente</p></div>
+                    </div>
+
+                    <!-- CONTENIDO: FACTURAS (proximamente) -->
+                    <div id="dash-panel-facturas" class="dash-general-panel" style="display:none;">
+                        <div class="empty-state" style="padding:60px;"><i class="fas fa-file-invoice-dollar" style="font-size:40px;"></i><p style="margin-top:12px;">Modulo de Facturas - Proximamente</p></div>
+                    </div>
+                </div>
+
+                <!-- ============ MODULO DEPOSITOS ============ -->
+
+                <!-- Vista Depositos - Verificacion (Lider) -->
+                <div id="view-dep-pendientes" class="view">
+                    <div class="view-header" style="margin-bottom:0;">
+                        <h2><i class="fas fa-search-dollar"></i> Verificacion de Depositos</h2>
+                    </div>
+                    <div class="dep-layout">
+                        <!-- PANEL IZQUIERDO: Listado -->
+                        <div class="dep-sidebar">
+                            <div class="dep-sidebar-header">
+                                <select id="dep-pend-estado" class="dep-sidebar-filter" onchange="depCargarPendientes()">
+                                    <option value="">Todos</option>
+                                    <option value="Valor pendiente Verificar">Sin verificar</option>
+                                    <option value="Valor retirado por líder">Retirado por lider</option>
+                                    <option value="Enviado a Contabilidad">Enviado a Contabilidad</option>
+                                    <option value="Aprobado por Contabilidad">Aprobados</option>
+                                </select>
+                                <button class="dep-sidebar-refresh" onclick="depCargarPendientes()" title="Actualizar">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="dep-sidebar-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="dep-buscar" placeholder="Buscar local o responsable..." oninput="depFiltrarSidebar()">
+                            </div>
+                            <div id="dep-sidebar-list" class="dep-sidebar-items">
+                                <div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
+                            </div>
+                        </div>
+                        <!-- PANEL DERECHO: Detalle -->
+                        <div class="dep-detalle" id="dep-detalle">
+                            <div class="dep-detalle-empty">
+                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
+                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito del listado</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Depositos - Historial -->
+                <div id="view-dep-historial" class="view">
+                    <div class="view-header" style="margin-bottom:0;">
+                        <h2><i class="fas fa-list-alt"></i> Historial de Depositos</h2>
+                    </div>
+                    <div class="dep-layout">
+                        <div class="dep-sidebar">
+                            <div class="dep-sidebar-header">
+                                <select id="dep-hist-cuadre" class="dep-sidebar-filter" onchange="depCargarHistorial()">
+                                    <option value="">Todos</option>
+                                    <option value="Cuadra">Cuadra</option>
+                                    <option value="Descuadra">Descuadra</option>
+                                </select>
+                                <button class="dep-sidebar-refresh" onclick="depCargarHistorial()" title="Actualizar">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="dep-sidebar-header" style="border-bottom:1px solid var(--border);padding:6px 10px;">
+                                <input type="date" id="dep-fecha-desde" class="dep-sidebar-filter" style="flex:1;">
+                                <input type="date" id="dep-fecha-hasta" class="dep-sidebar-filter" style="flex:1;">
+                            </div>
+                            <div class="dep-sidebar-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="dep-hist-buscar" placeholder="Buscar..." oninput="depFiltrarHistSidebar()">
+                            </div>
+                            <div id="dep-hist-sidebar-list" class="dep-sidebar-items">
+                                <div class="empty-state" style="padding:30px;"><i class="fas fa-search"></i><p>Selecciona fechas y busca</p></div>
+                            </div>
+                        </div>
+                        <div class="dep-detalle" id="dep-hist-detalle">
+                            <div class="dep-detalle-empty">
+                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
+                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito del listado</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Depositos - Subir Respaldo -->
+                <div id="view-dep-respaldo" class="view">
+                    <div class="view-header" style="margin-bottom:0;">
+                        <h2><i class="fas fa-upload"></i> Subir Respaldo de Deposito</h2>
+                    </div>
+                    <div class="dep-layout">
+                        <div class="dep-sidebar">
+                            <div class="dep-sidebar-header">
+                                <span style="font-size:12px;font-weight:600;color:var(--text-gray);padding:0 4px;">Depositos retirados sin respaldo</span>
+                                <button class="dep-sidebar-refresh" onclick="depCargarSinRespaldo()" title="Actualizar">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div id="dep-resp-sidebar-list" class="dep-sidebar-items">
+                                <div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
+                            </div>
+                        </div>
+                        <div class="dep-detalle" id="dep-resp-detalle">
+                            <div class="dep-detalle-empty">
+                                <i class="fas fa-file-upload" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
+                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito para subir su respaldo</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Depositos - Descuadres -->
+                <div id="view-dep-descuadres" class="view">
+                    <div class="view-header" style="margin-bottom:0;">
+                        <h2><i class="fas fa-exclamation-triangle"></i> Descuadres</h2>
+                    </div>
+                    <div class="dep-layout">
+                        <div class="dep-sidebar">
+                            <div class="dep-sidebar-header" style="padding:6px 10px;">
+                                <input type="date" id="dep-desc-desde" class="dep-sidebar-filter" style="flex:1;">
+                                <input type="date" id="dep-desc-hasta" class="dep-sidebar-filter" style="flex:1;">
+                                <button class="dep-sidebar-refresh" onclick="depCargarDescuadres()" title="Buscar">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                            <div id="dep-desc-sidebar-list" class="dep-sidebar-items">
+                                <div class="empty-state" style="padding:30px;"><i class="fas fa-search"></i><p>Selecciona fechas</p></div>
+                            </div>
+                        </div>
+                        <div class="dep-detalle" id="dep-desc-detalle">
+                            <div class="dep-detalle-empty">
+                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
+                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un descuadre del listado</p>
+                            </div>
                         </div>
                     </div>
                 </div>
