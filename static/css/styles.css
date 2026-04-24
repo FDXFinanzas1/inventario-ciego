@@ -5721,10 +5721,10 @@ tr.cruce-solo-cont { background: #F1F5F9; }
 .nav-module-header {
     width: 100%; display: flex; align-items: center; gap: 10px;
     padding: 12px 16px; border: none; background: none; cursor: pointer;
-    color: #94a3b8; font-size: 13px; font-weight: 600; text-transform: uppercase;
+    color: #e2e8f0; font-size: 13px; font-weight: 600; text-transform: uppercase;
     letter-spacing: 0.5px; transition: all 0.2s;
 }
-.nav-module-header:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
+.nav-module-header:hover { color: #fff; background: rgba(255,255,255,0.1); }
 .nav-module-header i:first-child { font-size: 14px; width: 20px; text-align: center; }
 .nav-module-header span { flex: 1; text-align: left; }
 .nav-module-arrow { font-size: 10px; transition: transform 0.2s; }

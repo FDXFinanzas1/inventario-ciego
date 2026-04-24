@@ -99,7 +99,7 @@ def init_db():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.merma_operativa (
+            CREATE TABLE IF NOT EXISTS goti.merma_operativa (
                 id SERIAL PRIMARY KEY,
                 fecha DATE NOT NULL,
                 local VARCHAR(50) NOT NULL,
@@ -114,7 +114,7 @@ def init_db():
             )
         """)
         cur.execute("""
-            ALTER TABLE inventario_diario.asignacion_diferencias
+            ALTER TABLE goti.asignacion_diferencias
                 ADD COLUMN IF NOT EXISTS codigo VARCHAR(50),
                 ADD COLUMN IF NOT EXISTS nombre VARCHAR(150),
                 ADD COLUMN IF NOT EXISTS unidad VARCHAR(20),
@@ -122,7 +122,7 @@ def init_db():
                 ADD COLUMN IF NOT EXISTS fecha DATE
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.bajas_directas (
+            CREATE TABLE IF NOT EXISTS goti.bajas_directas (
                 id SERIAL PRIMARY KEY,
                 baja_grupo BIGINT,
                 fecha DATE NOT NULL,
@@ -139,19 +139,19 @@ def init_db():
             )
         """)
         cur.execute("""
-            ALTER TABLE inventario_diario.bajas_directas
+            ALTER TABLE goti.bajas_directas
                 ADD COLUMN IF NOT EXISTS baja_grupo BIGINT
         """)
         cur.execute("""
-            ALTER TABLE inventario_diario.bajas_directas
+            ALTER TABLE goti.bajas_directas
                 ADD COLUMN IF NOT EXISTS documento VARCHAR(100)
         """)
         cur.execute("""
-            ALTER TABLE inventario_diario.bajas_directas
+            ALTER TABLE goti.bajas_directas
                 ADD COLUMN IF NOT EXISTS codigo_baja VARCHAR(50)
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.bajas_asignaciones (
+            CREATE TABLE IF NOT EXISTS goti.bajas_asignaciones (
                 id SERIAL PRIMARY KEY,
                 baja_grupo BIGINT NOT NULL,
                 persona VARCHAR(100) NOT NULL,
@@ -164,7 +164,7 @@ def init_db():
         """)
         # ---- Tablas para Asignación por Sección (prototipo) ----
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.asignacion_seccion (
+            CREATE TABLE IF NOT EXISTS goti.asignacion_seccion (
                 id SERIAL PRIMARY KEY,
                 fecha DATE NOT NULL,
                 local VARCHAR(50) NOT NULL,
@@ -174,7 +174,7 @@ def init_db():
             )
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.asig_seccion_productos (
+            CREATE TABLE IF NOT EXISTS goti.asig_seccion_productos (
                 id SERIAL PRIMARY KEY,
                 seccion_id INT NOT NULL,
                 conteo_id INT NOT NULL,
@@ -187,11 +187,11 @@ def init_db():
             )
         """)
         cur.execute("""
-            ALTER TABLE inventario_diario.asig_seccion_productos
+            ALTER TABLE goti.asig_seccion_productos
                 ADD COLUMN IF NOT EXISTS cantidad_asignada NUMERIC(12,4)
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.asig_seccion_personas (
+            CREATE TABLE IF NOT EXISTS goti.asig_seccion_personas (
                 id SERIAL PRIMARY KEY,
                 seccion_id INT NOT NULL,
                 persona VARCHAR(100),
@@ -200,7 +200,7 @@ def init_db():
         """)
         # ---- Tablas para Asignacion Semanal ----
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.semanas_inventario (
+            CREATE TABLE IF NOT EXISTS goti.semanas_inventario (
                 id SERIAL PRIMARY KEY,
                 fecha_inicio DATE NOT NULL,
                 fecha_fin DATE NOT NULL,
@@ -214,7 +214,7 @@ def init_db():
             )
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.asignacion_semanal (
+            CREATE TABLE IF NOT EXISTS goti.asignacion_semanal (
                 id SERIAL PRIMARY KEY,
                 semana_id INT NOT NULL,
                 codigo VARCHAR(50) NOT NULL,
@@ -227,7 +227,7 @@ def init_db():
             )
         """)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.asignacion_semanal_personas (
+            CREATE TABLE IF NOT EXISTS goti.asignacion_semanal_personas (
                 id SERIAL PRIMARY KEY,
                 asignacion_semanal_id INT NOT NULL,
                 persona VARCHAR(100) NOT NULL,
@@ -237,7 +237,7 @@ def init_db():
         """)
         # ---- Columnas de auditoria: quien contó y quien modificó ----
         cur.execute("""
-            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ALTER TABLE goti.inventario_ciego_conteos
                 ADD COLUMN IF NOT EXISTS contado_por VARCHAR(50),
                 ADD COLUMN IF NOT EXISTS contado_at TIMESTAMP,
                 ADD COLUMN IF NOT EXISTS contado2_por VARCHAR(50),
@@ -247,7 +247,7 @@ def init_db():
         """)
         # ---- Tabla de permisos por ROL (ver + editar) ----
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.rol_modulos (
+            CREATE TABLE IF NOT EXISTS goti.rol_modulos (
                 id SERIAL PRIMARY KEY,
                 rol VARCHAR(20) NOT NULL,
                 modulo VARCHAR(30) NOT NULL,
@@ -258,37 +258,37 @@ def init_db():
         """)
         # Migrar: agregar columnas si tabla ya existia sin ellas
         cur.execute("""
-            ALTER TABLE inventario_diario.rol_modulos
+            ALTER TABLE goti.rol_modulos
                 ADD COLUMN IF NOT EXISTS puede_ver BOOLEAN DEFAULT TRUE,
                 ADD COLUMN IF NOT EXISTS puede_editar BOOLEAN DEFAULT FALSE,
                 ADD COLUMN IF NOT EXISTS puede_eliminar BOOLEAN DEFAULT FALSE
         """)
         # Seed defaults si la tabla esta vacia
-        cur.execute("SELECT COUNT(*) as cnt FROM inventario_diario.rol_modulos")
+        cur.execute("SELECT COUNT(*) as cnt FROM goti.rol_modulos")
         if cur.fetchone()['cnt'] == 0:
             # Subgerente: conteo, observaciones, historico, dashboard
             for mod in ['conteo','observaciones','historico','dashboard']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('subgerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+                cur.execute("INSERT INTO goti.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('subgerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             # Supervisor: ve todos los locales, ve todo pero no edita usuarios
             for mod in ['conteo','observaciones','historico','dashboard','cruce','bajas','semanal','correccion']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('supervisor', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+                cur.execute("INSERT INTO goti.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('supervisor', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             # Gerente: todo lo del subgerente + semanal, cruce, bajas
             for mod in ['conteo','observaciones','historico','dashboard']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('gerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+                cur.execute("INSERT INTO goti.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('gerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             for mod in ['cruce','bajas','semanal','correccion']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('gerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
+                cur.execute("INSERT INTO goti.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('gerente', %s, TRUE, TRUE, FALSE) ON CONFLICT DO NOTHING", (mod,))
             # Admin: ve, edita y elimina todo
             for mod in ['conteo','observaciones','historico','dashboard','cruce','bajas','semanal','correccion','usuarios']:
-                cur.execute("INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('admin', %s, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING", (mod,))
+                cur.execute("INSERT INTO goti.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar) VALUES ('admin', %s, TRUE, TRUE, TRUE) ON CONFLICT DO NOTHING", (mod,))
         # Actualizar registros existentes que no tengan puede_ver seteado (migracion)
-        cur.execute("UPDATE inventario_diario.rol_modulos SET puede_ver = TRUE WHERE puede_ver IS NULL")
-        cur.execute("UPDATE inventario_diario.rol_modulos SET puede_editar = TRUE WHERE puede_editar IS NULL")
+        cur.execute("UPDATE goti.rol_modulos SET puede_ver = TRUE WHERE puede_ver IS NULL")
+        cur.execute("UPDATE goti.rol_modulos SET puede_editar = TRUE WHERE puede_editar IS NULL")
 
         # Migrar roles: empleado → subgerente, supervisor → gerente
-        cur.execute("UPDATE inventario_diario.usuarios SET rol = 'subgerente' WHERE rol = 'empleado'")
-        cur.execute("UPDATE inventario_diario.usuarios SET rol = 'gerente' WHERE rol = 'supervisor'")
-        cur.execute("UPDATE inventario_diario.rol_modulos SET rol = 'subgerente' WHERE rol = 'empleado'")
-        cur.execute("UPDATE inventario_diario.rol_modulos SET rol = 'gerente' WHERE rol = 'supervisor'")
+        cur.execute("UPDATE goti.usuarios SET rol = 'subgerente' WHERE rol = 'empleado'")
+        cur.execute("UPDATE goti.usuarios SET rol = 'gerente' WHERE rol = 'supervisor'")
+        cur.execute("UPDATE goti.rol_modulos SET rol = 'subgerente' WHERE rol = 'empleado'")
+        cur.execute("UPDATE goti.rol_modulos SET rol = 'gerente' WHERE rol = 'supervisor'")
         conn.commit()
         print('init_db: tablas OK')
     except Exception as e:
@@ -346,7 +346,7 @@ def pagina_establecer_clave():
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("""SELECT username, nombre, invite_token_expires FROM inventario_diario.usuarios
+        cur.execute("""SELECT username, nombre, invite_token_expires FROM goti.usuarios
                        WHERE invite_token = %s AND activo = TRUE""", (token,))
         user = cur.fetchone()
         if not user:
@@ -399,7 +399,7 @@ def login():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            SELECT username, nombre, rol FROM inventario_diario.usuarios
+            SELECT username, nombre, rol FROM goti.usuarios
             WHERE username = %s AND password = %s AND activo = TRUE
         """, (username, password))
         user = cur.fetchone()
@@ -407,8 +407,8 @@ def login():
         if user:
             # Cargar bodegas desde BD
             cur.execute("""
-                SELECT ub.bodega FROM inventario_diario.usuario_bodegas ub
-                JOIN inventario_diario.usuarios u ON u.id = ub.usuario_id
+                SELECT ub.bodega FROM goti.usuario_bodegas ub
+                JOIN goti.usuarios u ON u.id = ub.usuario_id
                 WHERE u.username = %s
                 ORDER BY ub.bodega
             """, (user['username'],))
@@ -418,14 +418,14 @@ def login():
             bodega_asignada = bodegas_ventas[0] if len(bodegas_ventas) == 1 else None
             # Cargar modulos permitidos segun el ROL (con nivel ver/editar)
             cur.execute("""
-                SELECT modulo, puede_ver, puede_editar FROM inventario_diario.rol_modulos
+                SELECT modulo, puede_ver, puede_editar FROM goti.rol_modulos
                 WHERE rol = %s ORDER BY modulo
             """, (user['rol'],))
             modulos_user = [r['modulo'] for r in cur.fetchall() if r['puede_ver']]
             permisos_user = {}
             cur.execute("""
                 SELECT modulo, puede_ver, puede_editar, COALESCE(puede_eliminar, FALSE) as puede_eliminar
-                FROM inventario_diario.rol_modulos WHERE rol = %s
+                FROM goti.rol_modulos WHERE rol = %s
             """, (user['rol'],))
             for r in cur.fetchall():
                 permisos_user[r['modulo']] = {'ver': r['puede_ver'], 'editar': r['puede_editar'], 'eliminar': r['puede_eliminar']}
@@ -493,13 +493,13 @@ def consultar_inventario():
 
         # Asegurar columnas: observaciones, motivo, corregido (auditoría) y justificado (no descontar)
         cur.execute("""
-            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ALTER TABLE goti.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS observaciones TEXT;
-            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ALTER TABLE goti.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS motivo TEXT;
-            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ALTER TABLE goti.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS corregido BOOLEAN DEFAULT FALSE;
-            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ALTER TABLE goti.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS justificado BOOLEAN DEFAULT FALSE;
         """)
         conn.commit()
@@ -510,7 +510,7 @@ def consultar_inventario():
                    COALESCE(corregido, FALSE) as corregido,
                    COALESCE(justificado, FALSE) as justificado,
                    COALESCE(costo_unitario, 0) as costo_unitario
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
             ORDER BY codigo
         """, (fecha, local))
@@ -548,7 +548,7 @@ def autofill_conteo2():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            UPDATE inventario_diario.inventario_ciego_conteos
+            UPDATE goti.inventario_ciego_conteos
             SET cantidad_contada_2 = cantidad_contada
             WHERE fecha = %s AND local = %s
               AND cantidad_contada IS NOT NULL
@@ -582,13 +582,13 @@ def guardar_conteo():
 
         if conteo == 2:
             cur.execute("""
-                UPDATE inventario_diario.inventario_ciego_conteos
+                UPDATE goti.inventario_ciego_conteos
                 SET cantidad_contada_2 = %s, contado2_por = %s, contado2_at = NOW()
                 WHERE id = %s
             """, (cantidad, usuario or None, id_producto))
         else:
             cur.execute("""
-                UPDATE inventario_diario.inventario_ciego_conteos
+                UPDATE goti.inventario_ciego_conteos
                 SET cantidad_contada = %s, contado_por = %s, contado_at = NOW()
                 WHERE id = %s
             """, (cantidad, usuario or None, id_producto))
@@ -636,7 +636,7 @@ def guardar_observacion():
         if sets:
             params.append(id_producto)
             cur.execute(f"""
-                UPDATE inventario_diario.inventario_ciego_conteos
+                UPDATE goti.inventario_ciego_conteos
                 SET {', '.join(sets)}
                 WHERE id = %s
             """, params)
@@ -660,7 +660,7 @@ def reporte_motivos_lista():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            SELECT DISTINCT motivo FROM inventario_diario.inventario_ciego_conteos
+            SELECT DISTINCT motivo FROM goti.inventario_ciego_conteos
             WHERE motivo IS NOT NULL AND motivo != ''
             ORDER BY motivo
         """)
@@ -690,14 +690,14 @@ def reporte_motivos():
 
         # Asegurar columna motivo existe en conteos
         cur.execute("""
-            ALTER TABLE inventario_diario.inventario_ciego_conteos
+            ALTER TABLE goti.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS motivo TEXT
         """)
         conn.commit()
 
         # Asegurar tabla manuales existe
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.observaciones_manuales (
+            CREATE TABLE IF NOT EXISTS goti.observaciones_manuales (
                 id SERIAL PRIMARY KEY,
                 fecha DATE NOT NULL,
                 local VARCHAR(100) NOT NULL,
@@ -716,7 +716,7 @@ def reporte_motivos():
         # Motivos de conteos
         query1 = """
             SELECT motivo, COUNT(*) as cantidad
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
               AND motivo IS NOT NULL AND motivo != ''
         """
@@ -738,7 +738,7 @@ def reporte_motivos():
         # Motivos de observaciones manuales
         query2 = """
             SELECT motivo, COUNT(*) as cantidad
-            FROM inventario_diario.observaciones_manuales
+            FROM goti.observaciones_manuales
             WHERE fecha >= %s AND fecha <= %s
               AND motivo IS NOT NULL AND motivo != ''
         """
@@ -795,7 +795,7 @@ def reporte_diferencias_fecha():
                    COALESCE(cantidad_contada_2, cantidad_contada) as conteo,
                    COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
                    COALESCE(motivo, '') as motivo
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha = %s
               AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
               AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
@@ -843,7 +843,7 @@ def reporte_motivo_detalle():
         query1 = """
             SELECT nombre, local, COUNT(*) as veces,
                    SUM(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad)) as diferencia_total
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s AND motivo = %s
         """
         params1 = [fecha_desde, fecha_hasta, motivo]
@@ -858,7 +858,7 @@ def reporte_motivo_detalle():
         query2 = """
             SELECT nombre, local, COUNT(*) as veces,
                    SUM(ABS(diferencia)) as diferencia_total
-            FROM inventario_diario.observaciones_manuales
+            FROM goti.observaciones_manuales
             WHERE fecha >= %s AND fecha <= %s AND motivo = %s
         """
         params2 = [fecha_desde, fecha_hasta, motivo]
@@ -919,7 +919,7 @@ def listar_obs_manuales():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.observaciones_manuales (
+            CREATE TABLE IF NOT EXISTS goti.observaciones_manuales (
                 id SERIAL PRIMARY KEY,
                 fecha DATE NOT NULL,
                 local VARCHAR(100) NOT NULL,
@@ -935,12 +935,12 @@ def listar_obs_manuales():
             )
         """)
         # Asegurar columna justificado (migracion)
-        cur.execute("ALTER TABLE inventario_diario.observaciones_manuales ADD COLUMN IF NOT EXISTS justificado BOOLEAN DEFAULT FALSE")
+        cur.execute("ALTER TABLE goti.observaciones_manuales ADD COLUMN IF NOT EXISTS justificado BOOLEAN DEFAULT FALSE")
         conn.commit()
 
         cur.execute("""
             SELECT id, codigo, nombre, diferencia, motivo, observaciones, corregido, COALESCE(justificado, FALSE) as justificado, creado_por
-            FROM inventario_diario.observaciones_manuales
+            FROM goti.observaciones_manuales
             WHERE fecha = %s AND local = %s
             ORDER BY creado_at
         """, (fecha, local))
@@ -972,7 +972,7 @@ def crear_obs_manual():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO inventario_diario.observaciones_manuales
+            INSERT INTO goti.observaciones_manuales
             (fecha, local, codigo, nombre, diferencia, motivo, observaciones, creado_por)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -1009,7 +1009,7 @@ def actualizar_obs_manual(obs_id):
         if sets:
             params.append(obs_id)
             cur.execute(f"""
-                UPDATE inventario_diario.observaciones_manuales
+                UPDATE goti.observaciones_manuales
                 SET {', '.join(sets)}
                 WHERE id = %s
             """, params)
@@ -1028,7 +1028,7 @@ def eliminar_obs_manual(obs_id):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("DELETE FROM inventario_diario.observaciones_manuales WHERE id = %s", (obs_id,))
+        cur.execute("DELETE FROM goti.observaciones_manuales WHERE id = %s", (obs_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -1056,7 +1056,7 @@ def corregir_conteo():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            UPDATE inventario_diario.inventario_ciego_conteos
+            UPDATE goti.inventario_ciego_conteos
             SET cantidad = COALESCE(%s, cantidad),
                 cantidad_contada = %s,
                 cantidad_contada_2 = %s,
@@ -1094,7 +1094,7 @@ def cargar_inventario():
         registros = 0
         for prod in productos:
             cur.execute("""
-                INSERT INTO inventario_diario.inventario_ciego_conteos
+                INSERT INTO goti.inventario_ciego_conteos
                 (fecha, local, codigo, nombre, unidad, cantidad)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (fecha, local, codigo)
@@ -1135,7 +1135,7 @@ def generar_conteo_operativo():
 
         # Verificar si ya existen productos para esta fecha+bodega
         cur.execute("""
-            SELECT COUNT(*) as n FROM inventario_diario.inventario_ciego_conteos
+            SELECT COUNT(*) as n FROM goti.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
         """, (fecha, bodega))
         ya_existe = cur.fetchone()['n']
@@ -1144,7 +1144,7 @@ def generar_conteo_operativo():
 
         # Crear tarea para el worker
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inventario_diario.conteo_operativo_tareas (
+            CREATE TABLE IF NOT EXISTS goti.conteo_operativo_tareas (
                 id SERIAL PRIMARY KEY,
                 bodega VARCHAR(50) NOT NULL,
                 fecha DATE NOT NULL,
@@ -1164,7 +1164,7 @@ def generar_conteo_operativo():
 
         # Verificar si ya hay tarea pendiente/en_proceso
         cur.execute("""
-            SELECT id, estado FROM inventario_diario.conteo_operativo_tareas
+            SELECT id, estado FROM goti.conteo_operativo_tareas
             WHERE bodega = %s AND fecha = %s
         """, (bodega, fecha))
         existente = cur.fetchone()
@@ -1175,7 +1175,7 @@ def generar_conteo_operativo():
                 return jsonify({'error': 'Ya se genero el conteo para esta fecha', 'ya_existe': True}), 409
             # Error: resetear
             cur.execute("""
-                UPDATE inventario_diario.conteo_operativo_tareas
+                UPDATE goti.conteo_operativo_tareas
                 SET estado='pendiente', solicitado_at=NOW(), worker_lock=NULL, error_msg=NULL,
                     timestamp_inicio=NULL, timestamp_fin=NULL, total_productos=NULL
                 WHERE id = %s
@@ -1184,7 +1184,7 @@ def generar_conteo_operativo():
             return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
 
         cur.execute("""
-            INSERT INTO inventario_diario.conteo_operativo_tareas (bodega, fecha)
+            INSERT INTO goti.conteo_operativo_tareas (bodega, fecha)
             VALUES (%s, %s) RETURNING id
         """, (bodega, fecha))
         new_id = cur.fetchone()['id']
@@ -1210,10 +1210,10 @@ def conteo_op_pendientes():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            UPDATE inventario_diario.conteo_operativo_tareas
+            UPDATE goti.conteo_operativo_tareas
             SET estado = 'en_proceso', worker_lock = %s, timestamp_inicio = NOW()
             WHERE id IN (
-                SELECT id FROM inventario_diario.conteo_operativo_tareas
+                SELECT id FROM goti.conteo_operativo_tareas
                 WHERE estado = 'pendiente' ORDER BY solicitado_at ASC LIMIT 1
                 FOR UPDATE SKIP LOCKED
             )
@@ -1246,7 +1246,7 @@ def conteo_op_resultado():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            UPDATE inventario_diario.conteo_operativo_tareas
+            UPDATE goti.conteo_operativo_tareas
             SET estado = %s, timestamp_fin = NOW(),
                 total_productos = %s, fijos = %s, aleatorios = %s, error_msg = %s
             WHERE id = %s
@@ -1268,7 +1268,7 @@ def conteo_op_estado(ejec_id):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM inventario_diario.conteo_operativo_tareas WHERE id = %s", (ejec_id,))
+        cur.execute("SELECT * FROM goti.conteo_operativo_tareas WHERE id = %s", (ejec_id,))
         r = cur.fetchone()
         if not r: return jsonify({'error': 'no encontrado'}), 404
         return jsonify({
@@ -1307,7 +1307,7 @@ def historico():
                     THEN 1 END) as total_con_diferencia,
                 COUNT(CASE WHEN cantidad_contada IS NOT NULL THEN 1 END) as total_con_conteo1,
                 COUNT(CASE WHEN cantidad_contada_2 IS NOT NULL THEN 1 END) as total_con_conteo2
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
         """
         params = [fecha_desde, fecha_hasta]
@@ -1375,7 +1375,7 @@ def historico_pivot():
                 COALESCE(c.cantidad_contada_2, c.cantidad_contada) AS contado,
                 COALESCE(c.cantidad_contada_2, c.cantidad_contada) - c.cantidad AS diferencia,
                 c.costo_unitario
-            FROM inventario_diario.inventario_ciego_conteos c
+            FROM goti.inventario_ciego_conteos c
             WHERE c.fecha >= %s AND c.fecha <= %s AND c.local = %s
             ORDER BY c.codigo, c.fecha
         """, (fecha_desde, fecha_hasta, local))
@@ -1387,8 +1387,8 @@ def historico_pivot():
                    SUM(ABS(a.cantidad)) AS cantidad_neta,
                    SUM(a.cantidad)      AS cantidad_ajustada,
                    MAX(c.costo_unitario) AS costo_unitario
-            FROM inventario_diario.asignacion_diferencias a
-            JOIN inventario_diario.inventario_ciego_conteos c ON a.conteo_id = c.id
+            FROM goti.asignacion_diferencias a
+            JOIN goti.inventario_ciego_conteos c ON a.conteo_id = c.id
             WHERE c.fecha >= %s AND c.fecha <= %s AND c.local = %s
               AND a.persona IS NOT NULL AND a.persona <> ''
             GROUP BY c.codigo, a.persona
@@ -1472,7 +1472,7 @@ def reporte_diferencias():
                    observaciones,
                    COALESCE(corregido, FALSE) as corregido,
                    local
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha = %s
               AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
               AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
@@ -1540,7 +1540,7 @@ def exportar_excel():
                    COALESCE(motivo, '') as motivo,
                    observaciones,
                    COALESCE(corregido, FALSE) as corregido
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
         """
         params = [fecha_desde, fecha_hasta]
@@ -1671,7 +1671,7 @@ def reporte_tendencias():
                 COUNT(*) as frecuencia,
                 ROUND(AVG(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad))::numeric, 3) as promedio_desviacion,
                 ROUND(SUM(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad)::numeric, 3) as diferencia_acumulada
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
               AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
         """
@@ -1723,7 +1723,7 @@ def productos_disponibles():
     try:
         conn = get_db()
         cur = conn.cursor()
-        query = "SELECT DISTINCT codigo, nombre FROM inventario_diario.inventario_ciego_conteos WHERE fecha >= %s AND fecha <= %s"
+        query = "SELECT DISTINCT codigo, nombre FROM goti.inventario_ciego_conteos WHERE fecha >= %s AND fecha <= %s"
         params = [fecha_desde, fecha_hasta]
         if bodega:
             query += " AND local = %s"
@@ -1793,7 +1793,7 @@ def reporte_dashboard():
                 COALESCE(SUM(CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
                     AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad > 0
                     THEN ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) * COALESCE(costo_unitario, 0) END), 0) as valor_sobrantes
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
         """ + filtro_extra + " GROUP BY local ORDER BY local"
         cur.execute(query, params)
@@ -1821,7 +1821,7 @@ def reporte_dashboard():
                    SUM(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad)) as diferencia_total,
                    AVG(COALESCE(costo_unitario, 0)) as costo_unitario,
                    SUM(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) * COALESCE(costo_unitario, 0)) as valor_descuadre
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha >= %s AND fecha <= %s
               AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
               AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
@@ -1867,7 +1867,7 @@ def reporte_dashboard():
                        CASE WHEN COUNT(*) > 0
                             THEN COUNT(cantidad_contada)::float / COUNT(*) * 100
                             ELSE 0 END as cumplimiento_dia
-                FROM inventario_diario.inventario_ciego_conteos
+                FROM goti.inventario_ciego_conteos
                 WHERE fecha >= %s AND fecha <= %s
         """ + filtro_extra + """
                 GROUP BY fecha
@@ -1933,7 +1933,7 @@ def reporte_tendencias_temporal():
                 COUNT(CASE WHEN COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
                     AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
                     THEN 1 END) as total_con_diferencia
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE {where_fecha}{motivo_filter}
         """
 
@@ -2073,7 +2073,7 @@ def cruce_ejecuciones():
     try:
         conn = get_db()
         cur = conn.cursor()
-        sql = """SELECT * FROM inventario_diario.cruce_operativo_ejecuciones WHERE 1=1"""
+        sql = """SELECT * FROM goti.cruce_operativo_ejecuciones WHERE 1=1"""
         params = []
         if fecha_desde:
             sql += " AND fecha_toma >= %s"
@@ -2123,7 +2123,7 @@ def cruce_detalle():
     try:
         conn = get_db()
         cur = conn.cursor()
-        sql = """SELECT * FROM inventario_diario.cruce_operativo_detalle
+        sql = """SELECT * FROM goti.cruce_operativo_detalle
                  WHERE ejecucion_id = %s"""
         if solo_dif:
             sql += " AND diferencia != 0"
@@ -2166,7 +2166,7 @@ def cruce_resumen():
             WITH ultimas AS (
                 SELECT DISTINCT ON (bodega) id, bodega, fecha_toma,
                        total_productos_toma, total_con_diferencia
-                FROM inventario_diario.cruce_operativo_ejecuciones
+                FROM goti.cruce_operativo_ejecuciones
                 WHERE estado = 'completado'
                 ORDER BY bodega, fecha_toma DESC
             )
@@ -2175,7 +2175,7 @@ def cruce_resumen():
                    COUNT(*) FILTER (WHERE d.diferencia < 0) as faltantes,
                    COUNT(*) FILTER (WHERE d.diferencia > 0) as sobrantes
             FROM ultimas u
-            LEFT JOIN inventario_diario.cruce_operativo_detalle d ON d.ejecucion_id = u.id
+            LEFT JOIN goti.cruce_operativo_detalle d ON d.ejecucion_id = u.id
             GROUP BY u.id, u.bodega, u.fecha_toma, u.total_productos_toma, u.total_con_diferencia
             ORDER BY u.bodega
         """)
@@ -2213,13 +2213,13 @@ def cruce_exportar_excel():
         conn = get_db()
         cur = conn.cursor()
         # Info ejecucion
-        cur.execute("SELECT * FROM inventario_diario.cruce_operativo_ejecuciones WHERE id = %s", (ejec_id,))
+        cur.execute("SELECT * FROM goti.cruce_operativo_ejecuciones WHERE id = %s", (ejec_id,))
         ejec = cur.fetchone()
         if not ejec:
             return jsonify({'error': 'Ejecucion no encontrada'}), 404
 
         # Detalle
-        cur.execute("""SELECT * FROM inventario_diario.cruce_operativo_detalle
+        cur.execute("""SELECT * FROM goti.cruce_operativo_detalle
                        WHERE ejecucion_id = %s ORDER BY ABS(valor_diferencia) DESC""", (ejec_id,))
         rows = cur.fetchall()
 
@@ -2307,8 +2307,8 @@ def cruce_tendencias():
                    COUNT(*) as veces_con_diferencia,
                    ROUND(AVG(ABS(d.diferencia))::numeric, 2) as promedio_dif_abs,
                    ROUND(SUM(d.valor_diferencia)::numeric, 2) as valor_total
-            FROM inventario_diario.cruce_operativo_detalle d
-            JOIN inventario_diario.cruce_operativo_ejecuciones e ON d.ejecucion_id = e.id
+            FROM goti.cruce_operativo_detalle d
+            JOIN goti.cruce_operativo_ejecuciones e ON d.ejecucion_id = e.id
             WHERE d.diferencia != 0 AND e.estado = 'completado'
             GROUP BY d.codigo, d.nombre, d.categoria
             HAVING COUNT(*) >= 2
@@ -2353,16 +2353,16 @@ def borrar_datos():
         cur = conn.cursor()
         # Primero borrar asignaciones relacionadas
         cur.execute("""
-            DELETE FROM inventario_diario.asignacion_diferencias
+            DELETE FROM goti.asignacion_diferencias
             WHERE conteo_id IN (
-                SELECT id FROM inventario_diario.inventario_ciego_conteos
+                SELECT id FROM goti.inventario_ciego_conteos
                 WHERE fecha = %s AND local = %s
             )
         """, (fecha, local))
         asig_borradas = cur.rowcount
 
         cur.execute("""
-            DELETE FROM inventario_diario.inventario_ciego_conteos
+            DELETE FROM goti.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
         """, (fecha, local))
         conteos_borrados = cur.rowcount
@@ -2398,7 +2398,7 @@ def actualizar_costos():
             total = 0
             for nombre, costo in costos_directos.items():
                 cur_inv.execute("""
-                    UPDATE inventario_diario.inventario_ciego_conteos
+                    UPDATE goti.inventario_ciego_conteos
                     SET costo_unitario = %s
                     WHERE nombre = %s AND (costo_unitario IS NULL OR costo_unitario = 0)
                 """, (float(costo), nombre))
@@ -2414,7 +2414,7 @@ def actualizar_costos():
         conn_inv = get_db()
         cur_inv = conn_inv.cursor()
         cur_inv.execute("""
-            SELECT DISTINCT nombre FROM inventario_diario.inventario_ciego_conteos
+            SELECT DISTINCT nombre FROM goti.inventario_ciego_conteos
             WHERE costo_unitario IS NULL OR costo_unitario = 0
         """)
         nombres = [r['nombre'] for r in cur_inv.fetchall()]
@@ -2570,8 +2570,8 @@ def get_asignaciones():
         cur = conn.cursor()
         cur.execute("""
             SELECT a.id, a.conteo_id, a.persona, a.cantidad
-            FROM inventario_diario.asignacion_diferencias a
-            JOIN inventario_diario.inventario_ciego_conteos c ON a.conteo_id = c.id
+            FROM goti.asignacion_diferencias a
+            JOIN goti.inventario_ciego_conteos c ON a.conteo_id = c.id
             WHERE c.fecha = %s AND c.local = %s
             ORDER BY a.conteo_id, a.id
         """, (fecha, local))
@@ -2604,13 +2604,13 @@ def guardar_asignaciones():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            DELETE FROM inventario_diario.asignacion_diferencias
+            DELETE FROM goti.asignacion_diferencias
             WHERE conteo_id = %s
         """, (conteo_id,))
         # Obtener info del producto para guardar datos auto-contenidos
         cur.execute("""
             SELECT codigo, nombre, unidad, local, fecha
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE id = %s
         """, (conteo_id,))
         conteo_info = cur.fetchone()
@@ -2618,7 +2618,7 @@ def guardar_asignaciones():
             if a.get('persona') and a.get('cantidad') and float(a['cantidad']) > 0:
                 if conteo_info:
                     cur.execute("""
-                        INSERT INTO inventario_diario.asignacion_diferencias
+                        INSERT INTO goti.asignacion_diferencias
                             (conteo_id, persona, cantidad, codigo, nombre, unidad, local, fecha)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """, (conteo_id, a['persona'].strip(), float(a['cantidad']),
@@ -2626,7 +2626,7 @@ def guardar_asignaciones():
                           conteo_info['local'], conteo_info['fecha']))
                 else:
                     cur.execute("""
-                        INSERT INTO inventario_diario.asignacion_diferencias (conteo_id, persona, cantidad)
+                        INSERT INTO goti.asignacion_diferencias (conteo_id, persona, cantidad)
                         VALUES (%s, %s, %s)
                     """, (conteo_id, a['persona'].strip(), float(a['cantidad'])))
         conn.commit()
@@ -2654,7 +2654,7 @@ def listar_secciones_conteo():
         cur = conn.cursor()
         cur.execute("""
             SELECT id, nombre, total_valor
-            FROM inventario_diario.asignacion_seccion
+            FROM goti.asignacion_seccion
             WHERE fecha = %s AND local = %s
             ORDER BY created_at
         """, (fecha, local))
@@ -2663,7 +2663,7 @@ def listar_secciones_conteo():
         for s in secciones:
             cur.execute("""
                 SELECT conteo_id, codigo, nombre, diferencia, costo_unitario, cantidad_asignada, valor
-                FROM inventario_diario.asig_seccion_productos
+                FROM goti.asig_seccion_productos
                 WHERE seccion_id = %s ORDER BY id
             """, (s['id'],))
             productos = [{'conteo_id': r['conteo_id'], 'codigo': r['codigo'],
@@ -2673,7 +2673,7 @@ def listar_secciones_conteo():
                           'valor': float(r['valor'] or 0)} for r in cur.fetchall()]
             cur.execute("""
                 SELECT persona, monto
-                FROM inventario_diario.asig_seccion_personas
+                FROM goti.asig_seccion_personas
                 WHERE seccion_id = %s ORDER BY id
             """, (s['id'],))
             personas = [{'persona': r['persona'], 'monto': float(r['monto'] or 0)} for r in cur.fetchall()]
@@ -2707,19 +2707,19 @@ def guardar_seccion_conteo():
             cantidad_por_persona = float(p.get('cantidad_asignada', 0)) / n_personas
             # Borrar asignaciones previas para este conteo
             cur.execute("""
-                DELETE FROM inventario_diario.asignacion_diferencias
+                DELETE FROM goti.asignacion_diferencias
                 WHERE conteo_id = %s
             """, (conteo_id,))
             # Obtener info del producto para guardar datos auto-contenidos
             cur.execute("""
                 SELECT codigo, nombre, unidad, local, fecha
-                FROM inventario_diario.inventario_ciego_conteos WHERE id = %s
+                FROM goti.inventario_ciego_conteos WHERE id = %s
             """, (conteo_id,))
             info = cur.fetchone()
             for nombre_persona in personas:
                 if info:
                     cur.execute("""
-                        INSERT INTO inventario_diario.asignacion_diferencias
+                        INSERT INTO goti.asignacion_diferencias
                             (conteo_id, persona, cantidad, codigo, nombre, unidad, local, fecha)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """, (conteo_id, nombre_persona.strip(), cantidad_por_persona,
@@ -2727,7 +2727,7 @@ def guardar_seccion_conteo():
                           info['local'], info['fecha']))
                 else:
                     cur.execute("""
-                        INSERT INTO inventario_diario.asignacion_diferencias (conteo_id, persona, cantidad)
+                        INSERT INTO goti.asignacion_diferencias (conteo_id, persona, cantidad)
                         VALUES (%s, %s, %s)
                     """, (conteo_id, nombre_persona.strip(), cantidad_por_persona))
         conn.commit()
@@ -2747,9 +2747,9 @@ def eliminar_seccion_conteo(seccion_id):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("DELETE FROM inventario_diario.asig_seccion_productos WHERE seccion_id=%s", (seccion_id,))
-        cur.execute("DELETE FROM inventario_diario.asig_seccion_personas WHERE seccion_id=%s", (seccion_id,))
-        cur.execute("DELETE FROM inventario_diario.asignacion_seccion WHERE id=%s", (seccion_id,))
+        cur.execute("DELETE FROM goti.asig_seccion_productos WHERE seccion_id=%s", (seccion_id,))
+        cur.execute("DELETE FROM goti.asig_seccion_personas WHERE seccion_id=%s", (seccion_id,))
+        cur.execute("DELETE FROM goti.asignacion_seccion WHERE id=%s", (seccion_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2785,7 +2785,7 @@ def debug_db():
     try:
         conn2 = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
         cur2 = conn2.cursor()
-        cur2.execute("SELECT COUNT(*) as cnt FROM inventario_diario.usuarios")
+        cur2.execute("SELECT COUNT(*) as cnt FROM goti.usuarios")
         row2 = cur2.fetchone()
         result['direct_conn'] = 'ok'
         result['direct_data'] = {'usuarios_count': row2['cnt']}
@@ -2842,7 +2842,7 @@ def listar_mermas():
         cur.execute(f"""
             SELECT id, fecha, local, codigo, nombre, unidad, cantidad, motivo,
                    costo_unitario, costo_total, created_at
-            FROM inventario_diario.merma_operativa
+            FROM goti.merma_operativa
             {where}
             ORDER BY fecha DESC, created_at DESC
         """, params)
@@ -2889,7 +2889,7 @@ def registrar_merma():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO inventario_diario.merma_operativa
+            INSERT INTO goti.merma_operativa
                 (fecha, local, codigo, nombre, unidad, cantidad, motivo, costo_unitario, costo_total)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -2910,7 +2910,7 @@ def eliminar_merma(merma_id):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("DELETE FROM inventario_diario.merma_operativa WHERE id = %s", (merma_id,))
+        cur.execute("DELETE FROM goti.merma_operativa WHERE id = %s", (merma_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2948,7 +2948,7 @@ def listar_bajas():
                    MIN(b.codigo_baja) AS codigo_baja,
                    SUM(b.costo_total) AS total_costo,
                    MIN(b.created_at) AS created_at
-            FROM inventario_diario.bajas_directas b
+            FROM goti.bajas_directas b
             {where}
             GROUP BY b.baja_grupo
             ORDER BY MIN(b.created_at) DESC
@@ -2960,7 +2960,7 @@ def listar_bajas():
             # Productos del grupo
             cur.execute("""
                 SELECT id, codigo, nombre, unidad, cantidad, costo_unitario, costo_total
-                FROM inventario_diario.bajas_directas
+                FROM goti.bajas_directas
                 WHERE baja_grupo = %s ORDER BY id
             """, (grp,))
             items = [{'id': r['id'], 'codigo': r['codigo'], 'nombre': r['nombre'],
@@ -2969,7 +2969,7 @@ def listar_bajas():
                       'costo_total': float(r['costo_total'] or 0)} for r in cur.fetchall()]
             # Asignaciones del grupo
             cur.execute("""
-                SELECT id, persona, monto FROM inventario_diario.bajas_asignaciones
+                SELECT id, persona, monto FROM goti.bajas_asignaciones
                 WHERE baja_grupo = %s ORDER BY id
             """, (grp,))
             asigs = [{'id': r['id'], 'persona': r['persona'], 'monto': float(r['monto'])} for r in cur.fetchall()]
@@ -3021,7 +3021,7 @@ def registrar_baja():
             costo_unitario = float(item.get('costo_unitario') or 0)
             costo_total = cantidad * costo_unitario
             cur.execute("""
-                INSERT INTO inventario_diario.bajas_directas
+                INSERT INTO goti.bajas_directas
                     (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, persona, motivo, documento, codigo_baja, costo_unitario, costo_total)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (baja_grupo, fecha, local, codigo, nombre, unidad, cantidad, '', motivo, documento or None, codigo_baja or None, costo_unitario, costo_total))
@@ -3030,7 +3030,7 @@ def registrar_baja():
             monto = float(asig.get('monto') or 0)
             if persona and monto > 0:
                 cur.execute("""
-                    INSERT INTO inventario_diario.bajas_asignaciones
+                    INSERT INTO goti.bajas_asignaciones
                         (baja_grupo, persona, monto, fecha, local, motivo)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """, (baja_grupo, persona, monto, fecha, local, motivo))
@@ -3049,8 +3049,8 @@ def eliminar_baja_grupo(baja_grupo):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("DELETE FROM inventario_diario.bajas_directas WHERE baja_grupo = %s", (baja_grupo,))
-        cur.execute("DELETE FROM inventario_diario.bajas_asignaciones WHERE baja_grupo = %s", (baja_grupo,))
+        cur.execute("DELETE FROM goti.bajas_directas WHERE baja_grupo = %s", (baja_grupo,))
+        cur.execute("DELETE FROM goti.bajas_asignaciones WHERE baja_grupo = %s", (baja_grupo,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -3102,7 +3102,7 @@ def panel_consultar():
         query = """
             SELECT local, codigo, nombre, unidad,
                    cantidad, cantidad_contada, cantidad_contada_2, costo_unitario
-            FROM inventario_diario.inventario_ciego_conteos
+            FROM goti.inventario_ciego_conteos
             WHERE fecha = %s
         """
         params = [fecha]
@@ -3141,7 +3141,7 @@ def panel_borrar_stock():
 
         # Contar afectados
         q_count = """
-            SELECT COUNT(*) as cnt FROM inventario_diario.inventario_ciego_conteos
+            SELECT COUNT(*) as cnt FROM goti.inventario_ciego_conteos
             WHERE fecha = %s AND cantidad IS NOT NULL
         """
         params = [fecha]
@@ -3157,7 +3157,7 @@ def panel_borrar_stock():
 
         # Ejecutar UPDATE
         q_update = """
-            UPDATE inventario_diario.inventario_ciego_conteos
+            UPDATE goti.inventario_ciego_conteos
             SET cantidad = NULL
             WHERE fecha = %s AND cantidad IS NOT NULL
         """
@@ -3197,7 +3197,7 @@ def panel_contar_stock():
         cur = conn.cursor()
 
         query = """
-            SELECT COUNT(*) as cnt FROM inventario_diario.inventario_ciego_conteos
+            SELECT COUNT(*) as cnt FROM goti.inventario_ciego_conteos
             WHERE fecha = %s AND cantidad IS NOT NULL
         """
         params = [fecha]
@@ -3236,17 +3236,17 @@ def listar_semanas():
         query = """
             SELECT s.*,
                 (SELECT COUNT(DISTINCT c.codigo)
-                 FROM inventario_diario.inventario_ciego_conteos c
+                 FROM goti.inventario_ciego_conteos c
                  WHERE c.local = s.local
                    AND c.fecha BETWEEN s.fecha_inicio AND s.fecha_fin
                    AND (c.cantidad_contada IS NOT NULL OR c.cantidad_contada_2 IS NOT NULL)
                 ) as total_productos,
                 COALESCE((SELECT SUM(ap.monto)
-                 FROM inventario_diario.asignacion_semanal a
-                 JOIN inventario_diario.asignacion_semanal_personas ap ON ap.asignacion_semanal_id = a.id
+                 FROM goti.asignacion_semanal a
+                 JOIN goti.asignacion_semanal_personas ap ON ap.asignacion_semanal_id = a.id
                  WHERE a.semana_id = s.id
                 ), 0) as total_asignado
-            FROM inventario_diario.semanas_inventario s
+            FROM goti.semanas_inventario s
             WHERE s.local = %s
         """
         params = [local]
@@ -3308,7 +3308,7 @@ def crear_semana():
 
         # Verificar si ya existe
         cur.execute("""
-            SELECT * FROM inventario_diario.semanas_inventario
+            SELECT * FROM goti.semanas_inventario
             WHERE fecha_inicio = %s AND local = %s
         """, (dt_inicio, local))
         existing = cur.fetchone()
@@ -3324,7 +3324,7 @@ def crear_semana():
 
         # Verificar que no haya otra semana abierta para este local
         cur.execute("""
-            SELECT id, fecha_inicio, fecha_fin FROM inventario_diario.semanas_inventario
+            SELECT id, fecha_inicio, fecha_fin FROM goti.semanas_inventario
             WHERE local = %s AND estado = 'abierta'
         """, (local,))
         abierta = cur.fetchone()
@@ -3335,7 +3335,7 @@ def crear_semana():
             }), 409
 
         cur.execute("""
-            INSERT INTO inventario_diario.semanas_inventario (fecha_inicio, fecha_fin, local)
+            INSERT INTO goti.semanas_inventario (fecha_inicio, fecha_fin, local)
             VALUES (%s, %s, %s)
             RETURNING *
         """, (dt_inicio, dt_fin, local))
@@ -3367,7 +3367,7 @@ def diferencias_semana(semana_id):
 
         # Obtener datos de la semana
         cur.execute("""
-            SELECT * FROM inventario_diario.semanas_inventario WHERE id = %s
+            SELECT * FROM goti.semanas_inventario WHERE id = %s
         """, (semana_id,))
         semana = cur.fetchone()
         if not semana:
@@ -3390,7 +3390,7 @@ def diferencias_semana(semana_id):
                     COALESCE(costo_unitario, 0) as costo_unitario,
                     COALESCE(corregido, FALSE) as corregido,
                     COALESCE(justificado, FALSE) as justificado
-                FROM inventario_diario.inventario_ciego_conteos
+                FROM goti.inventario_ciego_conteos
                 WHERE local = %s AND fecha BETWEEN %s AND %s
                   AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
             )
@@ -3440,8 +3440,8 @@ def diferencias_semana(semana_id):
                        'cantidad', ap.cantidad,
                        'monto', ap.monto
                    )) FILTER (WHERE ap.id IS NOT NULL) as personas
-            FROM inventario_diario.asignacion_semanal a
-            LEFT JOIN inventario_diario.asignacion_semanal_personas ap
+            FROM goti.asignacion_semanal a
+            LEFT JOIN goti.asignacion_semanal_personas ap
                 ON ap.asignacion_semanal_id = a.id
             WHERE a.semana_id = %s
             GROUP BY a.id, a.codigo, a.nombre, a.unidad, a.diferencia_semanal, a.costo_unitario
@@ -3500,7 +3500,7 @@ def asignar_semana(semana_id):
 
         # Verificar que la semana existe y esta abierta
         cur.execute("""
-            SELECT * FROM inventario_diario.semanas_inventario WHERE id = %s
+            SELECT * FROM goti.semanas_inventario WHERE id = %s
         """, (semana_id,))
         semana = cur.fetchone()
         if not semana:
@@ -3510,20 +3510,20 @@ def asignar_semana(semana_id):
 
         # Borrar asignaciones previas de esta semana
         cur.execute("""
-            DELETE FROM inventario_diario.asignacion_semanal_personas
+            DELETE FROM goti.asignacion_semanal_personas
             WHERE asignacion_semanal_id IN (
-                SELECT id FROM inventario_diario.asignacion_semanal WHERE semana_id = %s
+                SELECT id FROM goti.asignacion_semanal WHERE semana_id = %s
             )
         """, (semana_id,))
         cur.execute("""
-            DELETE FROM inventario_diario.asignacion_semanal WHERE semana_id = %s
+            DELETE FROM goti.asignacion_semanal WHERE semana_id = %s
         """, (semana_id,))
 
         # Insertar nuevas asignaciones
         total_insertadas = 0
         for asig in asignaciones:
             cur.execute("""
-                INSERT INTO inventario_diario.asignacion_semanal
+                INSERT INTO goti.asignacion_semanal
                     (semana_id, codigo, nombre, unidad, local, diferencia_semanal, costo_unitario)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
@@ -3543,7 +3543,7 @@ def asignar_semana(semana_id):
                 costo = asig.get('costo_unitario', 0)  # ya viene con 20% desde frontend
                 monto = float(cantidad) * float(costo) if cantidad and costo else 0
                 cur.execute("""
-                    INSERT INTO inventario_diario.asignacion_semanal_personas
+                    INSERT INTO goti.asignacion_semanal_personas
                         (asignacion_semanal_id, persona, cantidad, monto)
                     VALUES (%s, %s, %s, %s)
                 """, (asig_id, persona.get('persona'), cantidad, round(monto, 2)))
@@ -3576,7 +3576,7 @@ def cerrar_semana(semana_id):
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT estado FROM inventario_diario.semanas_inventario WHERE id = %s
+            SELECT estado FROM goti.semanas_inventario WHERE id = %s
         """, (semana_id,))
         semana = cur.fetchone()
         if not semana:
@@ -3585,7 +3585,7 @@ def cerrar_semana(semana_id):
             return jsonify({'error': 'La semana ya esta cerrada'}), 400
 
         cur.execute("""
-            UPDATE inventario_diario.semanas_inventario
+            UPDATE goti.semanas_inventario
             SET estado = 'cerrada', cerrada_por = %s, cerrada_at = NOW()
             WHERE id = %s
             RETURNING *
@@ -3618,7 +3618,7 @@ def eliminar_semana(semana_id):
         conn = get_db()
         cur = conn.cursor()
 
-        cur.execute("SELECT estado FROM inventario_diario.semanas_inventario WHERE id = %s", (semana_id,))
+        cur.execute("SELECT estado FROM goti.semanas_inventario WHERE id = %s", (semana_id,))
         semana = cur.fetchone()
         if not semana:
             return jsonify({'error': 'Semana no encontrada'}), 404
@@ -3628,15 +3628,15 @@ def eliminar_semana(semana_id):
 
         # Eliminar asignaciones de personas
         cur.execute("""
-            DELETE FROM inventario_diario.asignacion_semanal_personas
+            DELETE FROM goti.asignacion_semanal_personas
             WHERE asignacion_semanal_id IN (
-                SELECT id FROM inventario_diario.asignacion_semanal WHERE semana_id = %s
+                SELECT id FROM goti.asignacion_semanal WHERE semana_id = %s
             )
         """, (semana_id,))
         # Eliminar asignaciones
-        cur.execute("DELETE FROM inventario_diario.asignacion_semanal WHERE semana_id = %s", (semana_id,))
+        cur.execute("DELETE FROM goti.asignacion_semanal WHERE semana_id = %s", (semana_id,))
         # Eliminar semana
-        cur.execute("DELETE FROM inventario_diario.semanas_inventario WHERE id = %s", (semana_id,))
+        cur.execute("DELETE FROM goti.semanas_inventario WHERE id = %s", (semana_id,))
         conn.commit()
 
         return jsonify({'success': True, 'estado_previo': semana['estado']})
@@ -3655,7 +3655,7 @@ def reabrir_semana(semana_id):
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT estado FROM inventario_diario.semanas_inventario WHERE id = %s
+            SELECT estado FROM goti.semanas_inventario WHERE id = %s
         """, (semana_id,))
         semana = cur.fetchone()
         if not semana:
@@ -3664,7 +3664,7 @@ def reabrir_semana(semana_id):
             return jsonify({'error': 'La semana ya esta abierta'}), 400
 
         cur.execute("""
-            UPDATE inventario_diario.semanas_inventario
+            UPDATE goti.semanas_inventario
             SET estado = 'abierta', cerrada_por = NULL, cerrada_at = NULL
             WHERE id = %s
             RETURNING *
@@ -3697,7 +3697,7 @@ def semanas_pendientes():
 
         cur.execute("""
             SELECT s.*
-            FROM inventario_diario.semanas_inventario s
+            FROM goti.semanas_inventario s
             WHERE s.estado = 'abierta'
               AND s.fecha_fin < CURRENT_DATE
             ORDER BY s.fecha_fin ASC
@@ -3738,9 +3738,9 @@ def resumen_persona_semanal():
                    SUM(ap.cantidad) as total_cantidad,
                    SUM(ap.monto) as total_monto,
                    COUNT(DISTINCT a.semana_id) as semanas_count
-            FROM inventario_diario.asignacion_semanal_personas ap
-            JOIN inventario_diario.asignacion_semanal a ON a.id = ap.asignacion_semanal_id
-            JOIN inventario_diario.semanas_inventario s ON s.id = a.semana_id
+            FROM goti.asignacion_semanal_personas ap
+            JOIN goti.asignacion_semanal a ON a.id = ap.asignacion_semanal_id
+            JOIN goti.semanas_inventario s ON s.id = a.semana_id
             WHERE s.local = %s AND s.estado = 'cerrada'
         """
         params = [local]
@@ -3800,7 +3800,7 @@ def cruce_op_solicitar():
         cur = conn.cursor()
         # Ver si ya existe alguna ejecucion para esta bodega+fecha
         cur.execute("""
-            SELECT id, estado FROM inventario_diario.cruce_operativo_ejecuciones
+            SELECT id, estado FROM goti.cruce_operativo_ejecuciones
             WHERE bodega = %s AND fecha_toma = %s
             ORDER BY COALESCE(solicitado_at, timestamp_deteccion) DESC LIMIT 1
         """, (bodega, fecha_toma))
@@ -3815,9 +3815,9 @@ def cruce_op_solicitar():
             if rol != 'admin':
                 return jsonify({'error': 'Este cruce ya fue ejecutado. Solo el administrador puede re-ejecutarlo.', 'ya_completado': True}), 409
             # Admin: resetear
-            cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (existente['id'],))
+            cur.execute("DELETE FROM goti.cruce_operativo_detalle WHERE ejecucion_id = %s", (existente['id'],))
             cur.execute("""
-                UPDATE inventario_diario.cruce_operativo_ejecuciones
+                UPDATE goti.cruce_operativo_ejecuciones
                 SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
                     fecha_corte_contifico=%s,
                     worker_lock=NULL, error_msg=NULL,
@@ -3831,9 +3831,9 @@ def cruce_op_solicitar():
 
         if existente:
             # Estado error: cualquiera puede reintentar
-            cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (existente['id'],))
+            cur.execute("DELETE FROM goti.cruce_operativo_detalle WHERE ejecucion_id = %s", (existente['id'],))
             cur.execute("""
-                UPDATE inventario_diario.cruce_operativo_ejecuciones
+                UPDATE goti.cruce_operativo_ejecuciones
                 SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
                     fecha_corte_contifico=%s,
                     worker_lock=NULL, error_msg=NULL,
@@ -3847,7 +3847,7 @@ def cruce_op_solicitar():
 
         # No existe: crear nueva
         cur.execute("""
-            INSERT INTO inventario_diario.cruce_operativo_ejecuciones
+            INSERT INTO goti.cruce_operativo_ejecuciones
             (bodega, fecha_toma, fecha_corte_contifico, estado, solicitado_por, solicitado_at)
             VALUES (%s, %s, %s, 'pendiente', %s, NOW())
             RETURNING id
@@ -3871,8 +3871,8 @@ def cruce_op_eliminar(ejec_id):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (ejec_id,))
-        cur.execute("DELETE FROM inventario_diario.cruce_operativo_ejecuciones WHERE id = %s", (ejec_id,))
+        cur.execute("DELETE FROM goti.cruce_operativo_detalle WHERE ejecucion_id = %s", (ejec_id,))
+        cur.execute("DELETE FROM goti.cruce_operativo_ejecuciones WHERE id = %s", (ejec_id,))
         conn.commit()
         return jsonify({'ok': True, 'eliminados': cur.rowcount})
     except Exception as e:
@@ -3898,12 +3898,12 @@ def cruce_op_pendientes():
         cur = conn.cursor()
         # Marca atomicamente las pendientes como en_proceso para este worker
         cur.execute("""
-            UPDATE inventario_diario.cruce_operativo_ejecuciones
+            UPDATE goti.cruce_operativo_ejecuciones
             SET estado = 'en_proceso',
                 worker_lock = %s,
                 timestamp_descarga = NOW()
             WHERE id IN (
-                SELECT id FROM inventario_diario.cruce_operativo_ejecuciones
+                SELECT id FROM goti.cruce_operativo_ejecuciones
                 WHERE estado = 'pendiente'
                 ORDER BY solicitado_at ASC
                 LIMIT 5
@@ -3953,7 +3953,7 @@ def cruce_op_resultado():
 
         if estado == 'error':
             cur.execute("""
-                UPDATE inventario_diario.cruce_operativo_ejecuciones
+                UPDATE goti.cruce_operativo_ejecuciones
                 SET estado = 'error', error_msg = %s, timestamp_cruce = NOW()
                 WHERE id = %s
             """, (error_msg, ejec_id))
@@ -3961,13 +3961,13 @@ def cruce_op_resultado():
             return jsonify({'ok': True})
 
         # Borrar detalle previo si existiera
-        cur.execute("DELETE FROM inventario_diario.cruce_operativo_detalle WHERE ejecucion_id = %s", (ejec_id,))
+        cur.execute("DELETE FROM goti.cruce_operativo_detalle WHERE ejecucion_id = %s", (ejec_id,))
 
         # Insertar detalle
         if detalle:
             for d in detalle:
                 cur.execute("""
-                    INSERT INTO inventario_diario.cruce_operativo_detalle
+                    INSERT INTO goti.cruce_operativo_detalle
                     (ejecucion_id, codigo, nombre, categoria, unidad, unidad_toma, factor,
                      unidad_destino, cantidad_toma, cantidad_sistema, diferencia,
                      costo_unitario, valor_diferencia, tipo_abc, origen)
@@ -3982,7 +3982,7 @@ def cruce_op_resultado():
 
         # Update ejecucion
         cur.execute("""
-            UPDATE inventario_diario.cruce_operativo_ejecuciones
+            UPDATE goti.cruce_operativo_ejecuciones
             SET estado = 'completado',
                 total_productos_toma = %s,
                 total_productos_contifico = %s,
@@ -4023,7 +4023,7 @@ def cruce_op_estado(ejec_id):
                    timestamp_descarga, timestamp_cruce, error_msg,
                    total_productos_toma, total_productos_contifico, total_cruzados,
                    total_con_diferencia, valor_total_dif
-            FROM inventario_diario.cruce_operativo_ejecuciones WHERE id = %s
+            FROM goti.cruce_operativo_ejecuciones WHERE id = %s
         """, (ejec_id,))
         r = cur.fetchone()
         if not r:
@@ -4057,9 +4057,9 @@ def cruce_op_fechas():
     """Devuelve las fechas con toma fisica disponibles para una bodega."""
     bodega = request.args.get('bodega')
     tablas = {
-        'bodega_principal': 'public.toma_bodega',
-        'materia_prima':    'public.toma_materiaprima',
-        'planta':           'public.toma_planta',
+        'bodega_principal': 'goti.toma_bodega',
+        'materia_prima':    'goti.toma_materiaprima',
+        'planta':           'goti.toma_planta',
     }
     if bodega not in tablas:
         return jsonify({'error': 'bodega invalida'}), 400
@@ -4107,7 +4107,7 @@ def carga_contifico_fechas_con_cruce():
         cur = conn.cursor()
         cur.execute("""
             SELECT fecha_toma, total_cruzados, total_con_diferencia, valor_total_dif
-            FROM inventario_diario.cruce_operativo_ejecuciones
+            FROM goti.cruce_operativo_ejecuciones
             WHERE bodega = %s AND estado = 'completado'
             ORDER BY fecha_toma DESC
         """, (bodega,))
@@ -4138,7 +4138,7 @@ def carga_contifico_verificar():
         cur = conn.cursor()
         cur.execute("""
             SELECT id, estado, solicitado_at, timestamp_fin, total_productos, productos_ok, productos_error
-            FROM inventario_diario.carga_contifico_ejecuciones
+            FROM goti.carga_contifico_ejecuciones
             WHERE bodega = %s AND fecha_toma = %s
         """, (bodega, fecha))
         row = cur.fetchone()
@@ -4181,7 +4181,7 @@ def carga_contifico_solicitar():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, estado FROM inventario_diario.carga_contifico_ejecuciones
+            SELECT id, estado FROM goti.carga_contifico_ejecuciones
             WHERE bodega = %s AND fecha_toma = %s
         """, (bodega, fecha_toma))
         existente = cur.fetchone()
@@ -4192,7 +4192,7 @@ def carga_contifico_solicitar():
                     return jsonify({'error': 'Ya fue cargado a Contifico. Solo el administrador puede re-ejecutar.', 'ya_cargado': True}), 409
                 # Admin: resetear para re-ejecutar
                 cur.execute("""
-                    UPDATE inventario_diario.carga_contifico_ejecuciones
+                    UPDATE goti.carga_contifico_ejecuciones
                     SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
                         worker_lock=NULL, error_msg=NULL, timestamp_inicio=NULL, timestamp_fin=NULL,
                         total_productos=NULL, productos_ok=NULL, productos_error=NULL, productos_error_lista=NULL
@@ -4204,7 +4204,7 @@ def carga_contifico_solicitar():
                 return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
             # Estado error: resetear para reintentar
             cur.execute("""
-                UPDATE inventario_diario.carga_contifico_ejecuciones
+                UPDATE goti.carga_contifico_ejecuciones
                 SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
                     worker_lock=NULL, error_msg=NULL, timestamp_inicio=NULL, timestamp_fin=NULL,
                     total_productos=NULL, productos_ok=NULL, productos_error=NULL, productos_error_lista=NULL
@@ -4215,7 +4215,7 @@ def carga_contifico_solicitar():
 
         # No existe: crear nueva
         cur.execute("""
-            INSERT INTO inventario_diario.carga_contifico_ejecuciones
+            INSERT INTO goti.carga_contifico_ejecuciones
             (bodega, fecha_toma, estado, solicitado_por, solicitado_at)
             VALUES (%s, %s, 'pendiente', %s, NOW())
             RETURNING id
@@ -4244,10 +4244,10 @@ def carga_contifico_pendientes():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            UPDATE inventario_diario.carga_contifico_ejecuciones
+            UPDATE goti.carga_contifico_ejecuciones
             SET estado = 'en_proceso', worker_lock = %s, timestamp_inicio = NOW()
             WHERE id IN (
-                SELECT id FROM inventario_diario.carga_contifico_ejecuciones
+                SELECT id FROM goti.carga_contifico_ejecuciones
                 WHERE estado = 'pendiente'
                 ORDER BY solicitado_at ASC
                 LIMIT 1
@@ -4290,7 +4290,7 @@ def carga_contifico_resultado():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            UPDATE inventario_diario.carga_contifico_ejecuciones
+            UPDATE goti.carga_contifico_ejecuciones
             SET estado = %s, timestamp_fin = NOW(),
                 total_productos = %s, productos_ok = %s,
                 productos_error = %s, productos_error_lista = %s,
@@ -4326,7 +4326,7 @@ def carga_contifico_estado(ejec_id):
             SELECT id, bodega, fecha_toma, estado, solicitado_at,
                    timestamp_inicio, timestamp_fin, error_msg,
                    total_productos, productos_ok, productos_error, productos_error_lista
-            FROM inventario_diario.carga_contifico_ejecuciones WHERE id = %s
+            FROM goti.carga_contifico_ejecuciones WHERE id = %s
         """, (ejec_id,))
         r = cur.fetchone()
         if not r:
@@ -4371,7 +4371,7 @@ def eval_categorias():
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("SELECT id, nombre, descripcion, orden, criterios FROM inventario_diario.eval_categorias WHERE activa = TRUE ORDER BY orden")
+        cur.execute("SELECT id, nombre, descripcion, orden, criterios FROM goti.eval_categorias WHERE activa = TRUE ORDER BY orden")
         return jsonify(cur.fetchall())
     except Exception as e:
         return jsonify({'error': str(e)[:200]}), 500
@@ -4404,7 +4404,7 @@ def eval_guardar():
         guardados = 0
         for ev in evaluaciones:
             cur.execute("""
-                INSERT INTO inventario_diario.eval_semanal
+                INSERT INTO goti.eval_semanal
                 (local, semana_inicio, semana_fin, categoria_id, puntaje, comentario, evaluado_por, evaluado_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (local, semana_inicio, categoria_id)
@@ -4435,16 +4435,16 @@ def eval_semana():
         if local:
             cur.execute("""
                 SELECT e.id, e.local, e.categoria_id, c.nombre as categoria, e.puntaje, e.comentario, e.evaluado_por, e.evaluado_at
-                FROM inventario_diario.eval_semanal e
-                JOIN inventario_diario.eval_categorias c ON c.id = e.categoria_id
+                FROM goti.eval_semanal e
+                JOIN goti.eval_categorias c ON c.id = e.categoria_id
                 WHERE e.semana_inicio = %s AND e.local = %s
                 ORDER BY c.orden
             """, (semana, local))
         else:
             cur.execute("""
                 SELECT e.id, e.local, e.categoria_id, c.nombre as categoria, e.puntaje, e.comentario, e.evaluado_por, e.evaluado_at
-                FROM inventario_diario.eval_semanal e
-                JOIN inventario_diario.eval_categorias c ON c.id = e.categoria_id
+                FROM goti.eval_semanal e
+                JOIN goti.eval_categorias c ON c.id = e.categoria_id
                 WHERE e.semana_inicio = %s
                 ORDER BY e.local, c.orden
             """, (semana,))
@@ -4467,16 +4467,16 @@ def eval_ranking():
         if semana:
             cur.execute("""
                 SELECT local, ROUND(AVG(puntaje)::numeric, 2) as promedio, COUNT(DISTINCT categoria_id) as categorias_evaluadas
-                FROM inventario_diario.eval_semanal
+                FROM goti.eval_semanal
                 WHERE semana_inicio = %s
                 GROUP BY local ORDER BY promedio DESC
             """, (semana,))
         else:
             cur.execute("""
                 SELECT local, ROUND(AVG(puntaje)::numeric, 2) as promedio, COUNT(DISTINCT semana_inicio) as semanas
-                FROM inventario_diario.eval_semanal
+                FROM goti.eval_semanal
                 WHERE semana_inicio >= (
-                    SELECT MAX(semana_inicio) - interval '%s weeks' FROM inventario_diario.eval_semanal
+                    SELECT MAX(semana_inicio) - interval '%s weeks' FROM goti.eval_semanal
                 )
                 GROUP BY local ORDER BY promedio DESC
             """ % max(1, ultimas_n))
@@ -4499,14 +4499,14 @@ def eval_tendencia():
         if local:
             cur.execute("""
                 SELECT semana_inicio, ROUND(AVG(puntaje)::numeric, 2) as promedio
-                FROM inventario_diario.eval_semanal
+                FROM goti.eval_semanal
                 WHERE local = %s
                 GROUP BY semana_inicio ORDER BY semana_inicio DESC LIMIT %s
             """, (local, limite))
         else:
             cur.execute("""
                 SELECT local, semana_inicio, ROUND(AVG(puntaje)::numeric, 2) as promedio
-                FROM inventario_diario.eval_semanal
+                FROM goti.eval_semanal
                 GROUP BY local, semana_inicio ORDER BY semana_inicio DESC, promedio DESC
                 LIMIT %s
             """, (limite * 6,))
@@ -4525,7 +4525,7 @@ def eval_semanas_disponibles():
         cur = conn.cursor()
         cur.execute("""
             SELECT DISTINCT semana_inicio, semana_fin
-            FROM inventario_diario.eval_semanal
+            FROM goti.eval_semanal
             ORDER BY semana_inicio DESC LIMIT 52
         """)
         return jsonify(cur.fetchall())
@@ -4607,7 +4607,7 @@ def _require_admin(data):
     conn = get_db()
     try:
         cur = conn.cursor()
-        cur.execute("""SELECT id FROM inventario_diario.usuarios
+        cur.execute("""SELECT id FROM goti.usuarios
                        WHERE username = %s AND password = %s AND rol = 'admin' AND activo = TRUE""",
                     (admin_user, admin_pass))
         row = cur.fetchone()
@@ -4638,8 +4638,8 @@ def admin_listar_usuarios():
         cur.execute("""
             SELECT u.id, u.username, u.nombre, u.rol, u.activo, u.created_at, u.email,
                    COALESCE(array_agg(ub.bodega ORDER BY ub.bodega) FILTER (WHERE ub.bodega IS NOT NULL), '{}') AS bodegas
-            FROM inventario_diario.usuarios u
-            LEFT JOIN inventario_diario.usuario_bodegas ub ON ub.usuario_id = u.id
+            FROM goti.usuarios u
+            LEFT JOIN goti.usuario_bodegas ub ON ub.usuario_id = u.id
             GROUP BY u.id, u.username, u.nombre, u.rol, u.activo, u.created_at, u.email
             ORDER BY u.id
         """)
@@ -4675,7 +4675,7 @@ def admin_crear_usuario():
         if not enviar_invitacion and not password:
             return jsonify({'error': 'Debes asignar contrasena o enviar invitacion por email'}), 400
 
-        cur.execute("SELECT id FROM inventario_diario.usuarios WHERE username = %s", (username,))
+        cur.execute("SELECT id FROM goti.usuarios WHERE username = %s", (username,))
         if cur.fetchone():
             return jsonify({'error': f'El usuario "{username}" ya existe'}), 409
 
@@ -4685,13 +4685,13 @@ def admin_crear_usuario():
         pwd = password if password else '__pendiente__'
 
         cur.execute("""
-            INSERT INTO inventario_diario.usuarios (username, password, nombre, rol, activo, email, invite_token, invite_token_expires)
+            INSERT INTO goti.usuarios (username, password, nombre, rol, activo, email, invite_token, invite_token_expires)
             VALUES (%s, %s, %s, %s, TRUE, %s, %s, %s) RETURNING id
         """, (username, pwd, nombre, rol, email or None, token, token_expires))
         new_id = cur.fetchone()['id']
 
         for bod in bodegas:
-            cur.execute("""INSERT INTO inventario_diario.usuario_bodegas (usuario_id, bodega)
+            cur.execute("""INSERT INTO goti.usuario_bodegas (usuario_id, bodega)
                            VALUES (%s, %s) ON CONFLICT DO NOTHING""", (new_id, bod))
 
         conn.commit()
@@ -4732,25 +4732,25 @@ def admin_editar_usuario(uid):
 
         # Verificar que el nuevo username no exista en otro usuario
         if username:
-            cur.execute("SELECT id FROM inventario_diario.usuarios WHERE username = %s AND id != %s", (username, uid))
+            cur.execute("SELECT id FROM goti.usuarios WHERE username = %s AND id != %s", (username, uid))
             if cur.fetchone():
                 return jsonify({'error': f'El usuario "{username}" ya existe'}), 409
 
         if password:
-            cur.execute("""UPDATE inventario_diario.usuarios
+            cur.execute("""UPDATE goti.usuarios
                            SET username = %s, nombre = %s, password = %s, rol = %s, activo = %s, email = %s
                            WHERE id = %s""", (username, nombre, password, rol, activo, email, uid))
         else:
-            cur.execute("""UPDATE inventario_diario.usuarios
+            cur.execute("""UPDATE goti.usuarios
                            SET username = %s, nombre = %s, rol = %s, activo = %s, email = %s
                            WHERE id = %s""", (username, nombre, rol, activo, email, uid))
 
         if cur.rowcount == 0:
             return jsonify({'error': 'Usuario no encontrado'}), 404
 
-        cur.execute("DELETE FROM inventario_diario.usuario_bodegas WHERE usuario_id = %s", (uid,))
+        cur.execute("DELETE FROM goti.usuario_bodegas WHERE usuario_id = %s", (uid,))
         for bod in bodegas:
-            cur.execute("""INSERT INTO inventario_diario.usuario_bodegas (usuario_id, bodega)
+            cur.execute("""INSERT INTO goti.usuario_bodegas (usuario_id, bodega)
                            VALUES (%s, %s) ON CONFLICT DO NOTHING""", (uid, bod))
 
         conn.commit()
@@ -4770,12 +4770,12 @@ def admin_eliminar_usuario(uid):
         return err, code
     try:
         cur = conn.cursor()
-        cur.execute("SELECT username FROM inventario_diario.usuarios WHERE id = %s", (uid,))
+        cur.execute("SELECT username FROM goti.usuarios WHERE id = %s", (uid,))
         row = cur.fetchone()
         if row and row['username'] == 'admin':
             return jsonify({'error': 'No se puede eliminar al administrador principal'}), 403
 
-        cur.execute("DELETE FROM inventario_diario.usuarios WHERE id = %s", (uid,))
+        cur.execute("DELETE FROM goti.usuarios WHERE id = %s", (uid,))
         conn.commit()
         return jsonify({'success': True, 'message': 'Usuario eliminado'})
     except Exception as e:
@@ -4794,7 +4794,7 @@ def admin_listar_roles():
         cur = conn.cursor()
         cur.execute("""SELECT rol, modulo, puede_ver, puede_editar,
                        COALESCE(puede_eliminar, FALSE) as puede_eliminar
-                       FROM inventario_diario.rol_modulos ORDER BY rol, modulo""")
+                       FROM goti.rol_modulos ORDER BY rol, modulo""")
         rows = cur.fetchall()
         result = {}
         for r in rows:
@@ -4822,13 +4822,13 @@ def admin_guardar_roles():
         modulos = data.get('modulos', {})
         if rol not in ('subgerente', 'supervisor', 'gerente', 'admin'):
             return jsonify({'error': 'Rol invalido'}), 400
-        cur.execute("DELETE FROM inventario_diario.rol_modulos WHERE rol = %s", (rol,))
+        cur.execute("DELETE FROM goti.rol_modulos WHERE rol = %s", (rol,))
         for mod, perms in modulos.items():
             ver = perms.get('ver', False)
             editar = perms.get('editar', False)
             eliminar = perms.get('eliminar', False)
             if ver or editar or eliminar:
-                cur.execute("""INSERT INTO inventario_diario.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar)
+                cur.execute("""INSERT INTO goti.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar)
                                VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
                             (rol, mod, ver, editar, eliminar))
         conn.commit()
@@ -4849,7 +4849,7 @@ def admin_reenviar_invitacion(uid):
         return err, code
     try:
         cur = conn.cursor()
-        cur.execute("SELECT username, nombre, email FROM inventario_diario.usuarios WHERE id = %s", (uid,))
+        cur.execute("SELECT username, nombre, email FROM goti.usuarios WHERE id = %s", (uid,))
         user = cur.fetchone()
         if not user:
             return jsonify({'error': 'Usuario no encontrado'}), 404
@@ -4858,7 +4858,7 @@ def admin_reenviar_invitacion(uid):
 
         token = secrets.token_urlsafe(32)
         token_expires = (datetime.utcnow() + timedelta(hours=48)).isoformat()
-        cur.execute("""UPDATE inventario_diario.usuarios
+        cur.execute("""UPDATE goti.usuarios
                        SET invite_token = %s, invite_token_expires = %s
                        WHERE id = %s""", (token, token_expires, uid))
         conn.commit()
@@ -5010,7 +5010,7 @@ def api_establecer_clave():
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute("""SELECT id, invite_token_expires FROM inventario_diario.usuarios
+        cur.execute("""SELECT id, invite_token_expires FROM goti.usuarios
                        WHERE invite_token = %s AND activo = TRUE""", (token,))
         user = cur.fetchone()
         if not user:
@@ -5018,7 +5018,7 @@ def api_establecer_clave():
         if user['invite_token_expires'] and user['invite_token_expires'] < datetime.utcnow():
             return jsonify({'error': 'Enlace expirado. Pide al administrador que lo reenvie.'}), 410
 
-        cur.execute("""UPDATE inventario_diario.usuarios
+        cur.execute("""UPDATE goti.usuarios
                        SET password = %s, invite_token = NULL, invite_token_expires = NULL
                        WHERE id = %s""", (password, user['id']))
         conn.commit()
