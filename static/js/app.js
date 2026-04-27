@@ -1110,6 +1110,8 @@ function cambiarVista(viewName) {
     // Auto-inicializar depositos al entrar
     if (viewName === 'dep-pendientes') { depCargarPendientes(); }
     if (viewName === 'dep-respaldo') { depCargarSinRespaldo(); }
+    if (viewName === 'dep-contabilidad') { depCargarContabilidad(); }
+    if (viewName === 'dep-diaslibres') { depCargarDiasLibres(); }
     if (viewName === 'dep-historial' || viewName === 'dep-descuadres') {
         const hoy = new Date();
         const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
@@ -7970,6 +7972,267 @@ async function depSubirRespaldo(recordId) {
     } catch(e) { showToast('Error: ' + e.message, 'error'); }
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-upload" style="margin-right:6px;"></i>Subir y Enviar a Contabilidad';
+}
+
+// ===== DIAS LIBRES GERENTES (tipo alarma celular) =====
+const DIAS_KEYS = ['lunes','martes','miercoles','jueves','viernes','sabado','domingo'];
+const DIAS_LABELS = ['L','M','Mi','J','V','S','D'];
+const DIAS_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+const LOCALES_DEP = [
+    'CH001 (Chios Real Audiencia)','CH002 (Chios Portugal)','CH003 (Chios Floreana)',
+    'SC001 (Santo Cachón Real Audiencia)','SC002 (Santo Cachón Portugal)',
+    'SB001 (Simón Bolón Real Audiencia)'
+];
+
+async function depCargarDiasLibres() {
+    const container = document.getElementById('dep-diaslibres-body');
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/horario-gerentes`);
+        const datos = await r.json();
+
+        // Crear mapa de locales existentes
+        const existentes = {};
+        if (Array.isArray(datos)) {
+            datos.forEach(d => { existentes[d.local] = d; });
+        }
+
+        let html = '';
+        LOCALES_DEP.forEach(local => {
+            const d = existentes[local] || {};
+            const gerente = d.gerente || '';
+
+            html += `
+            <div style="background:var(--bg-white);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:var(--text-dark);"><i class="fas fa-store" style="margin-right:6px;color:var(--primary);opacity:0.6;"></i>${local}</div>
+                        <div style="margin-top:6px;">
+                            <input type="text" id="ger-${local.replace(/[^a-zA-Z0-9]/g,'')}" value="${gerente}" placeholder="Nombre del gerente"
+                                style="height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;width:250px;">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        ${DIAS_KEYS.map((dia, i) => {
+                            const activo = d[dia] !== undefined ? d[dia] : (dia !== 'domingo');
+                            return `<div onclick="this.classList.toggle('dia-activo');this.classList.toggle('dia-inactivo')"
+                                class="dia-toggle ${activo ? 'dia-activo' : 'dia-inactivo'}" data-dia="${dia}"
+                                style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+                                font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;user-select:none;">
+                                ${DIAS_LABELS[i]}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+                <div style="margin-top:10px;text-align:right;">
+                    <button onclick="depGuardarHorario('${local}')" style="padding:6px 18px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-save" style="margin-right:4px;"></i>Guardar
+                    </button>
+                </div>
+            </div>`;
+        });
+
+        container.innerHTML = html;
+    } catch(e) { container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${e.message}</p></div>`; }
+}
+
+async function depGuardarHorario(local) {
+    const safeId = local.replace(/[^a-zA-Z0-9]/g,'');
+    const gerente = document.getElementById(`ger-${safeId}`)?.value.trim() || '';
+    if (!gerente) { showToast('Ingresa el nombre del gerente', 'error'); return; }
+
+    // Leer estado de los toggles
+    const card = document.getElementById(`ger-${safeId}`)?.closest('.dep-diaslibres-body > div, [style*="margin-bottom:12px"]');
+    const dias = {};
+    document.querySelectorAll(`#ger-${safeId}`).forEach(() => {});
+
+    // Buscar los toggles dentro del mismo card
+    const toggles = document.getElementById(`ger-${safeId}`)?.closest('[style*="margin-bottom"]')?.querySelectorAll('.dia-toggle') || [];
+    toggles.forEach(t => {
+        dias[t.dataset.dia] = t.classList.contains('dia-activo');
+    });
+
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/horario-gerentes`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({local, gerente, dias})
+        });
+        if (r.ok) { showToast('Horario guardado', 'success'); }
+        else { showToast('Error al guardar', 'error'); }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+// ===== REVISION CONTABILIDAD =====
+let _depContabLista = [];
+
+async function depCargarContabilidad() {
+    const container = document.getElementById('dep-contab-sidebar-list');
+    container.innerHTML = '<div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/listar?estado=${encodeURIComponent('Enviado a Contabilidad')}`);
+        const data = await r.json();
+        _depContabLista = data.depositos || [];
+        _depContabLista.forEach(d => { _depCache[d.id] = d; });
+
+        if (_depContabLista.length === 0) {
+            container.innerHTML = '<div class="empty-state" style="padding:30px;color:var(--success);"><i class="fas fa-check-circle"></i><p>Todo revisado</p></div>';
+            return;
+        }
+
+        const grupos = {};
+        _depContabLista.forEach(d => { const l = d.local || 'Sin local'; if (!grupos[l]) grupos[l] = []; grupos[l].push(d); });
+        let html = '';
+        for (const [local, items] of Object.entries(grupos)) {
+            html += `<div class="dep-sidebar-group"><div class="dep-sidebar-group-header"><i class="fas fa-store" style="margin-right:6px;opacity:0.6;"></i>${local}</div>`;
+            items.forEach(d => {
+                const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+                html += `<div class="dep-sidebar-item" data-depid="${d.id}" onclick="depSeleccionarContab('${d.id}')">
+                    <div class="dep-sidebar-item-fecha">${d.secuencia || '-'}</div>
+                    <div class="dep-sidebar-item-local">${fechaCorta}</div>
+                    <div class="dep-sidebar-item-resp">${d.local}</div>
+                    <div class="dep-sidebar-item-monto">$${(d.monto_contado||0).toFixed(2)}</div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+        container.innerHTML = html;
+        if (_depContabLista.length > 0) depSeleccionarContab(_depContabLista[0].id);
+    } catch(e) { container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${e.message}</p></div>`; }
+}
+
+function depSeleccionarContab(id) {
+    document.querySelectorAll('#dep-contab-sidebar-list .dep-sidebar-item').forEach(el => el.classList.remove('active'));
+    const item = document.querySelector(`#dep-contab-sidebar-list .dep-sidebar-item[data-depid="${id}"]`);
+    if (item) item.classList.add('active');
+    const d = _depCache[id];
+    if (!d) return;
+
+    const panel = document.getElementById('dep-contab-detalle');
+    const fechaCorta = d.fecha ? d.fecha.split('-').reverse().join('/') : '';
+    const esCuadra = d.cuadre === 'Cuadra';
+
+    const evidencias = (d.evidencias || []).map(e =>
+        `<div class="dep-evidencia-item"><a href="${e.url}" target="_blank"><img src="${e.thumb || e.url}"></a><div class="dep-evidencia-item-name">${e.filename || 'Imagen'}</div></div>`
+    ).join('');
+
+    const evDeposito = (d.evidencias_deposito || []).map(e =>
+        `<div class="dep-evidencia-item"><a href="${e.url}" target="_blank"><img src="${e.thumb || e.url}"></a><div class="dep-evidencia-item-name">${e.filename || 'Comprobante'}</div></div>`
+    ).join('') || '<span style="color:var(--text-light);font-size:13px;">Sin comprobante adjunto</span>';
+
+    panel.innerHTML = `
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border-light);background:linear-gradient(135deg,var(--bg-light),var(--bg-white));">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:600;">Secuencia</div>
+                <div style="font-size:26px;font-weight:800;color:var(--primary);">#${d.secuencia || '-'}</div>
+                <div style="font-size:13px;color:var(--text-gray);margin-top:2px;">${fechaCorta}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:600;">Monto Contado</div>
+                <div style="font-size:24px;font-weight:800;color:var(--text-dark);">$${(d.monto_contado||0).toFixed(2)}</div>
+            </div>
+        </div>
+    </div>
+    <div style="padding:16px 24px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="padding:12px;background:var(--bg-light);border-radius:var(--radius-sm);border:1px solid var(--border-light);">
+                <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:6px;"><i class="fas fa-store" style="margin-right:4px;"></i>Local</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text-dark);">${d.local}</div>
+                ${d.local_ubicacion ? `<div style="font-size:12px;color:var(--text-gray);margin-top:2px;">${d.local_ubicacion}</div>` : ''}
+            </div>
+            <div style="padding:12px;background:var(--bg-light);border-radius:var(--radius-sm);border:1px solid var(--border-light);">
+                <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:6px;"><i class="fas fa-user" style="margin-right:4px;"></i>Responsable</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text-dark);">${d.responsable || '-'}</div>
+            </div>
+        </div>
+
+        ${evidencias ? `
+        <div style="margin-top:16px;">
+            <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:8px;"><i class="fas fa-camera" style="margin-right:4px;"></i>Evidencia</div>
+            <div class="dep-evidencia-grid">${evidencias}</div>
+        </div>` : ''}
+    </div>
+
+    <div class="dep-verificacion">
+        <h4>Verificacion de Conteo</h4>
+        <div class="dep-verif-field"><div class="dep-verif-label">Monto A Recibir</div><div class="dep-verif-value" style="font-weight:700;">$${(d.monto_recibir||0).toFixed(2)}</div></div>
+        <div class="dep-verif-field"><div class="dep-verif-label">Diferencia</div><div class="dep-verif-value" style="font-weight:700;color:${esCuadra ? '#059669' : '#dc2626'};">${d.diferencia != null ? Math.abs(d.diferencia).toFixed(2) : '-'} (${d.cuadre || '-'})</div></div>
+        <div class="dep-verif-field"><div class="dep-verif-label">Observacion</div><div class="dep-verif-value">${d.observacion || '-'}</div></div>
+    </div>
+
+    <div class="dep-verificacion" style="margin-top:12px;border-color:var(--primary);">
+        <h4><i class="fas fa-university" style="margin-right:6px;color:var(--primary);"></i>Deposito Bancario</h4>
+        <div class="dep-verif-field">
+            <div class="dep-verif-label">Comprobante</div>
+            <div class="dep-verif-value">
+                <input type="text" id="dep-contab-comprobante" placeholder="Numero de comprobante o referencia" style="width:100%;max-width:350px;height:36px;border:1px solid var(--border);border-radius:8px;padding:0 12px;font-size:13px;">
+            </div>
+        </div>
+        <div style="margin-top:12px;">
+            <div style="font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:8px;">Evidencia Del Deposito</div>
+            <div class="dep-evidencia-grid">${evDeposito}</div>
+        </div>
+        <div class="dep-verif-field" style="margin-top:12px;">
+            <div class="dep-verif-label">Calificacion</div>
+            <div class="dep-verif-value">
+                <select id="dep-contab-calificacion" style="height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;min-width:200px;">
+                    <option value="Deposito a tiempo">Deposito a tiempo</option>
+                    <option value="Deposito tardio">Deposito tardio</option>
+                    <option value="Deposito con inconsistencias">Deposito con inconsistencias</option>
+                </select>
+            </div>
+        </div>
+        <div class="dep-verif-field">
+            <div class="dep-verif-label">Observacion</div>
+            <div class="dep-verif-value">
+                <select id="dep-contab-obs" style="height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;min-width:250px;">
+                        <option value="No existe Observación">No existe Observación</option>
+                        <option value="Permiso por enfermedad">Permiso por enfermedad</option>
+                        <option value="Feriado">Feriado</option>
+                        <option value="Calamidad Domestica">Calamidad Domestica</option>
+                        <option value="Reunion en Oficina">Reunion en Oficina</option>
+                    </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="dep-acciones" style="justify-content:space-between;">
+        <button onclick="depContabRechazar('${d.id}')" style="padding:10px 24px;background:#dc2626;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;">
+            <i class="fas fa-times" style="margin-right:6px;"></i>Rechazado por contabilidad
+        </button>
+        <button onclick="depContabAprobar('${d.id}')" style="padding:10px 24px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:13px;box-shadow:0 3px 10px rgba(5,150,105,0.25);">
+            <i class="fas fa-check-double" style="margin-right:6px;"></i>Verificado por contabilidad
+        </button>
+    </div>`;
+}
+
+async function depContabAprobar(recordId) {
+    if (!confirm('Aprobar este deposito?')) return;
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/aprobar`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: recordId})
+        });
+        if (r.ok) {
+            showToast('Deposito aprobado por contabilidad', 'success');
+            document.getElementById('dep-contab-detalle').innerHTML = '<div class="dep-detalle-empty"><i class="fas fa-check-circle" style="font-size:40px;color:var(--success);"></i><p style="margin-top:12px;color:var(--success);font-weight:600;">Aprobado correctamente</p></div>';
+            depCargarContabilidad();
+        } else { showToast('Error al aprobar', 'error'); }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function depContabRechazar(recordId) {
+    if (!confirm('Rechazar este deposito?')) return;
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/depositos/aprobar`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: recordId, rechazar: true})
+        });
+        if (r.ok) {
+            showToast('Deposito rechazado', 'warning');
+            document.getElementById('dep-contab-detalle').innerHTML = '<div class="dep-detalle-empty"><i class="fas fa-times-circle" style="font-size:40px;color:#dc2626;"></i><p style="margin-top:12px;color:#dc2626;font-weight:600;">Rechazado</p></div>';
+            depCargarContabilidad();
+        } else { showToast('Error al rechazar', 'error'); }
+    } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 function depSeleccionarDesc(id) {

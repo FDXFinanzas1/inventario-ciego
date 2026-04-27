@@ -136,6 +136,14 @@
                             <i class="fas fa-upload"></i>
                             <span>Subir Respaldo</span>
                         </button>
+                        <button class="nav-btn" data-view="dep-contabilidad" style="display:none;">
+                            <i class="fas fa-file-invoice-dollar"></i>
+                            <span>Contabilidad</span>
+                        </button>
+                        <button class="nav-btn" data-view="dep-diaslibres" style="display:none;">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>Dias Libres</span>
+                        </button>
                         <button class="nav-btn" data-view="dep-descuadres" style="display:none;">
                             <i class="fas fa-exclamation-triangle"></i>
                             <span>Descuadres</span>
@@ -1240,6 +1248,43 @@
                             <div class="dep-detalle-empty">
                                 <i class="fas fa-file-upload" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
                                 <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito para subir su respaldo</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Depositos - Dias Libres Gerentes -->
+                <div id="view-dep-diaslibres" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-calendar-alt"></i> Dias Libres de Gerentes</h2>
+                    </div>
+                    <p style="color:var(--text-gray);font-size:13px;margin:8px 0 16px;">Configura el dia libre semanal de cada gerente. Los domingos no se deposita (banco cerrado).</p>
+                    <div id="dep-diaslibres-body" style="margin-top:12px;">
+                        <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
+                    </div>
+                </div>
+
+                <!-- Vista Depositos - Revision Contabilidad -->
+                <div id="view-dep-contabilidad" class="view">
+                    <div class="view-header" style="margin-bottom:0;">
+                        <h2><i class="fas fa-file-invoice-dollar"></i> Revision por Contabilidad</h2>
+                    </div>
+                    <div class="dep-layout">
+                        <div class="dep-sidebar">
+                            <div class="dep-sidebar-header">
+                                <span style="font-size:12px;font-weight:600;color:var(--text-gray);padding:0 4px;">Pendientes de revision</span>
+                                <button class="dep-sidebar-refresh" onclick="depCargarContabilidad()" title="Actualizar">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div id="dep-contab-sidebar-list" class="dep-sidebar-items">
+                                <div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
+                            </div>
+                        </div>
+                        <div class="dep-detalle" id="dep-contab-detalle">
+                            <div class="dep-detalle-empty">
+                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
+                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito para revisar</p>
                             </div>
                         </div>
                     </div>

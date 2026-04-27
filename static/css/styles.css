@@ -5959,6 +5959,22 @@ tr.cruce-solo-cont { background: #F1F5F9; }
     .dep-evidencia-item { width: 150px; }
 }
 
+/* Dias toggle tipo alarma */
+.dia-activo {
+    background: var(--primary) !important;
+    color: #fff !important;
+    border: 2px solid var(--primary) !important;
+}
+.dia-inactivo {
+    background: var(--bg-light) !important;
+    color: var(--text-light) !important;
+    border: 2px solid var(--border) !important;
+}
+.dia-toggle:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
 /* Sub-tabs del cruce operativo */
 .cruce-subtabs {
     display: flex;
