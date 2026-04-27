@@ -992,6 +992,14 @@ function showMainScreen() {
 
     // Cargar selector de impersonacion si es admin
     cargarSelectorImpersonar();
+
+    // Restaurar ultima vista o ir a dashboard
+    const ultimaVista = localStorage.getItem('ultima_vista');
+    if (ultimaVista && document.getElementById(`view-${ultimaVista}`)) {
+        cambiarVista(ultimaVista);
+    } else {
+        cambiarVista('dashboard-general');
+    }
 }
 
 // ==================== NAVEGACION ====================
@@ -1039,6 +1047,9 @@ function toggleSidebar() {
 }
 
 function cambiarVista(viewName) {
+    // Guardar vista actual para persistir al recargar
+    localStorage.setItem('ultima_vista', viewName);
+
     // Cerrar sidebar en móvil
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebar-overlay');
