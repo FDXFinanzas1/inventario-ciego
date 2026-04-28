@@ -7145,6 +7145,64 @@ function getCruceBodegaGlobal() {
 }
 
 // ============================================================
+// CARGAR BD MANUAL (admin)
+// ============================================================
+
+let _cargaBdPollHandle = null;
+
+async function adminCargarBD() {
+    const bodega = document.getElementById('carga-bd-bodega').value;
+    const fecha = document.getElementById('carga-bd-fecha').value;
+    const status = document.getElementById('carga-bd-status');
+    if (!fecha) { showToast('Selecciona una fecha', 'error'); return; }
+    if (!confirm(`Cargar inventario de ${bodega} para ${fecha}?`)) return;
+
+    status.innerHTML = '<div style="padding:12px;background:var(--bg-light);border-radius:8px;"><i class="fas fa-spinner fa-spin" style="margin-right:8px;color:var(--primary);"></i>Solicitando carga al worker...</div>';
+
+    try {
+        const r = await fetch(`${CONFIG.API_URL}/api/admin/cargar-inventario`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({bodega, fecha, usuario: state.usuario?.username || 'admin'})
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Error');
+        status.innerHTML = `<div style="padding:12px;background:var(--bg-light);border-radius:8px;"><i class="fas fa-spinner fa-spin" style="margin-right:8px;color:var(--primary);"></i>Tarea creada (id ${data.id}). Esperando worker en PC FINANZAS...</div>`;
+        cargaBdPoll(data.id);
+    } catch(e) {
+        status.innerHTML = `<div style="padding:12px;background:#fef2f2;border-radius:8px;color:#dc2626;"><i class="fas fa-exclamation-triangle" style="margin-right:8px;"></i>${e.message}</div>`;
+    }
+}
+
+function cargaBdPoll(ejecId) {
+    let intentos = 0;
+    if (_cargaBdPollHandle) clearInterval(_cargaBdPollHandle);
+    const status = document.getElementById('carga-bd-status');
+
+    _cargaBdPollHandle = setInterval(async () => {
+        intentos++;
+        try {
+            const r = await fetch(`${CONFIG.API_URL}/api/admin/cargar-inventario/estado/${ejecId}`);
+            const d = await r.json();
+            if (d.estado === 'pendiente') {
+                status.innerHTML = `<div style="padding:12px;background:var(--bg-light);border-radius:8px;"><i class="fas fa-spinner fa-spin" style="margin-right:8px;color:var(--primary);"></i>Esperando worker... (${intentos * 5}s)</div>`;
+            } else if (d.estado === 'en_proceso') {
+                status.innerHTML = `<div style="padding:12px;background:var(--bg-light);border-radius:8px;"><i class="fas fa-spinner fa-spin" style="margin-right:8px;color:var(--primary);"></i>Worker descargando de Contifico...</div>`;
+            } else if (d.estado === 'completado') {
+                clearInterval(_cargaBdPollHandle);
+                status.innerHTML = `<div style="padding:12px;background:#ecfdf5;border-radius:8px;color:#059669;font-weight:600;"><i class="fas fa-check-circle" style="margin-right:8px;"></i>Carga completada — ${d.total_productos || 0} productos</div>`;
+            } else if (d.estado === 'error') {
+                clearInterval(_cargaBdPollHandle);
+                status.innerHTML = `<div style="padding:12px;background:#fef2f2;border-radius:8px;color:#dc2626;"><i class="fas fa-exclamation-triangle" style="margin-right:8px;"></i>Error: ${d.error_msg || 'desconocido'}</div>`;
+            }
+            if (intentos > 120) {
+                clearInterval(_cargaBdPollHandle);
+                status.innerHTML += '<div style="margin-top:8px;color:var(--text-gray);font-size:12px;">Timeout — verifica que el worker este corriendo.</div>';
+            }
+        } catch(e) { console.error(e); }
+    }, 5000);
+}
+
+// ============================================================
 // EVALUACION CUALITATIVA DEL LIDER (dentro de Semanal)
 // ============================================================
 let _evalCategorias = null;

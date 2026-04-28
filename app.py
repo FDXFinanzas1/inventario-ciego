@@ -5034,6 +5034,151 @@ def depositos_aprobar():
 
 
 # ============================================================
+# CARGA INVENTARIO MANUAL (admin -> worker)
+# ============================================================
+
+BODEGAS_CARGA_MAP = {
+    'real_audiencia': {'contifico': 'BODEGA CHIOS REAL', 'modo': 'CHIOS'},
+    'floreana': {'contifico': 'BODEGA CHIOS FLOREANA', 'modo': 'CHIOS'},
+    'portugal': {'contifico': 'BODEGA CHIOS PORTUGAL', 'modo': 'CHIOS'},
+    'santo_cachon_real': {'contifico': 'BODEGA SANTO CACHON REAL', 'modo': 'CACHON'},
+    'santo_cachon_portugal': {'contifico': 'BODEGA SANTO CACHON PORTUGAL', 'modo': 'CACHON'},
+    'simon_bolon': {'contifico': 'BODEGA SIMON BOLON', 'modo': 'SIMON_BOLON'},
+}
+
+@app.route('/api/admin/cargar-inventario', methods=['POST'])
+def admin_cargar_inventario():
+    """Admin solicita carga de inventario para una bodega+fecha."""
+    data = request.json or {}
+    bodega = data.get('bodega')
+    fecha = data.get('fecha')
+    usuario = data.get('usuario', 'admin')
+
+    if bodega not in BODEGAS_CARGA_MAP:
+        return jsonify({'error': 'bodega invalida'}), 400
+    if not fecha:
+        return jsonify({'error': 'fecha requerida'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, estado FROM goti.carga_inventario_tareas
+            WHERE bodega = %s AND fecha = %s
+        """, (bodega, fecha))
+        existente = cur.fetchone()
+
+        if existente:
+            if existente['estado'] in ('pendiente', 'en_proceso'):
+                return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
+            # Resetear si completado o error
+            cur.execute("""
+                UPDATE goti.carga_inventario_tareas
+                SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
+                    worker_lock=NULL, error_msg=NULL, timestamp_inicio=NULL,
+                    timestamp_fin=NULL, total_productos=NULL
+                WHERE id = %s
+            """, (usuario, existente['id']))
+            conn.commit()
+            return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
+
+        modo = BODEGAS_CARGA_MAP[bodega]['modo']
+        cur.execute("""
+            INSERT INTO goti.carga_inventario_tareas (bodega, fecha, modo, solicitado_por)
+            VALUES (%s, %s, %s, %s) RETURNING id
+        """, (bodega, fecha, modo, usuario))
+        new_id = cur.fetchone()['id']
+        conn.commit()
+        return jsonify({'id': new_id, 'estado': 'pendiente'})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/admin/cargar-inventario/pendientes', methods=['GET'])
+def admin_cargar_inventario_pendientes():
+    """Worker toma tareas de carga."""
+    token = request.headers.get('X-Worker-Token')
+    if token != WORKER_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+    worker_id = request.args.get('worker_id', 'pc-finanzas')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE goti.carga_inventario_tareas
+            SET estado = 'en_proceso', worker_lock = %s, timestamp_inicio = NOW()
+            WHERE id IN (
+                SELECT id FROM goti.carga_inventario_tareas
+                WHERE estado = 'pendiente' ORDER BY solicitado_at ASC LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id, bodega, fecha, modo
+        """, (worker_id,))
+        rows = cur.fetchall()
+        conn.commit()
+        return jsonify([{
+            'id': r['id'], 'bodega': r['bodega'],
+            'fecha': r['fecha'].isoformat() if r['fecha'] else None,
+            'modo': r['modo'], 'tipo': 'carga_inventario',
+        } for r in rows])
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/admin/cargar-inventario/resultado', methods=['POST'])
+def admin_cargar_inventario_resultado():
+    """Worker reporta resultado."""
+    token = request.headers.get('X-Worker-Token')
+    if token != WORKER_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+    data = request.json or {}
+    ejec_id = data.get('id')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE goti.carga_inventario_tareas
+            SET estado = %s, timestamp_fin = NOW(), total_productos = %s, error_msg = %s
+            WHERE id = %s
+        """, (data.get('estado', 'completado'), data.get('total_productos'), data.get('error_msg'), ejec_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/admin/cargar-inventario/estado/<int:ejec_id>', methods=['GET'])
+def admin_cargar_inventario_estado(ejec_id):
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM goti.carga_inventario_tareas WHERE id = %s", (ejec_id,))
+        r = cur.fetchone()
+        if not r: return jsonify({'error': 'no encontrado'}), 404
+        return jsonify({
+            'id': r['id'], 'bodega': r['bodega'], 'estado': r['estado'],
+            'total_productos': r['total_productos'], 'error_msg': r['error_msg'],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+# ============================================================
 # DIAS LIBRES GERENTES
 # ============================================================
 
