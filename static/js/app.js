@@ -5382,9 +5382,12 @@ function renderTablaCorreccion(productos) {
                     value="${corrValor(p.cantidad_contada_2)}" min="0" step="0.01"
                     oninput="corrMarcarCambio(${p.id})">
             </td>
-            <td class="corr-td-btn">
+            <td class="corr-td-btn" style="display:flex;gap:4px;">
                 <button class="corr-btn-save" id="corr-savebtn-${p.id}" onclick="guardarCorreccionFila(${p.id})" title="Guardar esta fila">
                     <i class="fas fa-save"></i>
+                </button>
+                <button class="corr-btn-save" style="background:#fee2e2;color:#dc2626;" onclick="eliminarProductoCorreccion(${p.id}, '${p.codigo}')" title="Eliminar producto">
+                    <i class="fas fa-trash-alt"></i>
                 </button>
             </td>
         </tr>
@@ -5403,9 +5406,14 @@ function renderTablaCorreccion(productos) {
                 <span class="corr-info-sep">·</span>
                 <span>${fecha}</span>
             </div>
-            <button class="corr-btn-guardar-todos" onclick="guardarTodasCorrecciones()">
-                <i class="fas fa-save"></i> Guardar Todos
-            </button>
+            <div style="display:flex;gap:8px;">
+                <button class="corr-btn-guardar-todos" style="background:linear-gradient(135deg,#10b981,#059669);" onclick="abrirModalAgregar()">
+                    <i class="fas fa-plus"></i> Agregar Producto
+                </button>
+                <button class="corr-btn-guardar-todos" onclick="guardarTodasCorrecciones()">
+                    <i class="fas fa-save"></i> Guardar Todos
+                </button>
+            </div>
         </div>
         <div class="corr-table-wrap">
             <table class="corr-table">
@@ -5467,6 +5475,71 @@ async function guardarCorreccionFila(id) {
     } catch(e) {
         showToast('Error de conexión', 'error');
         if (btn) { btn.innerHTML = '<i class="fas fa-save"></i>'; btn.disabled = false; }
+    }
+}
+
+function abrirModalAgregar() {
+    if (!_puede('correccion', 'editar')) { showToast('No tienes permiso', 'error'); return; }
+    document.getElementById('agregar-prod-codigo').value = '';
+    document.getElementById('agregar-prod-nombre').value = '';
+    document.getElementById('agregar-prod-unidad').value = 'Unidad';
+    document.getElementById('modal-agregar-producto').style.display = 'flex';
+    document.getElementById('agregar-prod-codigo').focus();
+}
+
+function cerrarModalAgregar() {
+    document.getElementById('modal-agregar-producto').style.display = 'none';
+}
+
+async function confirmarAgregarProducto() {
+    const fecha = document.getElementById('corr-fecha').value;
+    const local = document.getElementById('corr-bodega').value;
+    const codigo = document.getElementById('agregar-prod-codigo').value.trim().toUpperCase();
+    const nombre = document.getElementById('agregar-prod-nombre').value.trim();
+    const unidad = document.getElementById('agregar-prod-unidad').value.trim() || 'Unidad';
+
+    if (!codigo || !nombre) { showToast('Código y nombre son requeridos', 'error'); return; }
+    if (!fecha || !local) { showToast('Selecciona fecha y bodega primero', 'error'); return; }
+
+    try {
+        const res = await fetch('/api/admin/agregar-producto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fecha, local, codigo, nombre, unidad })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Producto ${codigo} agregado`, 'success');
+            cerrarModalAgregar();
+            cargarCorreccion();
+        } else {
+            showToast(data.error || 'Error al agregar', 'error');
+        }
+    } catch(e) {
+        showToast('Error de conexión', 'error');
+    }
+}
+
+async function eliminarProductoCorreccion(id, codigo) {
+    if (!_puede('correccion', 'eliminar')) { showToast('No tienes permiso para eliminar', 'error'); return; }
+    if (!confirm(`¿Eliminar el producto ${codigo} de esta fecha y bodega?`)) return;
+
+    try {
+        const res = await fetch('/api/admin/eliminar-producto', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Producto ${codigo} eliminado`, 'success');
+            const row = document.getElementById(`corr-row-${id}`);
+            if (row) row.remove();
+        } else {
+            showToast(data.error || 'Error al eliminar', 'error');
+        }
+    } catch(e) {
+        showToast('Error de conexión', 'error');
     }
 }
 
@@ -9522,4 +9595,143 @@ function salirImpersonacion() {
     document.getElementById('btn-impersonar').value = '';
     document.getElementById('user-name').textContent = state.user.nombre;
     showMainScreen();
+}
+
+// ============================================================
+// MODULO: Configuracion de Productos por Marca
+// ============================================================
+
+let _cfgProductos = [];
+
+async function cargarProductosMarca() {
+    const marca = document.getElementById('cfg-marca').value;
+    const container = document.getElementById('cfg-tabla-container');
+    const form = document.getElementById('cfg-agregar-form');
+    const contador = document.getElementById('cfg-contador');
+
+    if (!marca) {
+        form.style.display = 'none';
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-cogs"></i><p>Selecciona un tipo de local</p></div>';
+        contador.textContent = '';
+        return;
+    }
+
+    container.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
+    form.style.display = 'block';
+
+    try {
+        const res = await fetch(`/api/admin/productos-marca?marca=${marca}`);
+        _cfgProductos = await res.json();
+        renderCfgProductos();
+    } catch(e) {
+        showToast('Error al cargar productos', 'error');
+    }
+}
+
+function renderCfgProductos() {
+    const container = document.getElementById('cfg-tabla-container');
+    const contador = document.getElementById('cfg-contador');
+    const activos = _cfgProductos.filter(p => p.activo);
+    contador.innerHTML = `<i class="fas fa-box"></i> <strong>${activos.length}</strong> activos de ${_cfgProductos.length} totales`;
+
+    if (!_cfgProductos.length) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-box-open"></i><p>No hay productos configurados</p></div>';
+        return;
+    }
+
+    const rows = _cfgProductos.map(p => `
+        <tr style="opacity:${p.activo ? '1' : '0.45'};">
+            <td style="padding:8px 12px;font-family:monospace;font-weight:700;font-size:13px;">${p.codigo}</td>
+            <td style="padding:8px 12px;font-size:13px;">${p.nombre}</td>
+            <td style="padding:8px 12px;text-align:center;">
+                <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;
+                    background:${p.activo ? '#d1fae5' : '#fee2e2'};color:${p.activo ? '#065f46' : '#991b1b'};">
+                    ${p.activo ? 'Activo' : 'Inactivo'}
+                </span>
+            </td>
+            <td style="padding:8px 12px;text-align:center;white-space:nowrap;">
+                <button onclick="cfgToggleProducto(${p.id})" title="${p.activo ? 'Desactivar' : 'Activar'}"
+                    style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;margin-right:4px;">
+                    <i class="fas fa-${p.activo ? 'toggle-on' : 'toggle-off'}" style="color:${p.activo ? '#10b981' : '#9ca3af'};"></i>
+                </button>
+                <button onclick="cfgEliminarProducto(${p.id}, '${p.codigo}')" title="Eliminar definitivamente"
+                    style="background:none;border:1px solid #fecaca;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">
+                    <i class="fas fa-trash-alt" style="color:#dc2626;"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+
+    container.innerHTML = `
+        <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="background:var(--bg-sidebar);border-bottom:2px solid var(--border);">
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--text-gray);">Codigo</th>
+                        <th style="padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--text-gray);">Nombre</th>
+                        <th style="padding:10px 12px;text-align:center;font-size:12px;text-transform:uppercase;color:var(--text-gray);">Estado</th>
+                        <th style="padding:10px 12px;text-align:center;font-size:12px;text-transform:uppercase;color:var(--text-gray);">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+async function cfgAgregarProducto() {
+    const marca = document.getElementById('cfg-marca').value;
+    const codigo = document.getElementById('cfg-new-codigo').value.trim().toUpperCase();
+    const nombre = document.getElementById('cfg-new-nombre').value.trim();
+
+    if (!marca) { showToast('Selecciona una marca', 'error'); return; }
+    if (!codigo || !nombre) { showToast('Codigo y nombre son requeridos', 'error'); return; }
+
+    try {
+        const res = await fetch('/api/admin/productos-marca', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ marca, codigo, nombre })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`${codigo} agregado`, 'success');
+            document.getElementById('cfg-new-codigo').value = '';
+            document.getElementById('cfg-new-nombre').value = '';
+            cargarProductosMarca();
+        } else {
+            showToast(data.error || 'Error', 'error');
+        }
+    } catch(e) {
+        showToast('Error de conexion', 'error');
+    }
+}
+
+async function cfgToggleProducto(id) {
+    try {
+        const res = await fetch(`/api/admin/productos-marca/toggle/${id}`, { method: 'PUT' });
+        const data = await res.json();
+        if (data.success) {
+            const p = _cfgProductos.find(x => x.id === id);
+            if (p) p.activo = data.activo;
+            renderCfgProductos();
+        }
+    } catch(e) {
+        showToast('Error', 'error');
+    }
+}
+
+async function cfgEliminarProducto(id, codigo) {
+    if (!confirm(`¿Eliminar ${codigo} definitivamente de esta marca?`)) return;
+    try {
+        const res = await fetch(`/api/admin/productos-marca/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`${codigo} eliminado`, 'success');
+            _cfgProductos = _cfgProductos.filter(p => p.id !== id);
+            renderCfgProductos();
+        }
+    } catch(e) {
+        showToast('Error', 'error');
+    }
 }

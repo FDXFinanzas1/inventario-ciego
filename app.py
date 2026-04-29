@@ -1075,6 +1075,176 @@ def corregir_conteo():
             release_db(conn)
 
 
+@app.route('/api/admin/agregar-producto', methods=['POST'])
+def admin_agregar_producto():
+    """Agrega un producto a una fecha+bodega con cantidad 0"""
+    data = request.json
+    fecha = data.get('fecha')
+    local = data.get('local')
+    codigo = data.get('codigo', '').strip().upper()
+    nombre = data.get('nombre', '').strip()
+    unidad = data.get('unidad', 'Unidad').strip()
+
+    if not fecha or not local or not codigo or not nombre:
+        return jsonify({'error': 'fecha, local, codigo y nombre son requeridos'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Verificar que no exista ya
+        cur.execute("""
+            SELECT id FROM goti.inventario_ciego_conteos
+            WHERE fecha = %s AND local = %s AND codigo = %s
+        """, (fecha, local, codigo))
+        if cur.fetchone():
+            return jsonify({'error': f'El producto {codigo} ya existe para esta fecha y bodega'}), 409
+
+        cur.execute("""
+            INSERT INTO goti.inventario_ciego_conteos
+                (fecha, local, codigo, nombre, unidad, cantidad, costo_unitario)
+            VALUES (%s, %s, %s, %s, %s, 0, 0)
+            RETURNING id
+        """, (fecha, local, codigo, nombre, unidad))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return jsonify({'success': True, 'id': new_id})
+    except Exception as e:
+        print(f"Error en /api/admin/agregar-producto: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
+@app.route('/api/admin/eliminar-producto', methods=['DELETE'])
+def admin_eliminar_producto():
+    """Elimina un producto de una fecha+bodega"""
+    data = request.json
+    id_producto = data.get('id')
+
+    if not id_producto:
+        return jsonify({'error': 'id es requerido'}), 400
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM goti.inventario_ciego_conteos WHERE id = %s
+        """, (id_producto,))
+        if cur.rowcount == 0:
+            return jsonify({'error': 'Producto no encontrado'}), 404
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error en /api/admin/eliminar-producto: {e}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
+# ============================================================
+# MODULO: Configuracion de Productos por Marca
+# ============================================================
+
+@app.route('/api/admin/productos-marca', methods=['GET'])
+def get_productos_marca():
+    """Lista productos configurados para una marca"""
+    marca = request.args.get('marca', '').upper()
+    if not marca:
+        return jsonify({'error': 'marca es requerido'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, codigo, nombre, activo
+            FROM goti.productos_por_marca
+            WHERE marca = %s
+            ORDER BY codigo
+        """, (marca,))
+        productos = [{'id': r[0], 'codigo': r[1], 'nombre': r[2], 'activo': r[3]} for r in cur.fetchall()]
+        return jsonify(productos)
+    except Exception as e:
+        print(f"Error en get_productos_marca: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
+@app.route('/api/admin/productos-marca', methods=['POST'])
+def add_producto_marca():
+    """Agrega un producto a una marca"""
+    data = request.json
+    marca = data.get('marca', '').upper()
+    codigo = data.get('codigo', '').strip().upper()
+    nombre = data.get('nombre', '').strip()
+    if not marca or not codigo or not nombre:
+        return jsonify({'error': 'marca, codigo y nombre son requeridos'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo)
+            VALUES (%s, %s, %s, TRUE)
+            ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE
+            RETURNING id
+        """, (marca, codigo, nombre))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return jsonify({'success': True, 'id': new_id})
+    except Exception as e:
+        print(f"Error en add_producto_marca: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
+@app.route('/api/admin/productos-marca/<int:pid>', methods=['DELETE'])
+def delete_producto_marca(pid):
+    """Elimina un producto de una marca"""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM goti.productos_por_marca WHERE id = %s", (pid,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error en delete_producto_marca: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
+@app.route('/api/admin/productos-marca/toggle/<int:pid>', methods=['PUT'])
+def toggle_producto_marca(pid):
+    """Activa/desactiva un producto"""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE goti.productos_por_marca SET activo = NOT activo WHERE id = %s
+            RETURNING activo
+        """, (pid,))
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({'success': True, 'activo': row[0] if row else False})
+    except Exception as e:
+        print(f"Error en toggle_producto_marca: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            release_db(conn)
+
+
 @app.route('/api/inventario/cargar', methods=['POST'])
 def cargar_inventario():
     """Endpoint para cargar datos desde el script de Selenium"""

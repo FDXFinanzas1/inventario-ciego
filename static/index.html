@@ -117,6 +117,10 @@
                             <i class="fas fa-database"></i>
                             <span>Cargar BD</span>
                         </button>
+                        <button class="nav-btn" data-view="config-productos" style="display:none;">
+                            <i class="fas fa-cogs"></i>
+                            <span>Productos</span>
+                        </button>
                     </div>
                 </div>
 
@@ -553,6 +557,31 @@
                             <p>Selecciona fecha y bodega para corregir conteos</p>
                         </div>
                     </div>
+
+                    <!-- Modal Agregar Producto -->
+                    <div id="modal-agregar-producto" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+                        <div style="background:#fff;border-radius:12px;padding:24px;width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+                            <h3 style="margin:0 0 16px;font-size:16px;"><i class="fas fa-plus-circle" style="color:var(--primary);"></i> Agregar Producto</h3>
+                            <div style="display:flex;flex-direction:column;gap:12px;">
+                                <div>
+                                    <label style="font-size:12px;font-weight:600;color:#666;">Código</label>
+                                    <input type="text" id="agregar-prod-codigo" placeholder="Ej: CP021" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px;font-weight:600;color:#666;">Nombre</label>
+                                    <input type="text" id="agregar-prod-nombre" placeholder="Ej: NEW YORK B PAQ" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px;font-weight:600;color:#666;">Unidad</label>
+                                    <input type="text" id="agregar-prod-unidad" value="Unidad" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
+                                <button onclick="cerrarModalAgregar()" style="padding:8px 20px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:13px;">Cancelar</button>
+                                <button onclick="confirmarAgregarProducto()" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">Agregar</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Vista Cruce Operativo (solo admin) -->
@@ -985,6 +1014,53 @@
                                 </button>
                             </div>
                             <div id="carga-bd-status" style="margin-top:16px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Configuracion de Productos por Marca -->
+                <div id="view-config-productos" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-cogs"></i> Productos por Local</h2>
+                    </div>
+                    <p style="color:var(--text-gray);font-size:13px;margin:8px 0 16px;padding:0 4px;">
+                        Configura que productos se descargan de Contifico para cada tipo de local. Los cambios aplican desde la proxima descarga automatica.
+                    </p>
+
+                    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+                        <div>
+                            <label style="font-size:11px;font-weight:600;color:var(--text-gray);text-transform:uppercase;display:block;margin-bottom:4px;">Marca / Tipo de Local</label>
+                            <select id="cfg-marca" onchange="cargarProductosMarca()" style="height:40px;border:1px solid var(--border);border-radius:8px;padding:0 14px;font-size:14px;font-weight:600;min-width:220px;">
+                                <option value="">-- Seleccionar --</option>
+                                <option value="CHIOS">CHIOS (Real, Floreana, Portugal)</option>
+                                <option value="CACHON">SANTO CACHON (Real, Portugal)</option>
+                                <option value="SIMON_BOLON">SIMON BOLON</option>
+                            </select>
+                        </div>
+                        <div id="cfg-contador" style="font-size:13px;color:var(--text-gray);margin-top:18px;"></div>
+                    </div>
+
+                    <!-- Formulario agregar -->
+                    <div id="cfg-agregar-form" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+                        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                            <div style="min-width:120px;">
+                                <label style="font-size:11px;font-weight:600;color:var(--text-gray);display:block;margin-bottom:4px;">Codigo</label>
+                                <input type="text" id="cfg-new-codigo" placeholder="Ej: CP025" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;box-sizing:border-box;">
+                            </div>
+                            <div style="flex:1;min-width:200px;">
+                                <label style="font-size:11px;font-weight:600;color:var(--text-gray);display:block;margin-bottom:4px;">Nombre</label>
+                                <input type="text" id="cfg-new-nombre" placeholder="Ej: NUEVO PRODUCTO PAQ" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;box-sizing:border-box;">
+                            </div>
+                            <button onclick="cfgAgregarProducto()" style="height:36px;padding:0 20px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;">
+                                <i class="fas fa-plus" style="margin-right:4px;"></i>Agregar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="cfg-tabla-container">
+                        <div class="empty-state">
+                            <i class="fas fa-cogs"></i>
+                            <p>Selecciona un tipo de local para ver y configurar sus productos</p>
                         </div>
                     </div>
                 </div>
