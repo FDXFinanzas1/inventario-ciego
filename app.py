@@ -1106,7 +1106,7 @@ def admin_agregar_producto():
             VALUES (%s, %s, %s, %s, %s, 0, 0)
             RETURNING id
         """, (fecha, local, codigo, nombre, unidad))
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         return jsonify({'success': True, 'id': new_id})
     except Exception as e:
@@ -1165,7 +1165,7 @@ def get_productos_marca():
             WHERE marca = %s
             ORDER BY codigo
         """, (marca,))
-        productos = [{'id': r[0], 'codigo': r[1], 'nombre': r[2], 'activo': r[3]} for r in cur.fetchall()]
+        productos = [{'id': r['id'], 'codigo': r['codigo'], 'nombre': r['nombre'], 'activo': r['activo']} for r in cur.fetchall()]
         return jsonify(productos)
     except Exception as e:
         print(f"Error en get_productos_marca: {e}")
@@ -1194,7 +1194,7 @@ def add_producto_marca():
             ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE
             RETURNING id
         """, (marca, codigo, nombre))
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         return jsonify({'success': True, 'id': new_id})
     except Exception as e:
@@ -1236,7 +1236,7 @@ def toggle_producto_marca(pid):
         """, (pid,))
         row = cur.fetchone()
         conn.commit()
-        return jsonify({'success': True, 'activo': row[0] if row else False})
+        return jsonify({'success': True, 'activo': row['activo'] if row else False})
     except Exception as e:
         print(f"Error en toggle_producto_marca: {e}")
         return jsonify({'error': str(e)}), 500
