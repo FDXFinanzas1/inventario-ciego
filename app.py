@@ -3514,8 +3514,8 @@ def diferencias_semana(semana_id):
         """, (local, fecha_inicio, fecha_fin))
         diferencias = cur.fetchall()
 
-        # Serializar datos — costo incluye 30% por costos indirectos (no visible al usuario)
-        FACTOR_COSTO_INDIRECTO = 1.30
+        # Serializar datos — costo incluye 20% por costos indirectos (no visible al usuario)
+        FACTOR_COSTO_INDIRECTO = 1.20
         for d in diferencias:
             d['diferencia'] = float(d['diferencia']) if d['diferencia'] else 0
             costo_base = float(d['costo_unitario']) if d['costo_unitario'] else 0
