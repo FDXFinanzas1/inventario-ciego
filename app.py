@@ -3488,9 +3488,9 @@ def diferencias_semana(semana_id):
                 unidad,
                 SUM(
                     CASE
-                        WHEN dif_dia < 0 THEN
-                            LEAST(dif_dia + cant_justif, 0)
-                        ELSE dif_dia
+                        WHEN dif_dia < 0 THEN LEAST(dif_dia + cant_justif, 0)
+                        WHEN dif_dia > 0 THEN GREATEST(dif_dia - cant_justif, 0)
+                        ELSE 0
                     END
                 ) as diferencia,
                 AVG(costo_unitario) as costo_unitario,
@@ -3509,7 +3509,7 @@ def diferencias_semana(semana_id):
                 ) ORDER BY fecha) as detalle_diario
             FROM diferencias_diarias
             GROUP BY codigo, nombre, unidad
-            HAVING SUM(CASE WHEN dif_dia < 0 THEN LEAST(dif_dia + cant_justif, 0) ELSE dif_dia END) != 0
+            HAVING SUM(CASE WHEN dif_dia < 0 THEN LEAST(dif_dia + cant_justif, 0) WHEN dif_dia > 0 THEN GREATEST(dif_dia - cant_justif, 0) ELSE 0 END) != 0
             ORDER BY nombre
         """, (local, fecha_inicio, fecha_fin))
         diferencias = cur.fetchall()

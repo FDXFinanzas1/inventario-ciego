@@ -1975,16 +1975,14 @@ function renderObservaciones() {
                                     <span class="badge-corregido ${corregido ? 'corregido-si' : 'corregido-no'}">${corregido ? 'Sí' : 'No'}</span>
                                 </td>
                                 <td class="obs-corregido-cell">
-                                    ${esAdmin && diferencia < 0
+                                    ${esAdmin && diferencia !== 0
                                         ? `<input type="number" step="0.01" min="0" max="${difAbs.toFixed(2)}"
                                                   value="${cantJustif > 0 ? cantJustif.toFixed(2) : ''}"
                                                   placeholder="0"
                                                   data-id="${prod.id}" data-max="${difAbs.toFixed(4)}"
                                                   onchange="guardarCantJustificada(this)"
                                                   style="width:70px;padding:4px 6px;border:1.5px solid ${cantJustif > 0 ? '#059669' : '#e2e8f0'};border-radius:6px;font-size:12px;text-align:center;font-weight:${cantJustif > 0 ? '700' : '400'};color:${cantJustif > 0 ? '#059669' : '#475569'};">`
-                                        : diferencia < 0
-                                            ? `<span style="font-size:12px;color:${cantJustif > 0 ? '#059669' : '#94a3b8'};font-weight:${cantJustif > 0 ? '600' : '400'};">${cantJustif > 0 ? cantJustif.toFixed(2) : '-'}</span>`
-                                            : '-'
+                                        : `<span style="font-size:12px;color:${cantJustif > 0 ? '#059669' : '#94a3b8'};font-weight:${cantJustif > 0 ? '600' : '400'};">${cantJustif > 0 ? cantJustif.toFixed(2) : '-'}</span>`
                                     }
                                 </td>
                             </tr>
