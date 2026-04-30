@@ -3453,8 +3453,8 @@ def diferencias_semana(semana_id):
         local = semana['local']
 
         # Netear diferencias diarias por producto en la semana
-        # Cada día: diferencia = conteo - sistema. Neto = suma de diferencias diarias.
-        # Producto queda "justificado" si CUALQUIER día de la semana tiene justificado=TRUE
+        # Solo suma los dias NO justificados. Los justificados se excluyen del neto
+        # pero se muestran en detalle_diario para referencia.
         cur.execute("""
             WITH diferencias_diarias AS (
                 SELECT
@@ -3473,10 +3473,10 @@ def diferencias_semana(semana_id):
                 codigo,
                 nombre,
                 unidad,
-                SUM(dif_dia) as diferencia,
+                SUM(CASE WHEN NOT justificado THEN dif_dia ELSE 0 END) as diferencia,
                 AVG(costo_unitario) as costo_unitario,
                 COUNT(*) as dias_contados,
-                BOOL_OR(justificado) as justificado,
+                BOOL_AND(justificado) as justificado,
                 BOOL_OR(corregido) as tiene_correccion,
                 json_agg(json_build_object(
                     'fecha', fecha,
@@ -3488,7 +3488,7 @@ def diferencias_semana(semana_id):
                 ) ORDER BY fecha) as detalle_diario
             FROM diferencias_diarias
             GROUP BY codigo, nombre, unidad
-            HAVING SUM(dif_dia) != 0
+            HAVING SUM(CASE WHEN NOT justificado THEN dif_dia ELSE 0 END) != 0
             ORDER BY nombre
         """, (local, fecha_inicio, fecha_fin))
         diferencias = cur.fetchall()
