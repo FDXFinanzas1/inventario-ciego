@@ -285,10 +285,85 @@ def init_db():
         cur.execute("UPDATE goti.rol_modulos SET puede_editar = TRUE WHERE puede_editar IS NULL")
 
         # Migrar roles: empleado → subgerente, supervisor → gerente
-        cur.execute("UPDATE goti.usuarios SET rol = 'subgerente' WHERE rol = 'empleado'")
-        cur.execute("UPDATE goti.usuarios SET rol = 'gerente' WHERE rol = 'supervisor'")
-        cur.execute("UPDATE goti.rol_modulos SET rol = 'subgerente' WHERE rol = 'empleado'")
-        cur.execute("UPDATE goti.rol_modulos SET rol = 'gerente' WHERE rol = 'supervisor'")
+        try:
+            cur.execute("SAVEPOINT migrate_roles")
+            cur.execute("UPDATE goti.usuarios SET rol = 'subgerente' WHERE rol = 'empleado'")
+            cur.execute("UPDATE goti.usuarios SET rol = 'gerente' WHERE rol = 'supervisor'")
+            cur.execute("UPDATE goti.rol_modulos SET rol = 'subgerente' WHERE rol = 'empleado'")
+            cur.execute("UPDATE goti.rol_modulos SET rol = 'gerente' WHERE rol = 'supervisor'")
+            cur.execute("RELEASE SAVEPOINT migrate_roles")
+        except Exception:
+            cur.execute("ROLLBACK TO SAVEPOINT migrate_roles")
+
+        # ---- Tabla Cuadres de Caja ----
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS goti.cuadres_caja (
+                id SERIAL PRIMARY KEY,
+                fecha DATE NOT NULL,
+                local VARCHAR(50) NOT NULL,
+                venta_sistema NUMERIC(12,2) DEFAULT 0,
+                efectivo_contado NUMERIC(12,2) DEFAULT 0,
+                venta_tarjeta NUMERIC(12,2) DEFAULT 0,
+                venta_transferencia NUMERIC(12,2) DEFAULT 0,
+                venta_plataformas NUMERIC(12,2) DEFAULT 0,
+                otros_ingresos NUMERIC(12,2) DEFAULT 0,
+                gastos_retiros NUMERIC(12,2) DEFAULT 0,
+                efectivo_esperado NUMERIC(12,2) DEFAULT 0,
+                diferencia NUMERIC(12,2) DEFAULT 0,
+                observacion TEXT,
+                registrado_por VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(fecha, local)
+            )
+        """)
+
+        # ---- Tabla Delivery Liquidaciones ----
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS goti.delivery_liquidaciones (
+                id SERIAL PRIMARY KEY,
+                fecha DATE NOT NULL,
+                local VARCHAR(50) NOT NULL,
+                plataforma VARCHAR(30) NOT NULL,
+                total_pedidos INT DEFAULT 0,
+                venta_bruta NUMERIC(12,2) DEFAULT 0,
+                comision_pct NUMERIC(5,2) DEFAULT 0,
+                comision_monto NUMERIC(12,2) DEFAULT 0,
+                iva_comision NUMERIC(12,2) DEFAULT 0,
+                propinas NUMERIC(12,2) DEFAULT 0,
+                ajustes NUMERIC(12,2) DEFAULT 0,
+                neto_recibir NUMERIC(12,2) DEFAULT 0,
+                depositado_real NUMERIC(12,2) DEFAULT 0,
+                diferencia NUMERIC(12,2) DEFAULT 0,
+                referencia VARCHAR(100),
+                observacion TEXT,
+                registrado_por VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # ---- Tabla Registro de Facturas ----
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS goti.facturas_registro (
+                id SERIAL PRIMARY KEY,
+                fecha_emision DATE NOT NULL,
+                local VARCHAR(50) NOT NULL,
+                proveedor VARCHAR(200) NOT NULL,
+                ruc VARCHAR(20),
+                numero_factura VARCHAR(50),
+                autorizacion VARCHAR(60),
+                subtotal_0 NUMERIC(12,2) DEFAULT 0,
+                subtotal_iva NUMERIC(12,2) DEFAULT 0,
+                iva NUMERIC(12,2) DEFAULT 0,
+                total NUMERIC(12,2) DEFAULT 0,
+                categoria VARCHAR(50) DEFAULT 'Otros',
+                forma_pago VARCHAR(30) DEFAULT 'Transferencia',
+                estado_pago VARCHAR(20) DEFAULT 'Pendiente',
+                observacion TEXT,
+                registrado_por VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
         print('init_db: tablas OK')
     except Exception as e:
@@ -319,12 +394,10 @@ BODEGAS_NOMBRES = {
 def index():
     import json as json_lib, base64
     # Inyectar personas directamente en el HTML como JSON en data attribute (evita problemas de encoding en script)
-    personas = _personas_cache['datos'] if _personas_cache['datos'] else []
-    if not personas:
-        try:
-            personas = _cargar_personas_airtable()
-        except Exception:
-            pass
+    try:
+        personas = _obtener_personas()
+    except Exception:
+        personas = _personas_cache['datos'] if _personas_cache['datos'] else []
     html_path = os.path.join(app.static_folder, 'index.html')
     with open(html_path, 'r', encoding='utf-8') as f:
         html = f.read()
@@ -1070,176 +1143,6 @@ def corregir_conteo():
     except Exception as e:
         print(f"Error en /api/admin/corregir-conteo: {e}")
         return jsonify({'error': 'Error interno del servidor'}), 500
-    finally:
-        if conn:
-            release_db(conn)
-
-
-@app.route('/api/admin/agregar-producto', methods=['POST'])
-def admin_agregar_producto():
-    """Agrega un producto a una fecha+bodega con cantidad 0"""
-    data = request.json
-    fecha = data.get('fecha')
-    local = data.get('local')
-    codigo = data.get('codigo', '').strip().upper()
-    nombre = data.get('nombre', '').strip()
-    unidad = data.get('unidad', 'Unidad').strip()
-
-    if not fecha or not local or not codigo or not nombre:
-        return jsonify({'error': 'fecha, local, codigo y nombre son requeridos'}), 400
-
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        # Verificar que no exista ya
-        cur.execute("""
-            SELECT id FROM goti.inventario_ciego_conteos
-            WHERE fecha = %s AND local = %s AND codigo = %s
-        """, (fecha, local, codigo))
-        if cur.fetchone():
-            return jsonify({'error': f'El producto {codigo} ya existe para esta fecha y bodega'}), 409
-
-        cur.execute("""
-            INSERT INTO goti.inventario_ciego_conteos
-                (fecha, local, codigo, nombre, unidad, cantidad, costo_unitario)
-            VALUES (%s, %s, %s, %s, %s, 0, 0)
-            RETURNING id
-        """, (fecha, local, codigo, nombre, unidad))
-        new_id = cur.fetchone()['id']
-        conn.commit()
-        return jsonify({'success': True, 'id': new_id})
-    except Exception as e:
-        print(f"Error en /api/admin/agregar-producto: {e}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
-    finally:
-        if conn:
-            release_db(conn)
-
-
-@app.route('/api/admin/eliminar-producto', methods=['DELETE'])
-def admin_eliminar_producto():
-    """Elimina un producto de una fecha+bodega"""
-    data = request.json
-    id_producto = data.get('id')
-
-    if not id_producto:
-        return jsonify({'error': 'id es requerido'}), 400
-
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            DELETE FROM goti.inventario_ciego_conteos WHERE id = %s
-        """, (id_producto,))
-        if cur.rowcount == 0:
-            return jsonify({'error': 'Producto no encontrado'}), 404
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        print(f"Error en /api/admin/eliminar-producto: {e}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
-    finally:
-        if conn:
-            release_db(conn)
-
-
-# ============================================================
-# MODULO: Configuracion de Productos por Marca
-# ============================================================
-
-@app.route('/api/admin/productos-marca', methods=['GET'])
-def get_productos_marca():
-    """Lista productos configurados para una marca"""
-    marca = request.args.get('marca', '').upper()
-    if not marca:
-        return jsonify({'error': 'marca es requerido'}), 400
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, codigo, nombre, activo
-            FROM goti.productos_por_marca
-            WHERE marca = %s
-            ORDER BY codigo
-        """, (marca,))
-        productos = [{'id': r['id'], 'codigo': r['codigo'], 'nombre': r['nombre'], 'activo': r['activo']} for r in cur.fetchall()]
-        return jsonify(productos)
-    except Exception as e:
-        print(f"Error en get_productos_marca: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if conn:
-            release_db(conn)
-
-
-@app.route('/api/admin/productos-marca', methods=['POST'])
-def add_producto_marca():
-    """Agrega un producto a una marca"""
-    data = request.json
-    marca = data.get('marca', '').upper()
-    codigo = data.get('codigo', '').strip().upper()
-    nombre = data.get('nombre', '').strip()
-    if not marca or not codigo or not nombre:
-        return jsonify({'error': 'marca, codigo y nombre son requeridos'}), 400
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo)
-            VALUES (%s, %s, %s, TRUE)
-            ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE
-            RETURNING id
-        """, (marca, codigo, nombre))
-        new_id = cur.fetchone()['id']
-        conn.commit()
-        return jsonify({'success': True, 'id': new_id})
-    except Exception as e:
-        print(f"Error en add_producto_marca: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if conn:
-            release_db(conn)
-
-
-@app.route('/api/admin/productos-marca/<int:pid>', methods=['DELETE'])
-def delete_producto_marca(pid):
-    """Elimina un producto de una marca"""
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM goti.productos_por_marca WHERE id = %s", (pid,))
-        conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        print(f"Error en delete_producto_marca: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if conn:
-            release_db(conn)
-
-
-@app.route('/api/admin/productos-marca/toggle/<int:pid>', methods=['PUT'])
-def toggle_producto_marca(pid):
-    """Activa/desactiva un producto"""
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE goti.productos_por_marca SET activo = NOT activo WHERE id = %s
-            RETURNING activo
-        """, (pid,))
-        row = cur.fetchone()
-        conn.commit()
-        return jsonify({'success': True, 'activo': row['activo'] if row else False})
-    except Exception as e:
-        print(f"Error en toggle_producto_marca: {e}")
-        return jsonify({'error': str(e)}), 500
     finally:
         if conn:
             release_db(conn)
@@ -2211,7 +2114,7 @@ def get_catalogo_productos():
 # Cache de personas en memoria del servidor
 import time as _time
 _personas_cache = {'datos': [], 'timestamp': 0}
-PERSONAS_CACHE_TTL = 3600  # 1 hora
+PERSONAS_CACHE_TTL = 300  # 5 minutos
 
 # Mapeo de bodega a centros de costo de Airtable
 BODEGA_CENTROS = {
@@ -2723,6 +2626,8 @@ def _obtener_personas_con_correo():
 @app.route('/api/personas', methods=['GET'])
 def get_personas():
     try:
+        if request.args.get('refresh') == '1':
+            _personas_cache['timestamp'] = 0
         personas = _obtener_personas()
         return jsonify(personas)
     except Exception as e:
@@ -4227,9 +4132,9 @@ def cruce_op_fechas():
     """Devuelve las fechas con toma fisica disponibles para una bodega."""
     bodega = request.args.get('bodega')
     tablas = {
-        'bodega_principal': 'public.toma_bodega',
-        'materia_prima':    'public.toma_materiaprima',
-        'planta':           'public.toma_planta',
+        'bodega_principal': 'goti.toma_bodega',
+        'materia_prima':    'goti.toma_materiaprima',
+        'planta':           'goti.toma_planta',
     }
     if bodega not in tablas:
         return jsonify({'error': 'bodega invalida'}), 400
@@ -4713,18 +4618,14 @@ def evaluacion_page():
 # ============================================================
 # MODULO: DEPOSITOS (lee desde AirTable)
 # ============================================================
-AIRTABLE_DEPOSITOS_TOKEN = os.environ.get('AIRTABLE_DEPOSITOS_TOKEN', '') or os.environ.get('AIRTABLE_TOKEN', '') or _b64.b64decode('cGF0d1owSHBiRlQ5RkNoNWQuZDQwY2ExZTZlNGViYWRlZWE5ZjJmZGYyZTAwM2FhOGMxMGIyMjAzYzkxZjg2OTk1YmRiOTgyMjYwOTkzMzM3YQ==').decode()
-print(f"[INIT] AIRTABLE_DEPOSITOS_TOKEN: {'SET (' + str(len(AIRTABLE_DEPOSITOS_TOKEN)) + ' chars)' if AIRTABLE_DEPOSITOS_TOKEN else 'EMPTY'}")
+_AT_DEP_FB = _b64.b64decode('cGF0d1owSHBiRlQ5RkNoNWQuZDQwY2ExZTZlNGViYWRlZWE5ZjJmZGYyZTAwM2FhOGMxMGIyMjAzYzkxZjg2OTk1YmRiOTgyMjYwOTkzMzM3YQ==').decode()
+AIRTABLE_DEPOSITOS_TOKEN = os.environ.get('AIRTABLE_DEPOSITOS_TOKEN', '') or _AT_DEP_FB
 AIRTABLE_DEPOSITOS_BASE = 'apppZXgUChlBLbVpR'
 AIRTABLE_DEPOSITOS_TABLE = 'tbldo5QTH6bBpgYbx'
 AIRTABLE_TIENDAS_TABLE = 'tblxloBdnbdsGcuKR'
 
 _tiendas_cache = {}
 _tiendas_cache_ts = 0
-_responsables_cache = {}
-_responsables_cache_ts = 0
-
-AIRTABLE_RESPONSABLES_TABLE = 'tblR8NOjmbp70LmTK'
 
 def _at_headers():
     return {'Authorization': f'Bearer {AIRTABLE_DEPOSITOS_TOKEN}'}
@@ -4736,118 +4637,40 @@ def _cargar_tiendas():
         return _tiendas_cache
     try:
         import requests as req
-        all_recs = []
-        offset = None
-        while True:
-            params = {'pageSize': 100, 'fields[]': ['Código', 'Marca', 'Ubicación']}
-            if offset: params['offset'] = offset
-            r = req.get(f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_TIENDAS_TABLE}',
-                headers=_at_headers(), params=params, timeout=15)
-            if r.status_code != 200: break
-            data = r.json()
-            all_recs.extend(data.get('records', []))
-            offset = data.get('offset')
-            if not offset: break
-        for rec in all_recs:
-            _tiendas_cache[rec['id']] = {
-                'codigo': rec['fields'].get('Código', rec['id']),
-                'ubicacion': rec['fields'].get('Ubicación', ''),
-                'marca': rec['fields'].get('Marca', ''),
-            }
-        _tiendas_cache_ts = _t.time()
+        r = req.get(f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_TIENDAS_TABLE}',
+            headers=_at_headers(), params={'fields[]': ['Código', 'Marca']}, timeout=15)
+        if r.status_code == 200:
+            for rec in r.json().get('records', []):
+                _tiendas_cache[rec['id']] = rec['fields'].get('Código', rec['id'])
+            _tiendas_cache_ts = _t.time()
     except Exception as e:
         print(f'Error cargando tiendas: {e}')
     return _tiendas_cache
-
-def _cargar_responsables():
-    global _responsables_cache, _responsables_cache_ts
-    import time as _t
-    if _responsables_cache and (_t.time() - _responsables_cache_ts) < 600:
-        return _responsables_cache
-    try:
-        import requests as req
-        all_recs = []
-        offset = None
-        while True:
-            params = {'pageSize': 100, 'fields[]': ['Nombre', 'Fecha Ingreso', 'Cargo']}
-            if offset: params['offset'] = offset
-            r = req.get(f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_RESPONSABLES_TABLE}',
-                headers=_at_headers(), params=params, timeout=15)
-            if r.status_code != 200: break
-            data = r.json()
-            all_recs.extend(data.get('records', []))
-            offset = data.get('offset')
-            if not offset: break
-        for rec in all_recs:
-            _responsables_cache[rec['id']] = {
-                'nombre': rec['fields'].get('Nombre', ''),
-                'fecha_ingreso': rec['fields'].get('Fecha Ingreso', ''),
-                'cargo': rec['fields'].get('Cargo', ''),
-            }
-        _responsables_cache_ts = _t.time()
-    except Exception as e:
-        print(f'Error cargando responsables: {e}')
-    return _responsables_cache
 
 def _resolver_local(local_ids):
     if not local_ids:
         return 'Sin local'
     tiendas = _cargar_tiendas()
-    nombres = [tiendas.get(lid, {}).get('codigo', lid) if isinstance(tiendas.get(lid), dict) else tiendas.get(lid, lid) for lid in local_ids]
+    nombres = [tiendas.get(lid, lid) for lid in local_ids]
     return ', '.join(nombres)
-
-def _resolver_local_detalle(local_ids):
-    if not local_ids:
-        return {'codigo': 'Sin local', 'ubicacion': '', 'marca': ''}
-    tiendas = _cargar_tiendas()
-    t = tiendas.get(local_ids[0], {})
-    if isinstance(t, str):
-        return {'codigo': t, 'ubicacion': '', 'marca': ''}
-    return t
-
-def _resolver_responsable(resp_ids):
-    if not resp_ids:
-        return {'nombre': 'Sin responsable', 'fecha_ingreso': '', 'cargo': ''}
-    responsables = _cargar_responsables()
-    return responsables.get(resp_ids[0], {'nombre': resp_ids[0], 'fecha_ingreso': '', 'cargo': ''})
-
-
-# Cache de depositos: {clave: {data, timestamp}}
-_depositos_cache = {}
-_DEPOSITOS_CACHE_TTL = 300  # 5 minutos
-
-def _depositos_cache_key(fecha_desde, fecha_hasta, estado, cuadre):
-    return f'{fecha_desde}|{fecha_hasta}|{estado}|{cuadre}'
-
-def _invalidar_cache_depositos():
-    """Limpia todo el cache de depositos (llamar al hacer una accion)."""
-    global _depositos_cache
-    _depositos_cache = {}
 
 
 @app.route('/api/depositos/listar', methods=['GET'])
 def depositos_listar():
-    """Lista depositos desde AirTable con filtros. Cache de 5 minutos."""
+    """Lista depositos desde AirTable con filtros."""
     import requests as req
-    import time as _t
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
     estado = request.args.get('estado', '')
     cuadre = request.args.get('cuadre', '')
 
-    # Verificar cache
-    cache_key = _depositos_cache_key(fecha_desde, fecha_hasta, estado, cuadre)
-    cached = _depositos_cache.get(cache_key)
-    if cached and (_t.time() - cached['ts']) < _DEPOSITOS_CACHE_TTL:
-        return jsonify(cached['data'])
-
     try:
         # Construir formula de filtro
         filtros = []
         if fecha_desde:
-            filtros.append(f"IS_ON_OR_AFTER({{Fecha}}, '{fecha_desde}')")
+            filtros.append(f"IS_AFTER({{Fecha}}, '{fecha_desde}')")
         if fecha_hasta:
-            filtros.append(f"IS_ON_OR_BEFORE({{Fecha}}, '{fecha_hasta}')")
+            filtros.append(f"IS_BEFORE({{Fecha}}, DATEADD('{fecha_hasta}', 1, 'day'))")
         if estado:
             filtros.append(f"{{Estado}} = '{estado}'")
         if cuadre:
@@ -4881,37 +4704,20 @@ def depositos_listar():
             if not offset or len(all_records) >= 500:
                 break
 
-        # Pre-cargar caches
-        _cargar_tiendas()
-        _cargar_responsables()
-
         # Resolver locales
         resultado = []
         for rec in all_records:
             f = rec['fields']
             evidencias = []
-            for att in (f.get('Evidencia', [])):
+            for att in (f.get('Evidencia', []) + f.get('Evidencia Del Déposito', [])):
                 if isinstance(att, dict):
                     thumb = att.get('thumbnails', {}).get('large', {}).get('url', '')
                     evidencias.append({'url': att.get('url', ''), 'thumb': thumb, 'filename': att.get('filename', '')})
-            evidencias_deposito = []
-            for att in (f.get('Evidencia Del Déposito', [])):
-                if isinstance(att, dict):
-                    thumb = att.get('thumbnails', {}).get('large', {}).get('url', '')
-                    evidencias_deposito.append({'url': att.get('url', ''), 'thumb': thumb, 'filename': att.get('filename', '')})
-
-            local_det = _resolver_local_detalle(f.get('Local', []))
-            resp_det = _resolver_responsable(f.get('Responsable De Caja', []))
 
             resultado.append({
                 'id': rec['id'],
                 'fecha': f.get('Fecha'),
-                'local': local_det.get('codigo', ''),
-                'local_ubicacion': local_det.get('ubicacion', ''),
-                'local_marca': local_det.get('marca', ''),
-                'responsable': resp_det.get('nombre', ''),
-                'responsable_ingreso': resp_det.get('fecha_ingreso', ''),
-                'responsable_cargo': resp_det.get('cargo', ''),
+                'local': _resolver_local(f.get('Local', [])),
                 'monto_contado': f.get('Monto Contado', 0),
                 'monto_recibir': f.get('Monto A Recibir', 0),
                 'diferencia': f.get('Diferencia Contado Vs. Recibido', 0),
@@ -4921,16 +4727,11 @@ def depositos_listar():
                 'cuadre': f.get('Estado De Cuadre', ''),
                 'observacion': f.get('Observación', ''),
                 'evidencias': evidencias,
-                'evidencias_deposito': evidencias_deposito,
                 'fecha_creacion': f.get('Fecha Creación'),
                 'responsable_email': (f.get('Correo (from Responsable De Caja)', [None]) or [None])[0],
             })
 
-        response_data = {'depositos': resultado, 'total': len(resultado)}
-        # Guardar en cache
-        import time as _t2
-        _depositos_cache[cache_key] = {'data': response_data, 'ts': _t2.time()}
-        return jsonify(response_data)
+        return jsonify({'depositos': resultado, 'total': len(resultado)})
     except Exception as e:
         print(f'Error en depositos_listar: {e}')
         return jsonify({'error': str(e)[:200]}), 500
@@ -4938,23 +4739,17 @@ def depositos_listar():
 
 @app.route('/api/depositos/resumen', methods=['GET'])
 def depositos_resumen():
-    """Resumen/KPIs de depositos. Cache 5 min."""
+    """Resumen/KPIs de depositos."""
     import requests as req
-    import time as _t
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
-
-    cache_key = f'resumen|{fecha_desde}|{fecha_hasta}'
-    cached = _depositos_cache.get(cache_key)
-    if cached and (_t.time() - cached['ts']) < _DEPOSITOS_CACHE_TTL:
-        return jsonify(cached['data'])
 
     try:
         filtros = []
         if fecha_desde:
-            filtros.append(f"IS_ON_OR_AFTER({{Fecha}}, '{fecha_desde}')")
+            filtros.append(f"IS_AFTER({{Fecha}}, '{fecha_desde}')")
         if fecha_hasta:
-            filtros.append(f"IS_ON_OR_BEFORE({{Fecha}}, '{fecha_hasta}')")
+            filtros.append(f"IS_BEFORE({{Fecha}}, DATEADD('{fecha_hasta}', 1, 'day'))")
 
         params = {
             'pageSize': 100,
@@ -5012,7 +4807,7 @@ def depositos_resumen():
             if f.get('Estado De Cuadre') == 'Descuadra':
                 por_local[local]['descuadres'] += 1
 
-        response_data = {
+        return jsonify({
             'total_depositos': len(all_records),
             'total_depositado': round(total_depositado, 2),
             'total_recibido': round(total_recibido, 2),
@@ -5021,382 +4816,36 @@ def depositos_resumen():
             'descuadres': descuadres,
             'pendientes': pendientes,
             'por_local': por_local,
-        }
-        _depositos_cache[cache_key] = {'data': response_data, 'ts': _t.time()}
-        return jsonify(response_data)
+        })
     except Exception as e:
         print(f'Error en depositos_resumen: {e}')
         return jsonify({'error': str(e)[:200]}), 500
 
 
-@app.route('/api/depositos/trabajadores', methods=['GET'])
-def depositos_trabajadores():
-    """Lista trabajadores para el selector de testigo. Cache largo."""
-    responsables = _cargar_responsables()
-    lista = [{'id': k, 'nombre': v.get('nombre', '')} for k, v in responsables.items() if v.get('nombre')]
-    lista.sort(key=lambda x: x['nombre'])
-    return jsonify(lista)
-
-
-@app.route('/api/depositos/verificar-lider', methods=['POST'])
-def depositos_verificar_lider():
-    """Lider verifica: pone monto a recibir, calcula cuadre, marca retirado."""
-    _invalidar_cache_depositos()
-    import requests as req
-    data = request.json or {}
-    record_id = data.get('id')
-    monto_recibir = data.get('monto_recibir')
-    observacion = data.get('observacion', 'No existe Observación')
-    testigo_id = data.get('testigo', '')
-
-    if not record_id or monto_recibir is None:
-        return jsonify({'error': 'id y monto_recibir requeridos'}), 400
-
-    try:
-        fields = {
-            'Estado': 'Valor retirado por líder',
-            'Monto A Recibir': float(monto_recibir),
-            'Fecha De Revisión líder': datetime.now().isoformat(),
-            'Observación': observacion,
-        }
-        if testigo_id:
-            fields['Testigo de conteo'] = [testigo_id]
-        # Calcular cuadre
-        r_get = req.get(
-            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
-            headers=_at_headers(), params={'fields[]': ['Monto Contado']}, timeout=15)
-        if r_get.status_code == 200:
-            monto_contado = r_get.json().get('fields', {}).get('Monto Contado', 0) or 0
-            diferencia = float(monto_contado) - float(monto_recibir)
-            fields['Estado De Cuadre'] = 'Cuadra' if abs(diferencia) < 0.01 else 'Descuadra'
-
-        r = req.patch(
-            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
-            headers={**_at_headers(), 'Content-Type': 'application/json'},
-            json={'fields': fields}, timeout=15)
-        if r.status_code == 200:
-            return jsonify({'ok': True, 'cuadre': fields.get('Estado De Cuadre', '')})
-        return jsonify({'error': f'AirTable: {r.status_code} {r.text[:100]}'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)[:200]}), 500
-
-
-@app.route('/api/depositos/enviar-contabilidad', methods=['POST'])
-def depositos_enviar_contabilidad():
-    """Marca como enviado a contabilidad."""
-    _invalidar_cache_depositos()
+@app.route('/api/depositos/aprobar', methods=['POST'])
+def depositos_aprobar():
+    """Aprueba un deposito en AirTable."""
     import requests as req
     data = request.json or {}
     record_id = data.get('id')
     if not record_id:
         return jsonify({'error': 'id requerido'}), 400
+
     try:
         r = req.patch(
             f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
             headers={**_at_headers(), 'Content-Type': 'application/json'},
             json={'fields': {
-                'Estado': 'Enviado a Contabilidad',
-                'Fecha Envío A Contabilidad': datetime.now().isoformat(),
-            }}, timeout=15)
-        if r.status_code == 200:
-            return jsonify({'ok': True})
-        return jsonify({'error': f'AirTable: {r.status_code}'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)[:200]}), 500
-
-
-@app.route('/api/depositos/subir-respaldo', methods=['POST'])
-def depositos_subir_respaldo():
-    """Sube foto de respaldo: guarda en servidor + envia URL a AirTable."""
-    _invalidar_cache_depositos()
-    import requests as req
-
-    record_id = request.form.get('id')
-    if not record_id:
-        return jsonify({'error': 'id requerido'}), 400
-
-    archivo = request.files.get('archivo')
-    if not archivo:
-        return jsonify({'error': 'archivo requerido'}), 400
-
-    try:
-        contenido = archivo.read()
-        filename = archivo.filename
-
-        # 1. Guardar archivo en el servidor
-        import os
-        temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
-        os.makedirs(temp_dir, exist_ok=True)
-        safe_name = filename.replace(' ', '_').replace('/', '_')
-        temp_path = os.path.join(temp_dir, f'{record_id}_{safe_name}')
-        with open(temp_path, 'wb') as f:
-            f.write(contenido)
-
-        # 2. Construir URL publica (en produccion usa Render URL)
-        app_url = os.environ.get('APP_URL', request.host_url.rstrip('/'))
-        img_url = f'{app_url}/static/uploads/{record_id}_{safe_name}'
-
-        # 3. Obtener attachments existentes
-        r_get = req.get(
-            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
-            headers=_at_headers(),
-            params={'fields[]': ['Evidencia Del Déposito']},
-            timeout=15,
-        )
-        existentes = []
-        if r_get.status_code == 200:
-            for a in r_get.json().get('fields', {}).get('Evidencia Del Déposito', []):
-                if isinstance(a, dict) and a.get('url'):
-                    existentes.append({'url': a['url']})
-
-        existentes.append({'url': img_url})
-
-        # 4. Actualizar AirTable
-        r2 = req.patch(
-            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
-            headers={**_at_headers(), 'Content-Type': 'application/json'},
-            json={'fields': {
-                'Evidencia Del Déposito': existentes,
-                'Estado': 'Enviado a Contabilidad',
-                'Fecha Envío A Contabilidad': datetime.now().isoformat(),
+                'Estado': 'Aprobado por Contabilidad',
+                'Fecha Aprobado Por Contabilidad': datetime.now().isoformat(),
             }},
             timeout=15,
         )
-        print(f'AirTable patch: {r2.status_code} {r2.text[:200]}')
-        if r2.status_code == 200:
-            return jsonify({'ok': True})
-        return jsonify({'error': f'AirTable: {r2.status_code} {r2.text[:200]}'}), 500
-    except Exception as e:
-        print(f'Error subiendo respaldo: {e}')
-        return jsonify({'error': str(e)[:200]}), 500
-
-
-@app.route('/api/depositos/aprobar', methods=['POST'])
-def depositos_aprobar():
-    """Aprueba o rechaza un deposito (contabilidad)."""
-    _invalidar_cache_depositos()
-    import requests as req
-    data = request.json or {}
-    record_id = data.get('id')
-    rechazar = data.get('rechazar', False)
-    if not record_id:
-        return jsonify({'error': 'id requerido'}), 400
-    try:
-        if rechazar:
-            fields = {
-                'Estado': 'Rechazado por Contabilidad',
-                'Fecha Aprobado Por Contabilidad': datetime.now().isoformat(),
-            }
-        else:
-            fields = {
-                'Estado': 'Aprobado por Contabilidad',
-                'Fecha Aprobado Por Contabilidad': datetime.now().isoformat(),
-            }
-        r = req.patch(
-            f'https://api.airtable.com/v0/{AIRTABLE_DEPOSITOS_BASE}/{AIRTABLE_DEPOSITOS_TABLE}/{record_id}',
-            headers={**_at_headers(), 'Content-Type': 'application/json'},
-            json={'fields': fields}, timeout=15)
         if r.status_code == 200:
             return jsonify({'ok': True})
         return jsonify({'error': f'AirTable: {r.status_code}'}), 500
     except Exception as e:
         return jsonify({'error': str(e)[:200]}), 500
-
-
-# ============================================================
-# CARGA INVENTARIO MANUAL (admin -> worker)
-# ============================================================
-
-BODEGAS_CARGA_MAP = {
-    'real_audiencia': {'contifico': 'BODEGA CHIOS REAL', 'modo': 'CHIOS'},
-    'floreana': {'contifico': 'BODEGA CHIOS FLOREANA', 'modo': 'CHIOS'},
-    'portugal': {'contifico': 'BODEGA CHIOS PORTUGAL', 'modo': 'CHIOS'},
-    'santo_cachon_real': {'contifico': 'BODEGA SANTO CACHON REAL', 'modo': 'CACHON'},
-    'santo_cachon_portugal': {'contifico': 'BODEGA SANTO CACHON PORTUGAL', 'modo': 'CACHON'},
-    'simon_bolon': {'contifico': 'BODEGA SIMON BOLON', 'modo': 'SIMON_BOLON'},
-}
-
-@app.route('/api/admin/cargar-inventario', methods=['POST'])
-def admin_cargar_inventario():
-    """Admin solicita carga de inventario para una bodega+fecha."""
-    data = request.json or {}
-    bodega = data.get('bodega')
-    fecha = data.get('fecha')
-    usuario = data.get('usuario', 'admin')
-
-    if bodega not in BODEGAS_CARGA_MAP:
-        return jsonify({'error': 'bodega invalida'}), 400
-    if not fecha:
-        return jsonify({'error': 'fecha requerida'}), 400
-
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-
-        cur.execute("""
-            SELECT id, estado FROM goti.carga_inventario_tareas
-            WHERE bodega = %s AND fecha = %s
-        """, (bodega, fecha))
-        existente = cur.fetchone()
-
-        if existente:
-            if existente['estado'] in ('pendiente', 'en_proceso'):
-                return jsonify({'id': existente['id'], 'estado': existente['estado'], 'reused': True})
-            # Resetear si completado o error
-            cur.execute("""
-                UPDATE goti.carga_inventario_tareas
-                SET estado='pendiente', solicitado_por=%s, solicitado_at=NOW(),
-                    worker_lock=NULL, error_msg=NULL, timestamp_inicio=NULL,
-                    timestamp_fin=NULL, total_productos=NULL
-                WHERE id = %s
-            """, (usuario, existente['id']))
-            conn.commit()
-            return jsonify({'id': existente['id'], 'estado': 'pendiente', 'reset': True})
-
-        modo = BODEGAS_CARGA_MAP[bodega]['modo']
-        cur.execute("""
-            INSERT INTO goti.carga_inventario_tareas (bodega, fecha, modo, solicitado_por)
-            VALUES (%s, %s, %s, %s) RETURNING id
-        """, (bodega, fecha, modo, usuario))
-        new_id = cur.fetchone()['id']
-        conn.commit()
-        return jsonify({'id': new_id, 'estado': 'pendiente'})
-    except Exception as e:
-        if conn: conn.rollback()
-        return jsonify({'error': str(e)[:200]}), 500
-    finally:
-        if conn: release_db(conn)
-
-
-@app.route('/api/admin/cargar-inventario/pendientes', methods=['GET'])
-def admin_cargar_inventario_pendientes():
-    """Worker toma tareas de carga."""
-    token = request.headers.get('X-Worker-Token')
-    if token != WORKER_TOKEN:
-        return jsonify({'error': 'unauthorized'}), 401
-    worker_id = request.args.get('worker_id', 'pc-finanzas')
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE goti.carga_inventario_tareas
-            SET estado = 'en_proceso', worker_lock = %s, timestamp_inicio = NOW()
-            WHERE id IN (
-                SELECT id FROM goti.carga_inventario_tareas
-                WHERE estado = 'pendiente' ORDER BY solicitado_at ASC LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            )
-            RETURNING id, bodega, fecha, modo
-        """, (worker_id,))
-        rows = cur.fetchall()
-        conn.commit()
-        return jsonify([{
-            'id': r['id'], 'bodega': r['bodega'],
-            'fecha': r['fecha'].isoformat() if r['fecha'] else None,
-            'modo': r['modo'], 'tipo': 'carga_inventario',
-        } for r in rows])
-    except Exception as e:
-        return jsonify({'error': str(e)[:200]}), 500
-    finally:
-        if conn: release_db(conn)
-
-
-@app.route('/api/admin/cargar-inventario/resultado', methods=['POST'])
-def admin_cargar_inventario_resultado():
-    """Worker reporta resultado."""
-    token = request.headers.get('X-Worker-Token')
-    if token != WORKER_TOKEN:
-        return jsonify({'error': 'unauthorized'}), 401
-    data = request.json or {}
-    ejec_id = data.get('id')
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE goti.carga_inventario_tareas
-            SET estado = %s, timestamp_fin = NOW(), total_productos = %s, error_msg = %s
-            WHERE id = %s
-        """, (data.get('estado', 'completado'), data.get('total_productos'), data.get('error_msg'), ejec_id))
-        conn.commit()
-        return jsonify({'ok': True})
-    except Exception as e:
-        if conn: conn.rollback()
-        return jsonify({'error': str(e)[:200]}), 500
-    finally:
-        if conn: release_db(conn)
-
-
-@app.route('/api/admin/cargar-inventario/estado/<int:ejec_id>', methods=['GET'])
-def admin_cargar_inventario_estado(ejec_id):
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM goti.carga_inventario_tareas WHERE id = %s", (ejec_id,))
-        r = cur.fetchone()
-        if not r: return jsonify({'error': 'no encontrado'}), 404
-        return jsonify({
-            'id': r['id'], 'bodega': r['bodega'], 'estado': r['estado'],
-            'total_productos': r['total_productos'], 'error_msg': r['error_msg'],
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)[:200]}), 500
-    finally:
-        if conn: release_db(conn)
-
-
-# ============================================================
-# DIAS LIBRES GERENTES
-# ============================================================
-
-@app.route('/api/depositos/horario-gerentes', methods=['GET'])
-def horario_gerentes_listar():
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT id, local, gerente, lunes, martes, miercoles, jueves, viernes, sabado, domingo FROM goti.horario_gerentes ORDER BY local")
-        return jsonify(cur.fetchall())
-    except Exception as e:
-        return jsonify({'error': str(e)[:200]}), 500
-    finally:
-        if conn: release_db(conn)
-
-
-@app.route('/api/depositos/horario-gerentes', methods=['POST'])
-def horario_gerentes_guardar():
-    data = request.json or {}
-    local = data.get('local')
-    gerente = data.get('gerente')
-    dias = data.get('dias', {})
-    if not local or not gerente:
-        return jsonify({'error': 'local y gerente requeridos'}), 400
-    conn = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO goti.horario_gerentes (local, gerente, lunes, martes, miercoles, jueves, viernes, sabado, domingo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (local) DO UPDATE SET
-                gerente = EXCLUDED.gerente,
-                lunes = EXCLUDED.lunes, martes = EXCLUDED.martes, miercoles = EXCLUDED.miercoles,
-                jueves = EXCLUDED.jueves, viernes = EXCLUDED.viernes, sabado = EXCLUDED.sabado,
-                domingo = EXCLUDED.domingo
-        """, (local, gerente,
-              dias.get('lunes', True), dias.get('martes', True), dias.get('miercoles', True),
-              dias.get('jueves', True), dias.get('viernes', True), dias.get('sabado', True),
-              dias.get('domingo', False)))
-        conn.commit()
-        return jsonify({'ok': True})
-    except Exception as e:
-        if conn: conn.rollback()
-        return jsonify({'error': str(e)[:200]}), 500
-    finally:
-        if conn: release_db(conn)
 
 
 # ==================== ADMIN USUARIOS ====================
@@ -5889,6 +5338,417 @@ def api_establecer_clave():
     finally:
         if conn:
             release_db(conn)
+
+
+# ==================== CUADRES DE CAJA ====================
+
+@app.route('/api/cuadres/listar', methods=['GET'])
+def cuadres_listar():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    local = request.args.get('local', '')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        sql = "SELECT * FROM goti.cuadres_caja WHERE 1=1"
+        params = []
+        if fecha_desde:
+            sql += " AND fecha >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            sql += " AND fecha <= %s"; params.append(fecha_hasta)
+        if local:
+            sql += " AND local = %s"; params.append(local)
+        sql += " ORDER BY fecha DESC, local"
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        return jsonify({'cuadres': [dict(r) for r in rows]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/cuadres/guardar', methods=['POST'])
+def cuadres_guardar():
+    data = request.json
+    fecha = data.get('fecha')
+    local = data.get('local')
+    if not fecha or not local:
+        return jsonify({'error': 'Fecha y local requeridos'}), 400
+    venta_sistema = float(data.get('venta_sistema', 0))
+    efectivo_contado = float(data.get('efectivo_contado', 0))
+    venta_tarjeta = float(data.get('venta_tarjeta', 0))
+    venta_transferencia = float(data.get('venta_transferencia', 0))
+    venta_plataformas = float(data.get('venta_plataformas', 0))
+    otros_ingresos = float(data.get('otros_ingresos', 0))
+    gastos_retiros = float(data.get('gastos_retiros', 0))
+    efectivo_esperado = venta_sistema - venta_tarjeta - venta_transferencia - venta_plataformas + otros_ingresos - gastos_retiros
+    diferencia = efectivo_contado - efectivo_esperado
+    observacion = data.get('observacion', '')
+    registrado_por = data.get('registrado_por', '')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO goti.cuadres_caja (fecha, local, venta_sistema, efectivo_contado, venta_tarjeta,
+                venta_transferencia, venta_plataformas, otros_ingresos, gastos_retiros,
+                efectivo_esperado, diferencia, observacion, registrado_por)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (fecha, local) DO UPDATE SET
+                venta_sistema=EXCLUDED.venta_sistema, efectivo_contado=EXCLUDED.efectivo_contado,
+                venta_tarjeta=EXCLUDED.venta_tarjeta, venta_transferencia=EXCLUDED.venta_transferencia,
+                venta_plataformas=EXCLUDED.venta_plataformas, otros_ingresos=EXCLUDED.otros_ingresos,
+                gastos_retiros=EXCLUDED.gastos_retiros, efectivo_esperado=EXCLUDED.efectivo_esperado,
+                diferencia=EXCLUDED.diferencia, observacion=EXCLUDED.observacion,
+                registrado_por=EXCLUDED.registrado_por
+            RETURNING id
+        """, (fecha, local, venta_sistema, efectivo_contado, venta_tarjeta,
+              venta_transferencia, venta_plataformas, otros_ingresos, gastos_retiros,
+              efectivo_esperado, diferencia, observacion, registrado_por))
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({'success': True, 'id': row['id']})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/cuadres/<int:cuadre_id>', methods=['DELETE'])
+def cuadres_eliminar(cuadre_id):
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM goti.cuadres_caja WHERE id = %s", (cuadre_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/cuadres/resumen', methods=['GET'])
+def cuadres_resumen():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        params = []
+        where = ""
+        if fecha_desde:
+            where += " AND fecha >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            where += " AND fecha <= %s"; params.append(fecha_hasta)
+        cur.execute(f"""
+            SELECT COUNT(*) as total,
+                   COALESCE(SUM(ABS(diferencia)),0) as total_diferencia,
+                   COALESCE(AVG(diferencia),0) as avg_diferencia,
+                   COALESCE(SUM(venta_sistema),0) as total_ventas,
+                   COUNT(CASE WHEN ABS(diferencia) > 1 THEN 1 END) as con_descuadre
+            FROM goti.cuadres_caja WHERE 1=1 {where}
+        """, params)
+        resumen = dict(cur.fetchone())
+        cur.execute(f"""
+            SELECT local, COUNT(*) as cuadres, COALESCE(SUM(diferencia),0) as diferencia_total,
+                   COALESCE(SUM(ABS(diferencia)),0) as diferencia_abs,
+                   COALESCE(AVG(diferencia),0) as diferencia_avg
+            FROM goti.cuadres_caja WHERE 1=1 {where}
+            GROUP BY local ORDER BY diferencia_abs DESC
+        """, params)
+        resumen['por_local'] = [dict(r) for r in cur.fetchall()]
+        return jsonify(resumen)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+# ==================== DELIVERY / PLATAFORMAS ====================
+
+@app.route('/api/delivery/listar', methods=['GET'])
+def delivery_listar():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    local = request.args.get('local', '')
+    plataforma = request.args.get('plataforma', '')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        sql = "SELECT * FROM goti.delivery_liquidaciones WHERE 1=1"
+        params = []
+        if fecha_desde:
+            sql += " AND fecha >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            sql += " AND fecha <= %s"; params.append(fecha_hasta)
+        if local:
+            sql += " AND local = %s"; params.append(local)
+        if plataforma:
+            sql += " AND plataforma = %s"; params.append(plataforma)
+        sql += " ORDER BY fecha DESC, local, plataforma"
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        return jsonify({'liquidaciones': [dict(r) for r in rows]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/delivery/guardar', methods=['POST'])
+def delivery_guardar():
+    data = request.json
+    fecha = data.get('fecha')
+    local = data.get('local')
+    plataforma = data.get('plataforma')
+    if not fecha or not local or not plataforma:
+        return jsonify({'error': 'Fecha, local y plataforma requeridos'}), 400
+    venta_bruta = float(data.get('venta_bruta', 0))
+    comision_pct = float(data.get('comision_pct', 0))
+    comision_monto = float(data.get('comision_monto', 0))
+    iva_comision = float(data.get('iva_comision', 0))
+    propinas = float(data.get('propinas', 0))
+    ajustes = float(data.get('ajustes', 0))
+    neto_recibir = venta_bruta - comision_monto - iva_comision + propinas + ajustes
+    depositado_real = float(data.get('depositado_real', 0))
+    diferencia = depositado_real - neto_recibir
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO goti.delivery_liquidaciones (fecha, local, plataforma, total_pedidos,
+                venta_bruta, comision_pct, comision_monto, iva_comision, propinas, ajustes,
+                neto_recibir, depositado_real, diferencia, referencia, observacion, registrado_por)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+        """, (fecha, local, plataforma, int(data.get('total_pedidos', 0)),
+              venta_bruta, comision_pct, comision_monto, iva_comision, propinas, ajustes,
+              neto_recibir, depositado_real, diferencia,
+              data.get('referencia', ''), data.get('observacion', ''), data.get('registrado_por', '')))
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({'success': True, 'id': row['id']})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/delivery/<int:liq_id>', methods=['DELETE'])
+def delivery_eliminar(liq_id):
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM goti.delivery_liquidaciones WHERE id = %s", (liq_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/delivery/resumen', methods=['GET'])
+def delivery_resumen():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        params = []
+        where = ""
+        if fecha_desde:
+            where += " AND fecha >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            where += " AND fecha <= %s"; params.append(fecha_hasta)
+        cur.execute(f"""
+            SELECT COUNT(*) as total, COALESCE(SUM(venta_bruta),0) as total_ventas,
+                   COALESCE(SUM(comision_monto),0) as total_comisiones,
+                   COALESCE(SUM(neto_recibir),0) as total_neto,
+                   COALESCE(SUM(depositado_real),0) as total_depositado,
+                   COALESCE(SUM(ABS(diferencia)),0) as total_diferencia,
+                   COALESCE(SUM(total_pedidos),0) as total_pedidos
+            FROM goti.delivery_liquidaciones WHERE 1=1 {where}
+        """, params)
+        resumen = dict(cur.fetchone())
+        cur.execute(f"""
+            SELECT plataforma, COUNT(*) as liquidaciones, COALESCE(SUM(venta_bruta),0) as ventas,
+                   COALESCE(SUM(comision_monto),0) as comisiones,
+                   COALESCE(AVG(comision_pct),0) as comision_pct_avg,
+                   COALESCE(SUM(ABS(diferencia)),0) as diferencia_abs,
+                   COALESCE(SUM(total_pedidos),0) as pedidos
+            FROM goti.delivery_liquidaciones WHERE 1=1 {where}
+            GROUP BY plataforma ORDER BY ventas DESC
+        """, params)
+        resumen['por_plataforma'] = [dict(r) for r in cur.fetchall()]
+        cur.execute(f"""
+            SELECT local, COUNT(*) as liquidaciones, COALESCE(SUM(venta_bruta),0) as ventas,
+                   COALESCE(SUM(ABS(diferencia)),0) as diferencia_abs
+            FROM goti.delivery_liquidaciones WHERE 1=1 {where}
+            GROUP BY local ORDER BY ventas DESC
+        """, params)
+        resumen['por_local'] = [dict(r) for r in cur.fetchall()]
+        return jsonify(resumen)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+# ==================== REGISTRO DE FACTURAS ====================
+
+@app.route('/api/facturas/listar', methods=['GET'])
+def facturas_listar():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    local = request.args.get('local', '')
+    categoria = request.args.get('categoria', '')
+    estado_pago = request.args.get('estado_pago', '')
+    proveedor = request.args.get('proveedor', '')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        sql = "SELECT * FROM goti.facturas_registro WHERE 1=1"
+        params = []
+        if fecha_desde:
+            sql += " AND fecha_emision >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            sql += " AND fecha_emision <= %s"; params.append(fecha_hasta)
+        if local:
+            sql += " AND local = %s"; params.append(local)
+        if categoria:
+            sql += " AND categoria = %s"; params.append(categoria)
+        if estado_pago:
+            sql += " AND estado_pago = %s"; params.append(estado_pago)
+        if proveedor:
+            sql += " AND proveedor ILIKE %s"; params.append(f'%{proveedor}%')
+        sql += " ORDER BY fecha_emision DESC, local"
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        return jsonify({'facturas': [dict(r) for r in rows]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/facturas/guardar', methods=['POST'])
+def facturas_guardar():
+    data = request.json
+    fecha = data.get('fecha_emision')
+    local = data.get('local')
+    proveedor = data.get('proveedor')
+    if not fecha or not local or not proveedor:
+        return jsonify({'error': 'Fecha, local y proveedor requeridos'}), 400
+    subtotal_0 = float(data.get('subtotal_0', 0))
+    subtotal_iva = float(data.get('subtotal_iva', 0))
+    iva = float(data.get('iva', 0))
+    total = subtotal_0 + subtotal_iva + iva
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO goti.facturas_registro (fecha_emision, local, proveedor, ruc, numero_factura,
+                autorizacion, subtotal_0, subtotal_iva, iva, total, categoria, forma_pago,
+                estado_pago, observacion, registrado_por)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+        """, (fecha, local, proveedor, data.get('ruc',''), data.get('numero_factura',''),
+              data.get('autorizacion',''), subtotal_0, subtotal_iva, iva, total,
+              data.get('categoria','Otros'), data.get('forma_pago','Transferencia'),
+              data.get('estado_pago','Pendiente'), data.get('observacion',''),
+              data.get('registrado_por','')))
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify({'success': True, 'id': row['id']})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/facturas/<int:factura_id>', methods=['PUT'])
+def facturas_actualizar(factura_id):
+    data = request.json
+    estado_pago = data.get('estado_pago')
+    if not estado_pago:
+        return jsonify({'error': 'estado_pago requerido'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE goti.facturas_registro SET estado_pago = %s WHERE id = %s", (estado_pago, factura_id))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/facturas/<int:factura_id>', methods=['DELETE'])
+def facturas_eliminar(factura_id):
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM goti.facturas_registro WHERE id = %s", (factura_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/facturas/resumen', methods=['GET'])
+def facturas_resumen():
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        params = []
+        where = ""
+        if fecha_desde:
+            where += " AND fecha_emision >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            where += " AND fecha_emision <= %s"; params.append(fecha_hasta)
+        cur.execute(f"""
+            SELECT COUNT(*) as total, COALESCE(SUM(total),0) as total_facturado,
+                   COALESCE(SUM(iva),0) as total_iva,
+                   COUNT(CASE WHEN estado_pago = 'Pendiente' THEN 1 END) as pendientes,
+                   COALESCE(SUM(CASE WHEN estado_pago = 'Pendiente' THEN total ELSE 0 END),0) as monto_pendiente
+            FROM goti.facturas_registro WHERE 1=1 {where}
+        """, params)
+        resumen = dict(cur.fetchone())
+        cur.execute(f"""
+            SELECT categoria, COUNT(*) as facturas, COALESCE(SUM(total),0) as monto
+            FROM goti.facturas_registro WHERE 1=1 {where}
+            GROUP BY categoria ORDER BY monto DESC
+        """, params)
+        resumen['por_categoria'] = [dict(r) for r in cur.fetchall()]
+        cur.execute(f"""
+            SELECT local, COUNT(*) as facturas, COALESCE(SUM(total),0) as monto,
+                   COUNT(CASE WHEN estado_pago = 'Pendiente' THEN 1 END) as pendientes
+            FROM goti.facturas_registro WHERE 1=1 {where}
+            GROUP BY local ORDER BY monto DESC
+        """, params)
+        resumen['por_local'] = [dict(r) for r in cur.fetchall()]
+        return jsonify(resumen)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
 
 
 if __name__ == '__main__':

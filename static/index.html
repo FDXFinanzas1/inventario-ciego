@@ -66,12 +66,6 @@
 
             <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
             <nav class="sidebar" id="sidebar">
-                <!-- DASHBOARD GENERAL -->
-                <button class="nav-btn" data-view="dashboard-general" style="display:none;background:linear-gradient(135deg,rgba(37,99,235,0.1),rgba(5,150,105,0.05));border-bottom:1px solid var(--border-light);margin-bottom:4px;font-weight:600;">
-                    <i class="fas fa-tachometer-alt" style="color:#2563eb;"></i>
-                    <span>Dashboard</span>
-                </button>
-
                 <!-- MODULO: INVENTARIO -->
                 <div class="nav-module" data-module="inventario">
                     <button class="nav-module-header" onclick="toggleModule('inventario')">
@@ -92,7 +86,10 @@
                             <i class="fas fa-history"></i>
                             <span>Historico</span>
                         </button>
-                        <!-- Dashboard movido a Dashboard General -->
+                        <button class="nav-btn" data-view="dashboard" style="display:none;">
+                            <i class="fas fa-chart-pie"></i>
+                            <span>Dashboard</span>
+                        </button>
                         <button class="nav-btn" data-view="cruce" style="display:none;">
                             <i class="fas fa-exchange-alt"></i>
                             <span>Cruce Operativo</span>
@@ -113,14 +110,6 @@
                             <i class="fas fa-edit"></i>
                             <span>Corregir</span>
                         </button>
-                        <button class="nav-btn" data-view="cargar-bd" style="display:none;">
-                            <i class="fas fa-database"></i>
-                            <span>Cargar BD</span>
-                        </button>
-                        <button class="nav-btn" data-view="config-productos" style="display:none;">
-                            <i class="fas fa-cogs"></i>
-                            <span>Productos</span>
-                        </button>
                     </div>
                 </div>
 
@@ -140,23 +129,14 @@
                             <i class="fas fa-list"></i>
                             <span>Historial</span>
                         </button>
-                        <button class="nav-btn" data-view="dep-respaldo" style="display:none;">
-                            <i class="fas fa-upload"></i>
-                            <span>Subir Respaldo</span>
-                        </button>
-                        <button class="nav-btn" data-view="dep-contabilidad" style="display:none;">
-                            <i class="fas fa-file-invoice-dollar"></i>
-                            <span>Contabilidad</span>
-                        </button>
-                        <button class="nav-btn" data-view="dep-diaslibres" style="display:none;">
-                            <i class="fas fa-calendar-alt"></i>
-                            <span>Dias Libres</span>
-                        </button>
                         <button class="nav-btn" data-view="dep-descuadres" style="display:none;">
                             <i class="fas fa-exclamation-triangle"></i>
                             <span>Descuadres</span>
                         </button>
-                        <!-- Dashboard movido a Dashboard General -->
+                        <button class="nav-btn" data-view="dep-dashboard" style="display:none;">
+                            <i class="fas fa-chart-bar"></i>
+                            <span>Dashboard</span>
+                        </button>
                     </div>
                 </div>
 
@@ -168,7 +148,15 @@
                         <i class="fas fa-chevron-down nav-module-arrow"></i>
                     </button>
                     <div class="nav-module-items" style="display:none;">
-                        <div class="nav-module-empty"><i class="fas fa-clock"></i> Proximamente</div>
+                        <button class="nav-btn" data-view="cuadre-registro" style="display:none;">
+                            <i class="fas fa-edit"></i><span>Registro</span>
+                        </button>
+                        <button class="nav-btn" data-view="cuadre-historial" style="display:none;">
+                            <i class="fas fa-list"></i><span>Historial</span>
+                        </button>
+                        <button class="nav-btn" data-view="cuadre-dashboard" style="display:none;">
+                            <i class="fas fa-chart-bar"></i><span>Dashboard</span>
+                        </button>
                     </div>
                 </div>
 
@@ -180,7 +168,15 @@
                         <i class="fas fa-chevron-down nav-module-arrow"></i>
                     </button>
                     <div class="nav-module-items" style="display:none;">
-                        <div class="nav-module-empty"><i class="fas fa-clock"></i> Proximamente</div>
+                        <button class="nav-btn" data-view="del-registro" style="display:none;">
+                            <i class="fas fa-edit"></i><span>Registro</span>
+                        </button>
+                        <button class="nav-btn" data-view="del-historial" style="display:none;">
+                            <i class="fas fa-list"></i><span>Historial</span>
+                        </button>
+                        <button class="nav-btn" data-view="del-dashboard" style="display:none;">
+                            <i class="fas fa-chart-bar"></i><span>Dashboard</span>
+                        </button>
                     </div>
                 </div>
 
@@ -192,7 +188,15 @@
                         <i class="fas fa-chevron-down nav-module-arrow"></i>
                     </button>
                     <div class="nav-module-items" style="display:none;">
-                        <div class="nav-module-empty"><i class="fas fa-clock"></i> Proximamente</div>
+                        <button class="nav-btn" data-view="fac-registro" style="display:none;">
+                            <i class="fas fa-edit"></i><span>Registro</span>
+                        </button>
+                        <button class="nav-btn" data-view="fac-historial" style="display:none;">
+                            <i class="fas fa-list"></i><span>Historial</span>
+                        </button>
+                        <button class="nav-btn" data-view="fac-dashboard" style="display:none;">
+                            <i class="fas fa-chart-bar"></i><span>Dashboard</span>
+                        </button>
                     </div>
                 </div>
 
@@ -389,8 +393,130 @@
                 </div>
 
                 <!-- Vista Dashboard -->
-                <!-- view-dashboard redirige al dashboard general -->
-                <div id="view-dashboard" class="view" style="display:none;"></div>
+                <div id="view-dashboard" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-chart-pie"></i> Dashboard Gerencial</h2>
+                    </div>
+
+                    <div class="filtros-dashboard">
+                        <div class="form-group">
+                            <label><i class="fas fa-calendar"></i> Desde</label>
+                            <input type="date" id="dash-fecha-desde">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-calendar"></i> Hasta</label>
+                            <input type="date" id="dash-fecha-hasta">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-store"></i> Marca</label>
+                            <select id="dash-marca" onchange="filtrarBodegasPorMarca()">
+                                <option value="">Todas las marcas</option>
+                                <option value="chios">Chios Burger</option>
+                                <option value="santo_cachon">Santo Cachon</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                                <option value="operaciones">Operaciones</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-warehouse"></i> Bodega</label>
+                            <select id="dash-bodega">
+                                <option value="">Todas las bodegas</option>
+                                <option value="real_audiencia" data-marca="chios">Real Audiencia</option>
+                                <option value="floreana" data-marca="chios">Floreana</option>
+                                <option value="portugal" data-marca="chios">Portugal</option>
+                                <option value="santo_cachon_real" data-marca="santo_cachon">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal" data-marca="santo_cachon">Santo Cachon Portugal</option>
+                                <option value="simon_bolon" data-marca="simon_bolon">Simon Bolon</option>
+                                <option value="bodega_principal" data-marca="operaciones">Bodega Principal</option>
+                                <option value="materia_prima" data-marca="operaciones">Materia Prima</option>
+                                <option value="planta" data-marca="operaciones">Planta de Produccion</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-box"></i> Producto</label>
+                            <select id="dash-producto" style="height:36px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;background:var(--bg-white);color:var(--text-dark);outline:none;min-width:200px;max-width:300px;">
+                                <option value="">Todos los productos</option>
+                            </select>
+                        </div>
+                        <button id="btn-cargar-dashboard" class="btn-secondary">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
+
+                    <div id="dashboard-stats" class="dashboard-stats-grid">
+                        <!-- KPIs gerenciales -->
+                    </div>
+
+                    <div id="dashboard-valor-resumen" style="margin:12px 0;"></div>
+
+                    <div class="dashboard-charts-grid">
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <i class="fas fa-bullseye"></i> Exactitud del Inventario
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="chart-exactitud"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <i class="fas fa-exclamation-circle"></i> Productos que mas Fallan
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="chart-productos-fallan"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <i class="fas fa-dollar-sign"></i> Descuadre en Valor ($)
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="chart-diferencias-bodega"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <i class="fas fa-tags"></i> Motivos mas Frecuentes
+                            </div>
+                            <div class="chart-card-body">
+                                <canvas id="chart-motivos"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card chart-card-full">
+                            <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                <span><i class="fas fa-chart-line"></i> Tendencia de Diferencias</span>
+                                <select id="tendencia-motivo-filter" onchange="actualizarTendenciaMotivo()" style="height:30px; border:1px solid #e2e8f0; border-radius:6px; padding:0 8px; font-size:12px; color:#475569; max-width:220px;">
+                                    <option value="">Todos los motivos</option>
+                                </select>
+                            </div>
+                            <div class="chart-card-body chart-card-body-line">
+                                <canvas id="chart-tendencia-temporal"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card chart-card-full" style="margin-top:12px;">
+                        <div class="chart-card-header">
+                            <i class="fas fa-exclamation-circle"></i> Top 10 Productos con Mayor Descuadre en Valor
+                        </div>
+                        <div class="chart-card-body" style="padding:0;">
+                            <div style="overflow-x:auto;">
+                                <table class="usuarios-tabla" id="dash-top-table" style="margin:0;width:100%;">
+                                    <thead>
+                                        <tr>
+                                            <th>Codigo</th>
+                                            <th>Producto</th>
+                                            <th>Diferencia</th>
+                                            <th>Costo Unit.</th>
+                                            <th>Valor Descuadre</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dash-top-tbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Vista Bajas Directas (solo admin) -->
                 <div id="view-bajas" class="view">
@@ -555,31 +681,6 @@
                         <div class="empty-state">
                             <i class="fas fa-edit"></i>
                             <p>Selecciona fecha y bodega para corregir conteos</p>
-                        </div>
-                    </div>
-
-                    <!-- Modal Agregar Producto -->
-                    <div id="modal-agregar-producto" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
-                        <div style="background:#fff;border-radius:12px;padding:24px;width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-                            <h3 style="margin:0 0 16px;font-size:16px;"><i class="fas fa-plus-circle" style="color:var(--primary);"></i> Agregar Producto</h3>
-                            <div style="display:flex;flex-direction:column;gap:12px;">
-                                <div>
-                                    <label style="font-size:12px;font-weight:600;color:#666;">Código</label>
-                                    <input type="text" id="agregar-prod-codigo" placeholder="Ej: CP021" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-                                </div>
-                                <div>
-                                    <label style="font-size:12px;font-weight:600;color:#666;">Nombre</label>
-                                    <input type="text" id="agregar-prod-nombre" placeholder="Ej: NEW YORK B PAQ" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-                                </div>
-                                <div>
-                                    <label style="font-size:12px;font-weight:600;color:#666;">Unidad</label>
-                                    <input type="text" id="agregar-prod-unidad" value="Unidad" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-                                </div>
-                            </div>
-                            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
-                                <button onclick="cerrarModalAgregar()" style="padding:8px 20px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:13px;">Cancelar</button>
-                                <button onclick="confirmarAgregarProducto()" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">Agregar</button>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -977,94 +1078,6 @@
 
                 </div>
 
-                <!-- Vista Cargar BD (admin) -->
-                <div id="view-cargar-bd" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-database"></i> Cargar Inventario a BD</h2>
-                    </div>
-                    <p style="color:var(--text-gray);font-size:13px;margin:8px 0 16px;">Descarga stock de Contifico y carga en la base de datos para una bodega y fecha especifica. Solo admin.</p>
-
-                    <div class="cuadrar-card">
-                        <div class="cuadrar-header" style="background:linear-gradient(135deg,#1e3a5f,#2563eb);">
-                            <div class="cuadrar-header-icon" style="background:rgba(255,255,255,0.2);"><i class="fas fa-download"></i></div>
-                            <div class="cuadrar-header-text">
-                                <h3>Solicitar carga</h3>
-                                <p>El worker en PC FINANZAS descargara el stock de Contifico</p>
-                            </div>
-                        </div>
-                        <div style="padding:20px;">
-                            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                                <div style="flex:1;min-width:200px;">
-                                    <label style="font-size:11px;font-weight:600;color:var(--text-gray);text-transform:uppercase;display:block;margin-bottom:4px;">Bodega</label>
-                                    <select id="carga-bd-bodega" style="width:100%;height:40px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;">
-                                        <option value="real_audiencia">Real Audiencia</option>
-                                        <option value="floreana">Floreana</option>
-                                        <option value="portugal">Portugal</option>
-                                        <option value="santo_cachon_real">Santo Cachon Real</option>
-                                        <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
-                                        <option value="simon_bolon">Simon Bolon</option>
-                                    </select>
-                                </div>
-                                <div style="min-width:180px;">
-                                    <label style="font-size:11px;font-weight:600;color:var(--text-gray);text-transform:uppercase;display:block;margin-bottom:4px;">Fecha</label>
-                                    <input type="date" id="carga-bd-fecha" style="width:100%;height:40px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;">
-                                </div>
-                                <button onclick="adminCargarBD()" style="height:40px;padding:0 24px;background:linear-gradient(135deg,var(--primary),#2563eb);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">
-                                    <i class="fas fa-play" style="margin-right:6px;"></i>Ejecutar Carga
-                                </button>
-                            </div>
-                            <div id="carga-bd-status" style="margin-top:16px;"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Vista Configuracion de Productos por Marca -->
-                <div id="view-config-productos" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-cogs"></i> Productos por Local</h2>
-                    </div>
-                    <p style="color:var(--text-gray);font-size:13px;margin:8px 0 16px;padding:0 4px;">
-                        Configura que productos se descargan de Contifico para cada tipo de local. Los cambios aplican desde la proxima descarga automatica.
-                    </p>
-
-                    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
-                        <div>
-                            <label style="font-size:11px;font-weight:600;color:var(--text-gray);text-transform:uppercase;display:block;margin-bottom:4px;">Marca / Tipo de Local</label>
-                            <select id="cfg-marca" onchange="cargarProductosMarca()" style="height:40px;border:1px solid var(--border);border-radius:8px;padding:0 14px;font-size:14px;font-weight:600;min-width:220px;">
-                                <option value="">-- Seleccionar --</option>
-                                <option value="CHIOS">CHIOS (Real, Floreana, Portugal)</option>
-                                <option value="CACHON">SANTO CACHON (Real, Portugal)</option>
-                                <option value="SIMON_BOLON">SIMON BOLON</option>
-                            </select>
-                        </div>
-                        <div id="cfg-contador" style="font-size:13px;color:var(--text-gray);margin-top:18px;"></div>
-                    </div>
-
-                    <!-- Formulario agregar -->
-                    <div id="cfg-agregar-form" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
-                        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-                            <div style="min-width:120px;">
-                                <label style="font-size:11px;font-weight:600;color:var(--text-gray);display:block;margin-bottom:4px;">Codigo</label>
-                                <input type="text" id="cfg-new-codigo" placeholder="Ej: CP025" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;box-sizing:border-box;">
-                            </div>
-                            <div style="flex:1;min-width:200px;">
-                                <label style="font-size:11px;font-weight:600;color:var(--text-gray);display:block;margin-bottom:4px;">Nombre</label>
-                                <input type="text" id="cfg-new-nombre" placeholder="Ej: NUEVO PRODUCTO PAQ" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;box-sizing:border-box;">
-                            </div>
-                            <button onclick="cfgAgregarProducto()" style="height:36px;padding:0 20px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;white-space:nowrap;">
-                                <i class="fas fa-plus" style="margin-right:4px;"></i>Agregar
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="cfg-tabla-container">
-                        <div class="empty-state">
-                            <i class="fas fa-cogs"></i>
-                            <p>Selecciona un tipo de local para ver y configurar sus productos</p>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Vista Evaluacion Cualitativa -->
                 <div id="view-evaluacion" class="view">
                     <div class="view-header">
@@ -1136,306 +1149,579 @@
                     </div>
                 </div>
 
-                <!-- ============ DASHBOARD GENERAL ============ -->
-                <div id="view-dashboard-general" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-tachometer-alt"></i> Dashboard General</h2>
-                    </div>
-
-                    <!-- Selector de modulo -->
-                    <div class="cruce-subtabs" style="margin-top:12px;">
-                        <button class="cruce-subtab active" data-subtab="dash-inv" onclick="dashGeneralTab('inventario')">
-                            <i class="fas fa-boxes"></i> Inventario
-                        </button>
-                        <button class="cruce-subtab" data-subtab="dash-dep" onclick="dashGeneralTab('depositos')">
-                            <i class="fas fa-money-bill-wave"></i> Depositos
-                        </button>
-                        <button class="cruce-subtab" data-subtab="dash-cuadres" onclick="dashGeneralTab('cuadres')">
-                            <i class="fas fa-cash-register"></i> Cuadres
-                        </button>
-                        <button class="cruce-subtab" data-subtab="dash-delivery" onclick="dashGeneralTab('delivery')">
-                            <i class="fas fa-motorcycle"></i> Delivery
-                        </button>
-                        <button class="cruce-subtab" data-subtab="dash-facturas" onclick="dashGeneralTab('facturas')">
-                            <i class="fas fa-file-invoice-dollar"></i> Facturas
-                        </button>
-                    </div>
-
-                    <!-- CONTENIDO: INVENTARIO -->
-                    <div id="dash-panel-inventario" class="dash-general-panel">
-                        <div class="obs-filtros">
-                            <div class="obs-filtro-grupo">
-                                <label>Desde</label>
-                                <input type="date" id="dash-fecha-desde" class="obs-filtro-input">
-                            </div>
-                            <div class="obs-filtro-grupo">
-                                <label>Hasta</label>
-                                <input type="date" id="dash-fecha-hasta" class="obs-filtro-input">
-                            </div>
-                            <div class="obs-filtro-grupo">
-                                <label>Marca</label>
-                                <select id="dash-marca" class="obs-filtro-input" onchange="filtrarBodegasPorMarca()">
-                                    <option value="">Todas</option>
-                                    <option value="chios">Chios Burger</option>
-                                    <option value="cachon">Santo Cachon</option>
-                                    <option value="simon">Simon Bolon</option>
-                                    <option value="operaciones">Operaciones</option>
-                                </select>
-                            </div>
-                            <div class="obs-filtro-grupo">
-                                <label>Bodega</label>
-                                <select id="dash-bodega" class="obs-filtro-input">
-                                    <option value="">Todas las bodegas</option>
-                                </select>
-                            </div>
-                            <div class="obs-filtro-grupo">
-                                <label>Producto</label>
-                                <select id="dash-producto" class="obs-filtro-input" style="max-width:200px;">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <button id="btn-cargar-dashboard" class="btn-obs-cargar" onclick="cargarDashboard()">
-                                <i class="fas fa-sync-alt"></i> Actualizar
-                            </button>
-                        </div>
-                        <div id="dashboard-stats" class="dashboard-stats-grid"></div>
-                        <div id="dashboard-valor-resumen" style="margin-top:12px;"></div>
-                        <div class="dashboard-charts-grid" style="margin-top:16px;">
-                            <div class="chart-card">
-                                <div class="chart-card-header"><i class="fas fa-bullseye"></i> Exactitud por Bodega</div>
-                                <div class="chart-card-body"><canvas id="chart-exactitud"></canvas></div>
-                            </div>
-                            <div class="chart-card">
-                                <div class="chart-card-header"><i class="fas fa-sort-amount-down"></i> Top Productos con Mayor Descuadre</div>
-                                <div class="chart-card-body"><canvas id="chart-productos-fallan"></canvas></div>
-                            </div>
-                            <div class="chart-card">
-                                <div class="chart-card-header"><i class="fas fa-chart-bar"></i> Diferencias por Bodega</div>
-                                <div class="chart-card-body"><canvas id="chart-diferencias-bodega"></canvas></div>
-                            </div>
-                            <div class="chart-card">
-                                <div class="chart-card-header"><i class="fas fa-fire"></i> Motivos mas Frecuentes</div>
-                                <div class="chart-card-body"><canvas id="chart-motivos"></canvas></div>
-                            </div>
-                            <div class="chart-card chart-card-full">
-                                <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                                    <span><i class="fas fa-chart-line"></i> Tendencia de Diferencias</span>
-                                    <select id="tendencia-motivo-filter" onchange="actualizarTendenciaMotivo()" style="height:30px; border:1px solid #e2e8f0; border-radius:6px; padding:0 8px; font-size:12px; color:#475569; max-width:220px;">
-                                        <option value="">Todos los motivos</option>
-                                    </select>
-                                </div>
-                                <div class="chart-card-body chart-card-body-line">
-                                    <canvas id="chart-tendencia-temporal"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="chart-card chart-card-full" style="margin-top:12px;">
-                            <div class="chart-card-header"><i class="fas fa-list-ol"></i> Top 10 Productos con Mayor Descuadre en Valor</div>
-                            <div style="padding:12px;"><div id="top-descuadre-table"></div></div>
-                        </div>
-                    </div>
-
-                    <!-- CONTENIDO: DEPOSITOS -->
-                    <div id="dash-panel-depositos" class="dash-general-panel" style="display:none;">
-                        <div class="obs-filtros">
-                            <div class="obs-filtro-grupo">
-                                <label>Desde</label>
-                                <input type="date" id="dep-dash-desde" class="obs-filtro-input">
-                            </div>
-                            <div class="obs-filtro-grupo">
-                                <label>Hasta</label>
-                                <input type="date" id="dep-dash-hasta" class="obs-filtro-input">
-                            </div>
-                            <button class="btn-obs-cargar" onclick="depCargarDashboard()">
-                                <i class="fas fa-sync-alt"></i> Actualizar
-                            </button>
-                        </div>
-                        <div id="dep-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
-                        <div id="dep-dash-locales" style="margin-top:16px;"></div>
-                    </div>
-
-                    <!-- CONTENIDO: CUADRES (proximamente) -->
-                    <div id="dash-panel-cuadres" class="dash-general-panel" style="display:none;">
-                        <div class="empty-state" style="padding:60px;"><i class="fas fa-cash-register" style="font-size:40px;"></i><p style="margin-top:12px;">Modulo de Cuadres de Caja - Proximamente</p></div>
-                    </div>
-
-                    <!-- CONTENIDO: DELIVERY (proximamente) -->
-                    <div id="dash-panel-delivery" class="dash-general-panel" style="display:none;">
-                        <div class="empty-state" style="padding:60px;"><i class="fas fa-motorcycle" style="font-size:40px;"></i><p style="margin-top:12px;">Modulo de Delivery - Proximamente</p></div>
-                    </div>
-
-                    <!-- CONTENIDO: FACTURAS (proximamente) -->
-                    <div id="dash-panel-facturas" class="dash-general-panel" style="display:none;">
-                        <div class="empty-state" style="padding:60px;"><i class="fas fa-file-invoice-dollar" style="font-size:40px;"></i><p style="margin-top:12px;">Modulo de Facturas - Proximamente</p></div>
-                    </div>
-                </div>
-
                 <!-- ============ MODULO DEPOSITOS ============ -->
 
-                <!-- Vista Depositos - Verificacion (Lider) -->
+                <!-- Vista Depositos Pendientes -->
                 <div id="view-dep-pendientes" class="view">
-                    <div class="view-header" style="margin-bottom:0;">
-                        <h2><i class="fas fa-search-dollar"></i> Verificacion de Depositos</h2>
-                    </div>
-                    <div class="dep-layout">
-                        <!-- PANEL IZQUIERDO: Listado -->
-                        <div class="dep-sidebar">
-                            <div class="dep-sidebar-header">
-                                <select id="dep-pend-estado" class="dep-sidebar-filter" onchange="depCargarPendientes()">
-                                    <option value="">Todos</option>
-                                    <option value="Valor pendiente Verificar">Sin verificar</option>
-                                    <option value="Valor retirado por líder">Retirado por lider</option>
-                                    <option value="Enviado a Contabilidad">Enviado a Contabilidad</option>
-                                    <option value="Aprobado por Contabilidad">Aprobados</option>
-                                </select>
-                                <button class="dep-sidebar-refresh" onclick="depCargarPendientes()" title="Actualizar">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                            <div class="dep-sidebar-search">
-                                <i class="fas fa-search"></i>
-                                <input type="text" id="dep-buscar" placeholder="Buscar local o responsable..." oninput="depFiltrarSidebar()">
-                            </div>
-                            <div id="dep-sidebar-list" class="dep-sidebar-items">
-                                <div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
-                            </div>
-                        </div>
-                        <!-- PANEL DERECHO: Detalle -->
-                        <div class="dep-detalle" id="dep-detalle">
-                            <div class="dep-detalle-empty">
-                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
-                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito del listado</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Vista Depositos - Historial -->
-                <div id="view-dep-historial" class="view">
-                    <div class="view-header" style="margin-bottom:0;">
-                        <h2><i class="fas fa-list-alt"></i> Historial de Depositos</h2>
-                    </div>
-                    <div class="dep-layout">
-                        <div class="dep-sidebar">
-                            <div class="dep-sidebar-header">
-                                <select id="dep-hist-cuadre" class="dep-sidebar-filter" onchange="depCargarHistorial()">
-                                    <option value="">Todos</option>
-                                    <option value="Cuadra">Cuadra</option>
-                                    <option value="Descuadra">Descuadra</option>
-                                </select>
-                                <button class="dep-sidebar-refresh" onclick="depCargarHistorial()" title="Actualizar">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                            <div class="dep-sidebar-header" style="border-bottom:1px solid var(--border);padding:6px 10px;">
-                                <input type="date" id="dep-fecha-desde" class="dep-sidebar-filter" style="flex:1;">
-                                <input type="date" id="dep-fecha-hasta" class="dep-sidebar-filter" style="flex:1;">
-                            </div>
-                            <div class="dep-sidebar-search">
-                                <i class="fas fa-search"></i>
-                                <input type="text" id="dep-hist-buscar" placeholder="Buscar..." oninput="depFiltrarHistSidebar()">
-                            </div>
-                            <div id="dep-hist-sidebar-list" class="dep-sidebar-items">
-                                <div class="empty-state" style="padding:30px;"><i class="fas fa-search"></i><p>Selecciona fechas y busca</p></div>
-                            </div>
-                        </div>
-                        <div class="dep-detalle" id="dep-hist-detalle">
-                            <div class="dep-detalle-empty">
-                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
-                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito del listado</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Vista Depositos - Subir Respaldo -->
-                <div id="view-dep-respaldo" class="view">
-                    <div class="view-header" style="margin-bottom:0;">
-                        <h2><i class="fas fa-upload"></i> Subir Respaldo de Deposito</h2>
-                    </div>
-                    <div class="dep-layout">
-                        <div class="dep-sidebar">
-                            <div class="dep-sidebar-header">
-                                <span style="font-size:12px;font-weight:600;color:var(--text-gray);padding:0 4px;">Depositos retirados sin respaldo</span>
-                                <button class="dep-sidebar-refresh" onclick="depCargarSinRespaldo()" title="Actualizar">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                            <div id="dep-resp-sidebar-list" class="dep-sidebar-items">
-                                <div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
-                            </div>
-                        </div>
-                        <div class="dep-detalle" id="dep-resp-detalle">
-                            <div class="dep-detalle-empty">
-                                <i class="fas fa-file-upload" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
-                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito para subir su respaldo</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Vista Depositos - Dias Libres Gerentes -->
-                <div id="view-dep-diaslibres" class="view">
                     <div class="view-header">
-                        <h2><i class="fas fa-calendar-alt"></i> Dias Libres de Gerentes</h2>
+                        <h2><i class="fas fa-clock"></i> Depositos Pendientes</h2>
                     </div>
-                    <p style="color:var(--text-gray);font-size:13px;margin:8px 0 16px;">Configura el dia libre semanal de cada gerente. Los domingos no se deposita (banco cerrado).</p>
-                    <div id="dep-diaslibres-body" style="margin-top:12px;">
-                        <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
-                    </div>
-                </div>
-
-                <!-- Vista Depositos - Revision Contabilidad -->
-                <div id="view-dep-contabilidad" class="view">
-                    <div class="view-header" style="margin-bottom:0;">
-                        <h2><i class="fas fa-file-invoice-dollar"></i> Revision por Contabilidad</h2>
-                    </div>
-                    <div class="dep-layout">
-                        <div class="dep-sidebar">
-                            <div class="dep-sidebar-header">
-                                <span style="font-size:12px;font-weight:600;color:var(--text-gray);padding:0 4px;">Pendientes de revision</span>
-                                <button class="dep-sidebar-refresh" onclick="depCargarContabilidad()" title="Actualizar">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                            <div id="dep-contab-sidebar-list" class="dep-sidebar-items">
-                                <div class="empty-state" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>
-                            </div>
-                        </div>
-                        <div class="dep-detalle" id="dep-contab-detalle">
-                            <div class="dep-detalle-empty">
-                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
-                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un deposito para revisar</p>
-                            </div>
-                        </div>
+                    <div id="dep-pend-list" style="margin-top:16px;">
+                        <div class="empty-state"><i class="fas fa-check-circle"></i><p>Cargando...</p></div>
                     </div>
                 </div>
 
-                <!-- Vista Depositos - Descuadres -->
+                <!-- Vista Depositos Historial -->
+                <div id="view-dep-historial" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-list"></i> Historial de Depositos</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="dep-fecha-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="dep-fecha-hasta" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Estado cuadre</label>
+                            <select id="dep-filtro-cuadre" class="obs-filtro-input">
+                                <option value="">Todos</option>
+                                <option value="Cuadra">Cuadra</option>
+                                <option value="Descuadra">Descuadra</option>
+                            </select>
+                        </div>
+                        <button class="btn-obs-cargar" onclick="depCargarHistorial()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+                    <div id="dep-hist-list" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- Vista Depositos Descuadres -->
                 <div id="view-dep-descuadres" class="view">
-                    <div class="view-header" style="margin-bottom:0;">
-                        <h2><i class="fas fa-exclamation-triangle"></i> Descuadres</h2>
+                    <div class="view-header">
+                        <h2><i class="fas fa-exclamation-triangle"></i> Descuadres de Depositos</h2>
                     </div>
-                    <div class="dep-layout">
-                        <div class="dep-sidebar">
-                            <div class="dep-sidebar-header" style="padding:6px 10px;">
-                                <input type="date" id="dep-desc-desde" class="dep-sidebar-filter" style="flex:1;">
-                                <input type="date" id="dep-desc-hasta" class="dep-sidebar-filter" style="flex:1;">
-                                <button class="dep-sidebar-refresh" onclick="depCargarDescuadres()" title="Buscar">
-                                    <i class="fas fa-search"></i>
-                                </button>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="dep-desc-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="dep-desc-hasta" class="obs-filtro-input">
+                        </div>
+                        <button class="btn-obs-cargar" onclick="depCargarDescuadres()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+                    <div id="dep-desc-list" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- Vista Depositos Dashboard -->
+                <div id="view-dep-dashboard" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-chart-bar"></i> Dashboard Depositos</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="dep-dash-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="dep-dash-hasta" class="obs-filtro-input">
+                        </div>
+                        <button class="btn-obs-cargar" onclick="depCargarDashboard()">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
+                    <div id="dep-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                    <div id="dep-dash-locales" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- ============ MODULO CUADRES DE CAJA ============ -->
+
+                <!-- Vista Cuadre Registro -->
+                <div id="view-cuadre-registro" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-cash-register"></i> Registro de Cuadre de Caja</h2>
+                    </div>
+                    <div class="merma-form-card">
+                        <div class="merma-form-grid">
+                            <div class="form-group">
+                                <label>Fecha *</label>
+                                <input type="date" id="cuadre-fecha" class="input-merma">
                             </div>
-                            <div id="dep-desc-sidebar-list" class="dep-sidebar-items">
-                                <div class="empty-state" style="padding:30px;"><i class="fas fa-search"></i><p>Selecciona fechas</p></div>
+                            <div class="form-group">
+                                <label>Local *</label>
+                                <select id="cuadre-local" class="input-merma">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="real_audiencia">Real Audiencia</option>
+                                    <option value="floreana">Floreana</option>
+                                    <option value="portugal">Portugal</option>
+                                    <option value="santo_cachon_real">Santo Cachon Real</option>
+                                    <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                    <option value="simon_bolon">Simon Bolon</option>
+                                </select>
                             </div>
                         </div>
-                        <div class="dep-detalle" id="dep-desc-detalle">
-                            <div class="dep-detalle-empty">
-                                <i class="fas fa-hand-pointer" style="font-size:40px;color:var(--primary);opacity:0.3;"></i>
-                                <p style="margin-top:12px;color:#94a3b8;">Selecciona un descuadre del listado</p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px;">
+                            <div class="form-group">
+                                <label>Venta Sistema (POS)</label>
+                                <input type="number" step="0.01" id="cuadre-venta-sistema" class="input-merma" value="0" oninput="cuadreRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Venta Tarjeta (Datafast)</label>
+                                <input type="number" step="0.01" id="cuadre-venta-tarjeta" class="input-merma" value="0" oninput="cuadreRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Venta Transferencia</label>
+                                <input type="number" step="0.01" id="cuadre-venta-transferencia" class="input-merma" value="0" oninput="cuadreRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Venta Plataformas</label>
+                                <input type="number" step="0.01" id="cuadre-venta-plataformas" class="input-merma" value="0" oninput="cuadreRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Otros Ingresos</label>
+                                <input type="number" step="0.01" id="cuadre-otros-ingresos" class="input-merma" value="0" oninput="cuadreRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Gastos / Retiros</label>
+                                <input type="number" step="0.01" id="cuadre-gastos-retiros" class="input-merma" value="0" oninput="cuadreRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label><strong>Efectivo Contado</strong></label>
+                                <input type="number" step="0.01" id="cuadre-efectivo-contado" class="input-merma" value="0" oninput="cuadreRecalcular()" style="border:2px solid var(--primary);font-weight:700;">
                             </div>
                         </div>
+                        <div id="cuadre-resumen-calc" style="margin-top:12px;padding:12px;background:#f1f5f9;border-radius:8px;display:flex;gap:24px;flex-wrap:wrap;font-size:14px;">
+                            <div>Efectivo esperado: <strong id="cuadre-esperado-val">$0.00</strong></div>
+                            <div>Diferencia: <strong id="cuadre-diferencia-val" style="font-size:18px;">$0.00</strong></div>
+                        </div>
+                        <div class="form-group" style="margin-top:12px;">
+                            <label>Observacion</label>
+                            <textarea id="cuadre-observacion" class="input-merma" rows="2" placeholder="Notas adicionales..."></textarea>
+                        </div>
+                        <div class="merma-form-actions">
+                            <button class="btn-primary" onclick="cuadreGuardar()">
+                                <i class="fas fa-save"></i> Guardar Cuadre
+                            </button>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Vista Cuadre Historial -->
+                <div id="view-cuadre-historial" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-list"></i> Historial Cuadres de Caja</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="cuadre-hist-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="cuadre-hist-hasta" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Local</label>
+                            <select id="cuadre-hist-local" class="obs-filtro-input">
+                                <option value="">Todos</option>
+                                <option value="real_audiencia">Real Audiencia</option>
+                                <option value="floreana">Floreana</option>
+                                <option value="portugal">Portugal</option>
+                                <option value="santo_cachon_real">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                            </select>
+                        </div>
+                        <button class="btn-obs-cargar" onclick="cuadreCargarHistorial()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+                    <div id="cuadre-hist-list" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- Vista Cuadre Dashboard -->
+                <div id="view-cuadre-dashboard" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-chart-bar"></i> Dashboard Cuadres de Caja</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="cuadre-dash-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="cuadre-dash-hasta" class="obs-filtro-input">
+                        </div>
+                        <button class="btn-obs-cargar" onclick="cuadreCargarDashboard()">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
+                    <div id="cuadre-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;" id="cuadre-dash-charts">
+                        <div class="chart-card">
+                            <div class="chart-card-header"><i class="fas fa-store"></i> Descuadre por Local</div>
+                            <div class="chart-card-body"><canvas id="chart-cuadre-local"></canvas></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header"><i class="fas fa-chart-line"></i> Tendencia Diaria</div>
+                            <div class="chart-card-body"><canvas id="chart-cuadre-tendencia"></canvas></div>
+                        </div>
+                    </div>
+                    <div id="cuadre-dash-tabla" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- ============ MODULO DELIVERY ============ -->
+
+                <!-- Vista Delivery Registro -->
+                <div id="view-del-registro" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-motorcycle"></i> Registro de Liquidacion Delivery</h2>
+                    </div>
+                    <div class="merma-form-card">
+                        <div class="merma-form-grid">
+                            <div class="form-group">
+                                <label>Fecha *</label>
+                                <input type="date" id="del-fecha" class="input-merma">
+                            </div>
+                            <div class="form-group">
+                                <label>Local *</label>
+                                <select id="del-local" class="input-merma">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="real_audiencia">Real Audiencia</option>
+                                    <option value="floreana">Floreana</option>
+                                    <option value="portugal">Portugal</option>
+                                    <option value="santo_cachon_real">Santo Cachon Real</option>
+                                    <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                    <option value="simon_bolon">Simon Bolon</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Plataforma *</label>
+                                <select id="del-plataforma" class="input-merma">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="Uber Eats">Uber Eats</option>
+                                    <option value="Rappi">Rappi</option>
+                                    <option value="PedidosYa">PedidosYa</option>
+                                    <option value="Didi Food">Didi Food</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Total Pedidos</label>
+                                <input type="number" id="del-pedidos" class="input-merma" value="0">
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:12px;">
+                            <div class="form-group">
+                                <label>Venta Bruta</label>
+                                <input type="number" step="0.01" id="del-venta-bruta" class="input-merma" value="0" oninput="delRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Comision %</label>
+                                <input type="number" step="0.01" id="del-comision-pct" class="input-merma" value="0" oninput="delRecalcularPct()">
+                            </div>
+                            <div class="form-group">
+                                <label>Comision $</label>
+                                <input type="number" step="0.01" id="del-comision-monto" class="input-merma" value="0" oninput="delRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>IVA Comision</label>
+                                <input type="number" step="0.01" id="del-iva-comision" class="input-merma" value="0" oninput="delRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Propinas</label>
+                                <input type="number" step="0.01" id="del-propinas" class="input-merma" value="0" oninput="delRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Ajustes/Promos</label>
+                                <input type="number" step="0.01" id="del-ajustes" class="input-merma" value="0" oninput="delRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label><strong>Depositado Real</strong></label>
+                                <input type="number" step="0.01" id="del-depositado" class="input-merma" value="0" oninput="delRecalcular()" style="border:2px solid var(--primary);font-weight:700;">
+                            </div>
+                        </div>
+                        <div id="del-resumen-calc" style="margin-top:12px;padding:12px;background:#f1f5f9;border-radius:8px;display:flex;gap:24px;flex-wrap:wrap;font-size:14px;">
+                            <div>Neto a recibir: <strong id="del-neto-val">$0.00</strong></div>
+                            <div>Diferencia: <strong id="del-diferencia-val" style="font-size:18px;">$0.00</strong></div>
+                        </div>
+                        <div class="merma-form-grid" style="margin-top:12px;">
+                            <div class="form-group">
+                                <label>Referencia / Nro. Documento</label>
+                                <input type="text" id="del-referencia" class="input-merma" placeholder="Nro. liquidacion...">
+                            </div>
+                            <div class="form-group" style="grid-column:1/-1;">
+                                <label>Observacion</label>
+                                <textarea id="del-observacion" class="input-merma" rows="2" placeholder="Notas..."></textarea>
+                            </div>
+                        </div>
+                        <div class="merma-form-actions">
+                            <button class="btn-primary" onclick="delGuardar()">
+                                <i class="fas fa-save"></i> Registrar Liquidacion
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Delivery Historial -->
+                <div id="view-del-historial" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-list"></i> Historial de Liquidaciones Delivery</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="del-hist-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="del-hist-hasta" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Local</label>
+                            <select id="del-hist-local" class="obs-filtro-input">
+                                <option value="">Todos</option>
+                                <option value="real_audiencia">Real Audiencia</option>
+                                <option value="floreana">Floreana</option>
+                                <option value="portugal">Portugal</option>
+                                <option value="santo_cachon_real">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                            </select>
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Plataforma</label>
+                            <select id="del-hist-plataforma" class="obs-filtro-input">
+                                <option value="">Todas</option>
+                                <option value="Uber Eats">Uber Eats</option>
+                                <option value="Rappi">Rappi</option>
+                                <option value="PedidosYa">PedidosYa</option>
+                                <option value="Didi Food">Didi Food</option>
+                            </select>
+                        </div>
+                        <button class="btn-obs-cargar" onclick="delCargarHistorial()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+                    <div id="del-hist-list" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- Vista Delivery Dashboard -->
+                <div id="view-del-dashboard" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-chart-bar"></i> Dashboard Delivery</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="del-dash-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="del-dash-hasta" class="obs-filtro-input">
+                        </div>
+                        <button class="btn-obs-cargar" onclick="delCargarDashboard()">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
+                    <div id="del-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+                        <div class="chart-card">
+                            <div class="chart-card-header"><i class="fas fa-motorcycle"></i> Ventas por Plataforma</div>
+                            <div class="chart-card-body"><canvas id="chart-del-plataforma"></canvas></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header"><i class="fas fa-store"></i> Ventas por Local</div>
+                            <div class="chart-card-body"><canvas id="chart-del-local"></canvas></div>
+                        </div>
+                    </div>
+                    <div id="del-dash-tabla" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- ============ MODULO FACTURAS ============ -->
+
+                <!-- Vista Facturas Registro -->
+                <div id="view-fac-registro" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-file-invoice-dollar"></i> Registro de Factura</h2>
+                    </div>
+                    <div class="merma-form-card">
+                        <div class="merma-form-grid">
+                            <div class="form-group">
+                                <label>Fecha Emision *</label>
+                                <input type="date" id="fac-fecha" class="input-merma">
+                            </div>
+                            <div class="form-group">
+                                <label>Local *</label>
+                                <select id="fac-local" class="input-merma">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="real_audiencia">Real Audiencia</option>
+                                    <option value="floreana">Floreana</option>
+                                    <option value="portugal">Portugal</option>
+                                    <option value="santo_cachon_real">Santo Cachon Real</option>
+                                    <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                    <option value="simon_bolon">Simon Bolon</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Proveedor *</label>
+                                <input type="text" id="fac-proveedor" class="input-merma" placeholder="Nombre del proveedor">
+                            </div>
+                            <div class="form-group">
+                                <label>RUC</label>
+                                <input type="text" id="fac-ruc" class="input-merma" placeholder="1234567890001" maxlength="20">
+                            </div>
+                            <div class="form-group">
+                                <label>Nro. Factura</label>
+                                <input type="text" id="fac-numero" class="input-merma" placeholder="001-001-000000123">
+                            </div>
+                            <div class="form-group">
+                                <label>Autorizacion</label>
+                                <input type="text" id="fac-autorizacion" class="input-merma" placeholder="Nro. autorizacion SRI">
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:12px;">
+                            <div class="form-group">
+                                <label>Subtotal 0%</label>
+                                <input type="number" step="0.01" id="fac-subtotal0" class="input-merma" value="0" oninput="facRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label>Subtotal IVA</label>
+                                <input type="number" step="0.01" id="fac-subtotal-iva" class="input-merma" value="0" oninput="facRecalcularIVA()">
+                            </div>
+                            <div class="form-group">
+                                <label>IVA (15%)</label>
+                                <input type="number" step="0.01" id="fac-iva" class="input-merma" value="0" oninput="facRecalcular()">
+                            </div>
+                            <div class="form-group">
+                                <label><strong>TOTAL</strong></label>
+                                <input type="number" step="0.01" id="fac-total" class="input-merma" value="0" readonly style="font-weight:700;background:#f1f5f9;">
+                            </div>
+                        </div>
+                        <div class="merma-form-grid" style="margin-top:12px;">
+                            <div class="form-group">
+                                <label>Categoria</label>
+                                <select id="fac-categoria" class="input-merma">
+                                    <option value="Materia Prima">Materia Prima</option>
+                                    <option value="Servicios">Servicios</option>
+                                    <option value="Insumos">Insumos</option>
+                                    <option value="Mantenimiento">Mantenimiento</option>
+                                    <option value="Arriendo">Arriendo</option>
+                                    <option value="Otros">Otros</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Forma de Pago</label>
+                                <select id="fac-forma-pago" class="input-merma">
+                                    <option value="Transferencia">Transferencia</option>
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Credito">Credito</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Estado de Pago</label>
+                                <select id="fac-estado-pago" class="input-merma">
+                                    <option value="Pendiente">Pendiente</option>
+                                    <option value="Pagada">Pagada</option>
+                                    <option value="Parcial">Parcial</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="grid-column:1/-1;">
+                                <label>Observacion</label>
+                                <textarea id="fac-observacion" class="input-merma" rows="2" placeholder="Notas..."></textarea>
+                            </div>
+                        </div>
+                        <div class="merma-form-actions">
+                            <button class="btn-primary" onclick="facGuardar()">
+                                <i class="fas fa-save"></i> Registrar Factura
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Facturas Historial -->
+                <div id="view-fac-historial" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-list"></i> Historial de Facturas</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="fac-hist-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="fac-hist-hasta" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Local</label>
+                            <select id="fac-hist-local" class="obs-filtro-input">
+                                <option value="">Todos</option>
+                                <option value="real_audiencia">Real Audiencia</option>
+                                <option value="floreana">Floreana</option>
+                                <option value="portugal">Portugal</option>
+                                <option value="santo_cachon_real">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                            </select>
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Categoria</label>
+                            <select id="fac-hist-categoria" class="obs-filtro-input">
+                                <option value="">Todas</option>
+                                <option value="Materia Prima">Materia Prima</option>
+                                <option value="Servicios">Servicios</option>
+                                <option value="Insumos">Insumos</option>
+                                <option value="Mantenimiento">Mantenimiento</option>
+                                <option value="Arriendo">Arriendo</option>
+                                <option value="Otros">Otros</option>
+                            </select>
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Estado</label>
+                            <select id="fac-hist-estado" class="obs-filtro-input">
+                                <option value="">Todos</option>
+                                <option value="Pendiente">Pendiente</option>
+                                <option value="Pagada">Pagada</option>
+                                <option value="Parcial">Parcial</option>
+                            </select>
+                        </div>
+                        <button class="btn-obs-cargar" onclick="facCargarHistorial()">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+                    <div id="fac-hist-list" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- Vista Facturas Dashboard -->
+                <div id="view-fac-dashboard" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-chart-bar"></i> Dashboard Facturas</h2>
+                    </div>
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde</label>
+                            <input type="date" id="fac-dash-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta</label>
+                            <input type="date" id="fac-dash-hasta" class="obs-filtro-input">
+                        </div>
+                        <button class="btn-obs-cargar" onclick="facCargarDashboard()">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
+                    <div id="fac-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+                        <div class="chart-card">
+                            <div class="chart-card-header"><i class="fas fa-tags"></i> Gasto por Categoria</div>
+                            <div class="chart-card-body"><canvas id="chart-fac-categoria"></canvas></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header"><i class="fas fa-store"></i> Gasto por Local</div>
+                            <div class="chart-card-body"><canvas id="chart-fac-local"></canvas></div>
+                        </div>
+                    </div>
+                    <div id="fac-dash-tabla" style="margin-top:16px;"></div>
                 </div>
 
                 <!-- Vista Usuarios (solo admin) -->
