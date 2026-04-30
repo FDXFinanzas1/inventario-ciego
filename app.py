@@ -574,6 +574,8 @@ def consultar_inventario():
             ADD COLUMN IF NOT EXISTS corregido BOOLEAN DEFAULT FALSE;
             ALTER TABLE goti.inventario_ciego_conteos
             ADD COLUMN IF NOT EXISTS justificado BOOLEAN DEFAULT FALSE;
+            ALTER TABLE goti.inventario_ciego_conteos
+            ADD COLUMN IF NOT EXISTS cantidad_justificada NUMERIC(12,4) DEFAULT 0;
         """)
         conn.commit()
 
@@ -582,6 +584,7 @@ def consultar_inventario():
                    COALESCE(motivo, '') as motivo,
                    COALESCE(corregido, FALSE) as corregido,
                    COALESCE(justificado, FALSE) as justificado,
+                   COALESCE(cantidad_justificada, 0) as cantidad_justificada,
                    COALESCE(costo_unitario, 0) as costo_unitario
             FROM goti.inventario_ciego_conteos
             WHERE fecha = %s AND local = %s
@@ -705,6 +708,15 @@ def guardar_observacion():
         if justificado is not None:
             sets.append("justificado = %s")
             params.append(bool(justificado))
+        cantidad_justificada = data.get('cantidad_justificada', None)
+        if cantidad_justificada is not None:
+            sets.append("cantidad_justificada = %s")
+            params.append(float(cantidad_justificada))
+            # Si pone cantidad > 0, marcar justificado=TRUE automaticamente
+            if float(cantidad_justificada) > 0:
+                sets.append("justificado = TRUE")
+            else:
+                sets.append("justificado = FALSE")
 
         if sets:
             params.append(id_producto)
@@ -3453,8 +3465,8 @@ def diferencias_semana(semana_id):
         local = semana['local']
 
         # Netear diferencias diarias por producto en la semana
-        # Solo suma los dias NO justificados. Los justificados se excluyen del neto
-        # pero se muestran en detalle_diario para referencia.
+        # Resta cantidad_justificada de cada dia (justificacion parcial)
+        # dif_neta = dif_dia + cantidad_justificada (dif es negativa, justif reduce el faltante)
         cur.execute("""
             WITH diferencias_diarias AS (
                 SELECT
@@ -3464,7 +3476,8 @@ def diferencias_semana(semana_id):
                     COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as dif_dia,
                     COALESCE(costo_unitario, 0) as costo_unitario,
                     COALESCE(corregido, FALSE) as corregido,
-                    COALESCE(justificado, FALSE) as justificado
+                    COALESCE(justificado, FALSE) as justificado,
+                    COALESCE(cantidad_justificada, 0) as cant_justif
                 FROM goti.inventario_ciego_conteos
                 WHERE local = %s AND fecha BETWEEN %s AND %s
                   AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
@@ -3473,10 +3486,17 @@ def diferencias_semana(semana_id):
                 codigo,
                 nombre,
                 unidad,
-                SUM(CASE WHEN NOT justificado THEN dif_dia ELSE 0 END) as diferencia,
+                SUM(
+                    CASE
+                        WHEN dif_dia < 0 THEN
+                            LEAST(dif_dia + cant_justif, 0)
+                        ELSE dif_dia
+                    END
+                ) as diferencia,
                 AVG(costo_unitario) as costo_unitario,
                 COUNT(*) as dias_contados,
                 BOOL_AND(justificado) as justificado,
+                SUM(cant_justif) as total_justificado,
                 BOOL_OR(corregido) as tiene_correccion,
                 json_agg(json_build_object(
                     'fecha', fecha,
@@ -3484,11 +3504,12 @@ def diferencias_semana(semana_id):
                     'contado', contado,
                     'dif', dif_dia,
                     'corregido', corregido,
-                    'justificado', justificado
+                    'justificado', justificado,
+                    'cant_justif', cant_justif
                 ) ORDER BY fecha) as detalle_diario
             FROM diferencias_diarias
             GROUP BY codigo, nombre, unidad
-            HAVING SUM(CASE WHEN NOT justificado THEN dif_dia ELSE 0 END) != 0
+            HAVING SUM(CASE WHEN dif_dia < 0 THEN LEAST(dif_dia + cant_justif, 0) ELSE dif_dia END) != 0
             ORDER BY nombre
         """, (local, fecha_inicio, fecha_fin))
         diferencias = cur.fetchall()

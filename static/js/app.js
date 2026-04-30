@@ -1925,7 +1925,7 @@ function renderObservaciones() {
                         <th class="obs-col-motivo">Motivo</th>
                         <th class="obs-col-obs">Observación</th>
                         <th class="obs-col-corregido" title="Se modificó el conteo">Corregido</th>
-                        <th class="obs-col-corregido" title="No entra al descuento semanal">Justificado</th>
+                        <th class="obs-col-corregido" title="Cantidad justificada (no entra al descuento)">Justif.</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1939,6 +1939,8 @@ function renderObservaciones() {
                         const motivoActual = prod.motivo || '';
                         const corregido = prod.corregido || false;
                         const justificado = prod.justificado || false;
+                        const cantJustif = parseFloat(prod.cantidad_justificada) || 0;
+                        const difAbs = Math.abs(diferencia);
                         const yaGuardado = motivoActual || obsActual;
                         const bloqueado = yaGuardado && !esAdmin;
 
@@ -1973,15 +1975,16 @@ function renderObservaciones() {
                                     <span class="badge-corregido ${corregido ? 'corregido-si' : 'corregido-no'}">${corregido ? 'Sí' : 'No'}</span>
                                 </td>
                                 <td class="obs-corregido-cell">
-                                    ${esAdmin
-                                        ? `<label class="toggle-corregido">
-                                               <input type="checkbox" class="check-corregido" data-id="${prod.id}"
-                                                      ${justificado ? 'checked' : ''}
-                                                      onchange="toggleJustificado(this)">
-                                               <span class="toggle-slider"></span>
-                                               <span class="toggle-label">${justificado ? 'Sí' : 'No'}</span>
-                                           </label>`
-                                        : `<span class="badge-corregido ${justificado ? 'corregido-si' : 'corregido-no'}">${justificado ? 'Sí' : 'No'}</span>`
+                                    ${esAdmin && diferencia < 0
+                                        ? `<input type="number" step="0.01" min="0" max="${difAbs.toFixed(2)}"
+                                                  value="${cantJustif > 0 ? cantJustif.toFixed(2) : ''}"
+                                                  placeholder="0"
+                                                  data-id="${prod.id}" data-max="${difAbs.toFixed(4)}"
+                                                  onchange="guardarCantJustificada(this)"
+                                                  style="width:70px;padding:4px 6px;border:1.5px solid ${cantJustif > 0 ? '#059669' : '#e2e8f0'};border-radius:6px;font-size:12px;text-align:center;font-weight:${cantJustif > 0 ? '700' : '400'};color:${cantJustif > 0 ? '#059669' : '#475569'};">`
+                                        : diferencia < 0
+                                            ? `<span style="font-size:12px;color:${cantJustif > 0 ? '#059669' : '#94a3b8'};font-weight:${cantJustif > 0 ? '600' : '400'};">${cantJustif > 0 ? cantJustif.toFixed(2) : '-'}</span>`
+                                            : '-'
                                     }
                                 </td>
                             </tr>
@@ -2011,7 +2014,7 @@ function renderObservaciones() {
                         <th class="obs-col-motivo">Motivo</th>
                         <th class="obs-col-obs">Observación</th>
                         <th class="obs-col-corregido" title="Se modificó el conteo">Corregido</th>
-                        <th class="obs-col-corregido" title="No entra al descuento semanal">Justificado</th>
+                        <th class="obs-col-corregido" title="Cantidad justificada (no entra al descuento)">Justif.</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2288,29 +2291,35 @@ async function toggleCorregido(checkbox) {
     }
 }
 
-async function toggleJustificado(checkbox) {
-    const id = parseInt(checkbox.dataset.id);
-    const justificado = checkbox.checked;
-    const label = checkbox.closest('.toggle-corregido').querySelector('.toggle-label');
+async function guardarCantJustificada(input) {
+    const id = parseInt(input.dataset.id);
+    const max = parseFloat(input.dataset.max) || 0;
+    let cantidad = parseFloat(input.value) || 0;
+    if (cantidad < 0) cantidad = 0;
+    if (cantidad > max) cantidad = max;
+    input.value = cantidad > 0 ? cantidad.toFixed(2) : '';
 
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/inventario/guardar-observacion`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, justificado })
+            body: JSON.stringify({ id, cantidad_justificada: cantidad })
         });
         if (response.ok) {
             const prod = _obsProductos.find(p => p.id === id);
-            if (prod) prod.justificado = justificado;
-            label.textContent = justificado ? 'Sí' : 'No';
-            showToast(justificado ? 'Producto justificado (no entra al descuento)' : 'Justificación removida', 'success');
+            if (prod) {
+                prod.cantidad_justificada = cantidad;
+                prod.justificado = cantidad > 0;
+            }
+            input.style.borderColor = cantidad > 0 ? '#059669' : '#e2e8f0';
+            input.style.fontWeight = cantidad > 0 ? '700' : '400';
+            input.style.color = cantidad > 0 ? '#059669' : '#475569';
+            showToast(cantidad > 0 ? `Justificado: ${cantidad.toFixed(2)} unidades` : 'Justificacion removida', 'success');
         } else {
-            checkbox.checked = !justificado;
-            showToast('Error al actualizar', 'error');
+            showToast('Error al guardar', 'error');
         }
     } catch (error) {
-        checkbox.checked = !justificado;
-        showToast('Error de conexión', 'error');
+        showToast('Error de conexion', 'error');
     }
 }
 
