@@ -1286,6 +1286,7 @@ async function consultarInventario() {
                 motivo: p.motivo || '',
                 corregido: p.corregido || false,
                 justificado: p.justificado || false,
+                cantidad_justificada: parseFloat(p.cantidad_justificada) || 0,
                 costo_unitario: parseFloat(p.costo_unitario) || 0
             }));
 
@@ -1852,7 +1853,8 @@ async function cargarObservaciones() {
             observaciones: p.observaciones || '',
             motivo: p.motivo || '',
             corregido: p.corregido || false,
-            justificado: p.justificado || false
+            justificado: p.justificado || false,
+            cantidad_justificada: parseFloat(p.cantidad_justificada) || 0
         }));
 
         // Cargar observaciones manuales
