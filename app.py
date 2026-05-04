@@ -5361,6 +5361,190 @@ def api_establecer_clave():
             release_db(conn)
 
 
+# ==================== DESCUENTOS NOMINA ====================
+
+@app.route('/api/descuentos/reporte', methods=['GET'])
+def descuentos_reporte():
+    """Reporte de descuentos por persona en un rango de fechas (semanas cerradas)"""
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    local = request.args.get('local', '')
+    solo_cerradas = request.args.get('solo_cerradas', '1')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        params = []
+        where = ""
+        if fecha_desde:
+            where += " AND s.fecha_inicio >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            where += " AND s.fecha_fin <= %s"; params.append(fecha_hasta)
+        if local:
+            where += " AND s.local = %s"; params.append(local)
+        if solo_cerradas == '1':
+            where += " AND s.estado = 'cerrada'"
+
+        # Detalle por persona, semana, local y producto
+        cur.execute(f"""
+            SELECT ap.persona,
+                   s.fecha_inicio, s.fecha_fin, s.local,
+                   a.codigo, a.nombre, a.unidad,
+                   ap.cantidad, ap.monto,
+                   a.costo_unitario, a.diferencia_semanal
+            FROM goti.asignacion_semanal_personas ap
+            JOIN goti.asignacion_semanal a ON a.id = ap.asignacion_semanal_id
+            JOIN goti.semanas_inventario s ON s.id = a.semana_id
+            WHERE 1=1 {where}
+            ORDER BY ap.persona, s.fecha_inicio, s.local, a.nombre
+        """, params)
+        detalle = [dict(r) for r in cur.fetchall()]
+
+        # Resumen por persona
+        cur.execute(f"""
+            SELECT ap.persona,
+                   COUNT(DISTINCT s.id) as semanas,
+                   COUNT(DISTINCT s.local) as locales,
+                   COALESCE(SUM(ap.monto), 0) as total_monto
+            FROM goti.asignacion_semanal_personas ap
+            JOIN goti.asignacion_semanal a ON a.id = ap.asignacion_semanal_id
+            JOIN goti.semanas_inventario s ON s.id = a.semana_id
+            WHERE 1=1 {where}
+            GROUP BY ap.persona
+            ORDER BY total_monto DESC
+        """, params)
+        resumen = [dict(r) for r in cur.fetchall()]
+
+        # Semanas incluidas
+        cur.execute(f"""
+            SELECT DISTINCT s.fecha_inicio, s.fecha_fin, s.local, s.estado
+            FROM goti.semanas_inventario s
+            JOIN goti.asignacion_semanal a ON a.semana_id = s.id
+            JOIN goti.asignacion_semanal_personas ap ON ap.asignacion_semanal_id = a.id
+            WHERE 1=1 {where}
+            ORDER BY s.fecha_inicio, s.local
+        """, params)
+        semanas = [dict(r) for r in cur.fetchall()]
+
+        return jsonify({
+            'resumen': resumen,
+            'detalle': detalle,
+            'semanas': semanas,
+            'total_personas': len(resumen),
+            'total_descuento': sum(float(r['total_monto']) for r in resumen)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+@app.route('/api/descuentos/exportar-excel', methods=['GET'])
+def descuentos_exportar_excel():
+    """Exporta el reporte de descuentos a Excel"""
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+    local = request.args.get('local', '')
+    solo_cerradas = request.args.get('solo_cerradas', '1')
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        params = []
+        where = ""
+        if fecha_desde:
+            where += " AND s.fecha_inicio >= %s"; params.append(fecha_desde)
+        if fecha_hasta:
+            where += " AND s.fecha_fin <= %s"; params.append(fecha_hasta)
+        if local:
+            where += " AND s.local = %s"; params.append(local)
+        if solo_cerradas == '1':
+            where += " AND s.estado = 'cerrada'"
+
+        # Resumen por persona
+        cur.execute(f"""
+            SELECT ap.persona,
+                   COUNT(DISTINCT s.id) as semanas,
+                   COALESCE(SUM(ap.monto), 0) as total_monto
+            FROM goti.asignacion_semanal_personas ap
+            JOIN goti.asignacion_semanal a ON a.id = ap.asignacion_semanal_id
+            JOIN goti.semanas_inventario s ON s.id = a.semana_id
+            WHERE 1=1 {where}
+            GROUP BY ap.persona
+            ORDER BY ap.persona
+        """, params)
+        resumen = cur.fetchall()
+
+        # Detalle
+        cur.execute(f"""
+            SELECT ap.persona, s.fecha_inicio, s.fecha_fin, s.local,
+                   a.codigo, a.nombre, ap.cantidad, ap.monto, a.costo_unitario
+            FROM goti.asignacion_semanal_personas ap
+            JOIN goti.asignacion_semanal a ON a.id = ap.asignacion_semanal_id
+            JOIN goti.semanas_inventario s ON s.id = a.semana_id
+            WHERE 1=1 {where}
+            ORDER BY ap.persona, s.fecha_inicio, s.local
+        """, params)
+        detalle = cur.fetchall()
+
+        wb = Workbook()
+        # Hoja 1: Resumen por persona
+        ws1 = wb.active
+        ws1.title = "Resumen Descuentos"
+        headers1 = ['Persona', 'Semanas', 'Total Descuento']
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="123450", end_color="123450", fill_type="solid")
+        for col, h in enumerate(headers1, 1):
+            c = ws1.cell(row=1, column=col, value=h)
+            c.font = header_font; c.fill = header_fill
+            c.alignment = Alignment(horizontal='center')
+        total_gen = 0
+        for i, r in enumerate(resumen, 2):
+            ws1.cell(row=i, column=1, value=r['persona'])
+            ws1.cell(row=i, column=2, value=int(r['semanas']))
+            monto = float(r['total_monto'])
+            ws1.cell(row=i, column=3, value=round(monto, 2)).number_format = '$#,##0.00'
+            total_gen += monto
+        # Fila total
+        row_total = len(resumen) + 2
+        ws1.cell(row=row_total, column=1, value='TOTAL').font = Font(bold=True, size=12)
+        ws1.cell(row=row_total, column=3, value=round(total_gen, 2)).font = Font(bold=True, size=12)
+        ws1.cell(row=row_total, column=3).number_format = '$#,##0.00'
+        ws1.column_dimensions['A'].width = 35
+        ws1.column_dimensions['B'].width = 12
+        ws1.column_dimensions['C'].width = 18
+
+        # Hoja 2: Detalle
+        ws2 = wb.create_sheet("Detalle")
+        headers2 = ['Persona', 'Semana Inicio', 'Semana Fin', 'Local', 'Codigo', 'Producto', 'Cantidad', 'Monto', 'Costo Unit.']
+        for col, h in enumerate(headers2, 1):
+            c = ws2.cell(row=1, column=col, value=h)
+            c.font = header_font; c.fill = header_fill
+            c.alignment = Alignment(horizontal='center')
+        for i, r in enumerate(detalle, 2):
+            ws2.cell(row=i, column=1, value=r['persona'])
+            ws2.cell(row=i, column=2, value=str(r['fecha_inicio']))
+            ws2.cell(row=i, column=3, value=str(r['fecha_fin']))
+            ws2.cell(row=i, column=4, value=BODEGAS_NOMBRES.get(r['local'], r['local']))
+            ws2.cell(row=i, column=5, value=r['codigo'])
+            ws2.cell(row=i, column=6, value=r['nombre'])
+            ws2.cell(row=i, column=7, value=float(r['cantidad'] or 0))
+            ws2.cell(row=i, column=8, value=round(float(r['monto'] or 0), 2)).number_format = '$#,##0.00'
+            ws2.cell(row=i, column=9, value=round(float(r['costo_unitario'] or 0), 4)).number_format = '$#,##0.0000'
+        for col_letter in ['A','B','C','D','E','F','G','H','I']:
+            ws2.column_dimensions[col_letter].width = 18 if col_letter in ['A','F'] else 14
+
+        rango = f"{fecha_desde or 'inicio'}_a_{fecha_hasta or 'fin'}"
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=f'Descuentos_Nomina_{rango}.xlsx')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
 # ==================== CUADRES DE CAJA ====================
 
 @app.route('/api/cuadres/listar', methods=['GET'])

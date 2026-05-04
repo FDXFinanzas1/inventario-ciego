@@ -200,8 +200,12 @@
                     </div>
                 </div>
 
-                <!-- ADMIN: USUARIOS -->
+                <!-- ADMIN -->
                 <div class="nav-module-separator"></div>
+                <button class="nav-btn" data-view="descuentos-nomina" style="display:none;">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <span>Descuentos Nomina</span>
+                </button>
                 <button class="nav-btn" data-view="usuarios" style="display:none;">
                     <i class="fas fa-users-cog"></i>
                     <span>Usuarios</span>
@@ -1722,6 +1726,54 @@
                         </div>
                     </div>
                     <div id="fac-dash-tabla" style="margin-top:16px;"></div>
+                </div>
+
+                <!-- ============ DESCUENTOS NOMINA ============ -->
+                <div id="view-descuentos-nomina" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-file-invoice-dollar"></i> Descuentos de Nomina</h2>
+                    </div>
+
+                    <div class="obs-filtros" style="margin-top:12px;">
+                        <div class="obs-filtro-grupo">
+                            <label>Desde (semana)</label>
+                            <input type="date" id="desc-fecha-desde" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Hasta (semana)</label>
+                            <input type="date" id="desc-fecha-hasta" class="obs-filtro-input">
+                        </div>
+                        <div class="obs-filtro-grupo">
+                            <label>Local</label>
+                            <select id="desc-local" class="obs-filtro-input">
+                                <option value="">Todos</option>
+                                <option value="real_audiencia">Real Audiencia</option>
+                                <option value="floreana">Floreana</option>
+                                <option value="portugal">Portugal</option>
+                                <option value="santo_cachon_real">Santo Cachon Real</option>
+                                <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                <option value="simon_bolon">Simon Bolon</option>
+                            </select>
+                        </div>
+                        <button class="btn-obs-cargar" onclick="descCargarReporte()">
+                            <i class="fas fa-search"></i> Consultar
+                        </button>
+                        <button class="btn-obs-cargar" style="background:#059669;" onclick="descExportarExcel()">
+                            <i class="fas fa-file-excel"></i> Descargar Excel
+                        </button>
+                    </div>
+
+                    <!-- Semanas incluidas -->
+                    <div id="desc-semanas-info" style="margin-top:12px;"></div>
+
+                    <!-- KPIs -->
+                    <div id="desc-stats" class="dashboard-stats-grid" style="margin-top:12px;"></div>
+
+                    <!-- Tabla resumen por persona -->
+                    <div id="desc-tabla-resumen" style="margin-top:16px;"></div>
+
+                    <!-- Detalle expandible -->
+                    <div id="desc-detalle" style="margin-top:16px;"></div>
                 </div>
 
                 <!-- Vista Usuarios (solo admin) -->

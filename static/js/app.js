@@ -1095,6 +1095,17 @@ function cambiarVista(viewName) {
         }
     }
 
+    // Auto-inicializar descuentos nomina
+    if (viewName === 'descuentos-nomina') {
+        const dd = document.getElementById('desc-fecha-desde');
+        const dh = document.getElementById('desc-fecha-hasta');
+        if (dd && !dd.value) {
+            const d = new Date(); d.setDate(d.getDate() - 30);
+            dd.value = d.toISOString().split('T')[0];
+        }
+        if (dh && !dh.value) dh.value = new Date().toISOString().split('T')[0];
+    }
+
     // Auto-inicializar cuadres de caja
     if (viewName === 'cuadre-registro') { cuadreInit(); }
     if (viewName === 'cuadre-historial' || viewName === 'cuadre-dashboard') {
@@ -8394,6 +8405,172 @@ function _aplicarVistaImpersonada() {
     state._impBodegas = imp.bodegas;
     state._impBodega = imp.bodega;
 }
+
+// ============================================================
+// MODULO DESCUENTOS NOMINA
+// ============================================================
+
+let _descDetalleData = [];
+
+async function descCargarReporte() {
+    const desde = document.getElementById('desc-fecha-desde').value;
+    const hasta = document.getElementById('desc-fecha-hasta').value;
+    const local = document.getElementById('desc-local').value;
+    if (!desde || !hasta) { showToast('Selecciona fechas', 'error'); return; }
+
+    document.getElementById('desc-tabla-resumen').innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+    document.getElementById('desc-stats').innerHTML = '';
+    document.getElementById('desc-semanas-info').innerHTML = '';
+    document.getElementById('desc-detalle').innerHTML = '';
+
+    try {
+        let url = `${CONFIG.API_URL}/api/descuentos/reporte?fecha_desde=${desde}&fecha_hasta=${hasta}`;
+        if (local) url += `&local=${local}`;
+        const r = await fetch(url);
+        const data = await r.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+
+        _descDetalleData = data.detalle || [];
+        const resumen = data.resumen || [];
+        const semanas = data.semanas || [];
+
+        // Semanas incluidas
+        if (semanas.length > 0) {
+            document.getElementById('desc-semanas-info').innerHTML = `
+                <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;font-size:12px;color:#0369a1;">
+                    <i class="fas fa-calendar-week"></i> <strong>${semanas.length} semana(s)</strong> incluidas:
+                    ${semanas.map(s => `<span style="display:inline-block;background:#e0f2fe;padding:2px 8px;border-radius:4px;margin:2px;">${s.fecha_inicio} a ${s.fecha_fin} · ${LOCALES_NOMBRES[s.local] || s.local}</span>`).join(' ')}
+                </div>`;
+        }
+
+        // KPIs
+        document.getElementById('desc-stats').innerHTML = `
+            <div class="dashboard-stat-card">
+                <div class="stat-icon" style="background:rgba(37,99,235,0.1);color:#2563eb;"><i class="fas fa-users"></i></div>
+                <div class="stat-info"><div class="stat-valor">${data.total_personas}</div><div class="stat-label">Personas</div></div>
+            </div>
+            <div class="dashboard-stat-card">
+                <div class="stat-icon" style="background:rgba(220,38,38,0.1);color:#dc2626;"><i class="fas fa-dollar-sign"></i></div>
+                <div class="stat-info"><div class="stat-valor">$${parseFloat(data.total_descuento).toFixed(2)}</div><div class="stat-label">Total a Descontar</div></div>
+            </div>
+            <div class="dashboard-stat-card">
+                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:#059669;"><i class="fas fa-calendar-check"></i></div>
+                <div class="stat-info"><div class="stat-valor">${semanas.length}</div><div class="stat-label">Semanas</div></div>
+            </div>`;
+
+        // Tabla resumen
+        if (resumen.length === 0) {
+            document.getElementById('desc-tabla-resumen').innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color:#059669;"></i><p>No hay descuentos en este periodo</p></div>';
+            return;
+        }
+
+        document.getElementById('desc-tabla-resumen').innerHTML = `
+            <div class="chart-card">
+                <div class="chart-card-header"><i class="fas fa-list"></i> Resumen por Persona</div>
+                <div style="padding:0;overflow-x:auto;">
+                    <table class="usuarios-tabla" style="width:100%;font-size:13px;margin:0;">
+                        <thead><tr>
+                            <th style="text-align:left;padding-left:16px;">Persona</th>
+                            <th>Semanas</th>
+                            <th>Total Descuento</th>
+                            <th></th>
+                        </tr></thead>
+                        <tbody>${resumen.map(r => {
+                            const monto = parseFloat(r.total_monto);
+                            return `<tr>
+                                <td style="font-weight:600;padding-left:16px;">${escapeHtml(r.persona)}</td>
+                                <td style="text-align:center;">${r.semanas}</td>
+                                <td style="text-align:center;font-weight:700;color:#dc2626;">$${monto.toFixed(2)}</td>
+                                <td style="text-align:center;">
+                                    <button class="btn-sm btn-secondary" onclick="descToggleDetalle('${escapeHtml(r.persona).replace(/'/g, "\\'")}')">
+                                        <i class="fas fa-eye"></i> Ver
+                                    </button>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                        <tr style="background:#f1f5f9;font-weight:700;">
+                            <td style="padding-left:16px;">TOTAL</td>
+                            <td></td>
+                            <td style="text-align:center;color:#dc2626;font-size:15px;">$${parseFloat(data.total_descuento).toFixed(2)}</td>
+                            <td></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+
+    } catch(e) {
+        document.getElementById('desc-tabla-resumen').innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error: ${e.message}</p></div>`;
+    }
+}
+
+function descToggleDetalle(persona) {
+    const container = document.getElementById('desc-detalle');
+    // Si ya esta mostrando esta persona, cerrar
+    if (container.dataset.persona === persona && container.innerHTML) {
+        container.innerHTML = '';
+        container.dataset.persona = '';
+        return;
+    }
+    container.dataset.persona = persona;
+    const items = _descDetalleData.filter(d => d.persona === persona);
+    if (items.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>Sin detalle</p></div>';
+        return;
+    }
+
+    // Agrupar por semana+local
+    const grupos = {};
+    items.forEach(d => {
+        const key = `${d.fecha_inicio}_${d.local}`;
+        if (!grupos[key]) grupos[key] = { fecha_inicio: d.fecha_inicio, fecha_fin: d.fecha_fin, local: d.local, productos: [], total: 0 };
+        const monto = parseFloat(d.monto) || 0;
+        grupos[key].productos.push(d);
+        grupos[key].total += monto;
+    });
+
+    container.innerHTML = `
+        <div class="chart-card" style="border-left:4px solid #dc2626;">
+            <div class="chart-card-header">
+                <i class="fas fa-user"></i> Detalle: ${escapeHtml(persona)}
+                <button class="btn-sm btn-secondary" onclick="document.getElementById('desc-detalle').innerHTML=''" style="margin-left:auto;">
+                    <i class="fas fa-times"></i> Cerrar
+                </button>
+            </div>
+            <div style="padding:16px;overflow-x:auto;">
+                ${Object.values(grupos).map(g => `
+                    <div style="margin-bottom:16px;">
+                        <div style="font-weight:600;font-size:13px;color:#1e293b;margin-bottom:6px;">
+                            <i class="fas fa-calendar-week" style="color:#2563eb;"></i>
+                            ${g.fecha_inicio} a ${g.fecha_fin} · ${LOCALES_NOMBRES[g.local] || g.local}
+                            <span style="float:right;color:#dc2626;">$${g.total.toFixed(2)}</span>
+                        </div>
+                        <table class="usuarios-tabla" style="width:100%;font-size:12px;margin:0;">
+                            <thead><tr><th>Codigo</th><th>Producto</th><th>Cantidad</th><th>Costo Unit.</th><th>Monto</th></tr></thead>
+                            <tbody>${g.productos.map(p => `<tr>
+                                <td>${escapeHtml(p.codigo)}</td>
+                                <td>${escapeHtml(p.nombre)}</td>
+                                <td style="text-align:center;">${parseFloat(p.cantidad || 0).toFixed(2)}</td>
+                                <td style="text-align:center;">$${parseFloat(p.costo_unitario || 0).toFixed(4)}</td>
+                                <td style="text-align:center;font-weight:600;color:#dc2626;">$${parseFloat(p.monto || 0).toFixed(2)}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>
+                `).join('')}
+            </div>
+        </div>`;
+}
+
+function descExportarExcel() {
+    const desde = document.getElementById('desc-fecha-desde').value;
+    const hasta = document.getElementById('desc-fecha-hasta').value;
+    const local = document.getElementById('desc-local').value;
+    if (!desde || !hasta) { showToast('Selecciona fechas primero', 'error'); return; }
+    let url = `${CONFIG.API_URL}/api/descuentos/exportar-excel?fecha_desde=${desde}&fecha_hasta=${hasta}`;
+    if (local) url += `&local=${local}`;
+    window.open(url, '_blank');
+}
+
 
 // ============================================================
 // MODULO CUADRES DE CAJA
