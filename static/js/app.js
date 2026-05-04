@@ -8420,7 +8420,6 @@ async function descCargarReporte() {
 
     document.getElementById('desc-tabla-resumen').innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
     document.getElementById('desc-stats').innerHTML = '';
-    document.getElementById('desc-semanas-info').innerHTML = '';
     document.getElementById('desc-detalle').innerHTML = '';
 
     try {
@@ -8434,15 +8433,6 @@ async function descCargarReporte() {
         const resumen = data.resumen || [];
         const semanas = data.semanas || [];
 
-        // Semanas incluidas
-        if (semanas.length > 0) {
-            document.getElementById('desc-semanas-info').innerHTML = `
-                <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;font-size:12px;color:#0369a1;">
-                    <i class="fas fa-calendar-week"></i> <strong>${semanas.length} semana(s)</strong> incluidas:
-                    ${semanas.map(s => `<span style="display:inline-block;background:#e0f2fe;padding:2px 8px;border-radius:4px;margin:2px;">${s.fecha_inicio} a ${s.fecha_fin} · ${LOCALES_NOMBRES[s.local] || s.local}</span>`).join(' ')}
-                </div>`;
-        }
-
         // KPIs
         document.getElementById('desc-stats').innerHTML = `
             <div class="dashboard-stat-card">
@@ -8453,10 +8443,7 @@ async function descCargarReporte() {
                 <div class="stat-icon" style="background:rgba(220,38,38,0.1);color:#dc2626;"><i class="fas fa-dollar-sign"></i></div>
                 <div class="stat-info"><div class="stat-valor">$${parseFloat(data.total_descuento).toFixed(2)}</div><div class="stat-label">Total a Descontar</div></div>
             </div>
-            <div class="dashboard-stat-card">
-                <div class="stat-icon" style="background:rgba(5,150,105,0.1);color:#059669;"><i class="fas fa-calendar-check"></i></div>
-                <div class="stat-info"><div class="stat-valor">${semanas.length}</div><div class="stat-label">Semanas</div></div>
-            </div>`;
+            `;
 
         // Tabla resumen
         if (resumen.length === 0) {
