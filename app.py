@@ -4153,9 +4153,9 @@ def cruce_op_fechas():
     """Devuelve las fechas con toma fisica disponibles para una bodega."""
     bodega = request.args.get('bodega')
     tablas = {
-        'bodega_principal': 'goti.toma_bodega',
-        'materia_prima':    'goti.toma_materiaprima',
-        'planta':           'goti.toma_planta',
+        'bodega_principal': 'public.toma_bodega',
+        'materia_prima':    'public.toma_materiaprima',
+        'planta':           'public.toma_planta',
     }
     if bodega not in tablas:
         return jsonify({'error': 'bodega invalida'}), 400
