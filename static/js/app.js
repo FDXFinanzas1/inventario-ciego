@@ -973,8 +973,8 @@ function showMainScreen() {
         const mod = btn.dataset.view;
         if (isAdmin) {
             btn.style.display = '';  // Admin ve todo
-        } else if (mod === 'usuarios') {
-            btn.style.display = 'none';  // usuarios SIEMPRE requiere admin
+        } else if (mod === 'usuarios' || mod === 'config-productos') {
+            btn.style.display = 'none';  // admin-only views
         } else {
             btn.style.display = userModulos.includes(mod) ? '' : 'none';
         }
@@ -1146,6 +1146,11 @@ function cambiarVista(viewName) {
     if (viewName === 'usuarios') {
         usuariosCargar();
         rolesCargar();
+    }
+
+    // Auto-cargar config productos
+    if (viewName === 'config-productos') {
+        cprodCargar();
     }
 
     // Auto-cargar dashboard al entrar
@@ -9139,6 +9144,171 @@ async function facCargarDashboard() {
     } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
+
+// ==================== CONFIG PRODUCTOS POR MARCA ====================
+
+async function cprodCargar() {
+    const marca = document.getElementById('cprod-marca').value;
+    const btnAgregar = document.getElementById('cprod-btn-agregar');
+    const btnCargaInicial = document.getElementById('cprod-btn-carga-inicial');
+    const resumen = document.getElementById('cprod-resumen');
+    const container = document.getElementById('cprod-tabla-container');
+
+    if (!marca) {
+        btnAgregar.style.display = 'none';
+        btnCargaInicial.style.display = 'none';
+        resumen.style.display = 'none';
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-boxes-stacked"></i><p>Selecciona una marca para ver sus productos</p></div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca?marca=${marca}`);
+        if (!res.ok) throw new Error('Error cargando productos');
+        const productos = await res.json();
+
+        btnAgregar.style.display = '';
+        resumen.style.display = '';
+
+        const activos = productos.filter(p => p.activo).length;
+        const inactivos = productos.length - activos;
+        document.getElementById('cprod-total').textContent = productos.length;
+        document.getElementById('cprod-activos').textContent = activos;
+        document.getElementById('cprod-inactivos').textContent = inactivos;
+
+        // Mostrar boton carga inicial solo si no hay productos
+        btnCargaInicial.style.display = productos.length === 0 ? '' : 'none';
+
+        if (productos.length === 0) {
+            container.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>No hay productos configurados para esta marca.<br>Usa <b>Carga Inicial</b> para importar los productos actuales.</p></div>`;
+            return;
+        }
+
+        let html = `<table class="usuarios-tabla" style="width:100%;">
+            <thead><tr>
+                <th style="width:40px;">#</th>
+                <th>Codigo</th>
+                <th>Nombre</th>
+                <th style="width:90px;text-align:center;">Estado</th>
+                <th style="width:130px;text-align:center;">Acciones</th>
+            </tr></thead><tbody>`;
+
+        productos.forEach((p, i) => {
+            const estadoColor = p.activo ? '#34d399' : '#f87171';
+            const estadoTexto = p.activo ? 'Activo' : 'Inactivo';
+            const estadoIcon = p.activo ? 'fa-check-circle' : 'fa-ban';
+            const toggleIcon = p.activo ? 'fa-toggle-on' : 'fa-toggle-off';
+            const toggleColor = p.activo ? '#f59e0b' : '#34d399';
+            const toggleTitle = p.activo ? 'Desactivar' : 'Activar';
+            const rowOpacity = p.activo ? '1' : '0.5';
+
+            html += `<tr style="opacity:${rowOpacity};">
+                <td style="color:#64748b;font-size:12px;">${i + 1}</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#60a5fa;">${p.codigo}</td>
+                <td>${p.nombre}</td>
+                <td style="text-align:center;"><span style="color:${estadoColor};font-size:13px;"><i class="fas ${estadoIcon}"></i> ${estadoTexto}</span></td>
+                <td style="text-align:center;">
+                    <button onclick="cprodToggle(${p.id})" title="${toggleTitle}" style="background:none;border:none;color:${toggleColor};cursor:pointer;font-size:18px;padding:4px 8px;">
+                        <i class="fas ${toggleIcon}"></i>
+                    </button>
+                    <button onclick="cprodEliminar(${p.id}, '${p.codigo}')" title="Eliminar" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;padding:4px 8px;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color:#f87171;"></i><p>Error: ${e.message}</p></div>`;
+    }
+}
+
+function cprodMostrarFormAgregar() {
+    document.getElementById('cprod-form-agregar').classList.remove('hidden');
+    document.getElementById('cprod-codigo').value = '';
+    document.getElementById('cprod-nombre').value = '';
+    document.getElementById('cprod-codigo').focus();
+}
+
+function cprodCerrarForm() {
+    document.getElementById('cprod-form-agregar').classList.add('hidden');
+}
+
+async function cprodAgregar() {
+    const marca = document.getElementById('cprod-marca').value;
+    const codigo = document.getElementById('cprod-codigo').value.trim().toUpperCase();
+    const nombre = document.getElementById('cprod-nombre').value.trim().toUpperCase();
+
+    if (!marca || !codigo || !nombre) {
+        showToast('Completa marca, codigo y nombre', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ marca, codigo, nombre })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Error al agregar');
+        }
+        showToast(`Producto ${codigo} agregado`, 'success');
+        cprodCerrarForm();
+        cprodCargar();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+async function cprodToggle(id) {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca/toggle/${id}`, { method: 'PUT' });
+        if (!res.ok) throw new Error('Error al cambiar estado');
+        const prod = await res.json();
+        showToast(`${prod.codigo} ${prod.activo ? 'activado' : 'desactivado'}`, 'success');
+        cprodCargar();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+async function cprodEliminar(id, codigo) {
+    if (!confirm(`¿Eliminar ${codigo} de esta marca? Esta accion no se puede deshacer.`)) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Error al eliminar');
+        showToast(`${codigo} eliminado`, 'success');
+        cprodCargar();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+async function cprodCargaInicial() {
+    const marca = document.getElementById('cprod-marca').value;
+    if (!marca) return;
+    if (!confirm(`¿Cargar los productos predeterminados de ${marca}? Esto no duplicara productos existentes.`)) return;
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca/carga-inicial`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ marca })
+        });
+        if (!res.ok) throw new Error('Error en carga inicial');
+        const data = await res.json();
+        showToast(`Carga inicial completada: ${data.insertados} productos`, 'success');
+        cprodCargar();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
 
 function salirImpersonacion() {
     state._impersonando = null;

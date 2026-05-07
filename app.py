@@ -5956,6 +5956,188 @@ def facturas_resumen():
         if conn: release_db(conn)
 
 
+# ==================== CONFIG PRODUCTOS POR MARCA ====================
+
+@app.route('/api/admin/productos-marca', methods=['GET'])
+def listar_productos_marca():
+    """Lista productos configurados para una marca"""
+    marca = request.args.get('marca', '')
+    if not marca:
+        return jsonify({'error': 'Marca requerida'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS goti.productos_por_marca (
+                id SERIAL PRIMARY KEY,
+                marca VARCHAR(50) NOT NULL,
+                codigo VARCHAR(20) NOT NULL,
+                nombre VARCHAR(100) NOT NULL,
+                activo BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(marca, codigo)
+            )
+        """)
+        conn.commit()
+        cur.execute("""
+            SELECT id, marca, codigo, nombre, activo, created_at
+            FROM goti.productos_por_marca
+            WHERE marca = %s
+            ORDER BY codigo
+        """, (marca,))
+        productos = [dict(r) for r in cur.fetchall()]
+        return jsonify(productos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/admin/productos-marca', methods=['POST'])
+def agregar_producto_marca():
+    """Agrega un producto a una marca"""
+    data = request.json
+    marca = data.get('marca', '').strip()
+    codigo = data.get('codigo', '').strip().upper()
+    nombre = data.get('nombre', '').strip().upper()
+    if not marca or not codigo or not nombre:
+        return jsonify({'error': 'marca, codigo y nombre son requeridos'}), 400
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo)
+            VALUES (%s, %s, %s, TRUE)
+            ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE
+            RETURNING id, marca, codigo, nombre, activo
+        """, (marca, codigo, nombre))
+        conn.commit()
+        prod = dict(cur.fetchone())
+        return jsonify(prod)
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/admin/productos-marca/<int:prod_id>', methods=['DELETE'])
+def eliminar_producto_marca(prod_id):
+    """Elimina un producto de la configuracion"""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM goti.productos_por_marca WHERE id = %s", (prod_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/admin/productos-marca/toggle/<int:prod_id>', methods=['PUT'])
+def toggle_producto_marca(prod_id):
+    """Activa o desactiva un producto"""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE goti.productos_por_marca SET activo = NOT activo WHERE id = %s
+            RETURNING id, marca, codigo, nombre, activo
+        """, (prod_id,))
+        conn.commit()
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'error': 'Producto no encontrado'}), 404
+        return jsonify(dict(row))
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
+@app.route('/api/admin/productos-marca/carga-inicial', methods=['POST'])
+def carga_inicial_productos():
+    """Carga los productos hardcodeados actuales como punto de partida"""
+    PRODUCTOS = {
+        'CHIOS': {
+            'ALCH002': 'CLUB PEQ', 'ALMP001': 'PILSENER 600 ML', 'BEB019': 'AGUA DASANI',
+            'BEB020': 'GUITIG', 'BEB021': 'COCA PEQ', 'BEB023': 'SPRITE PEQ',
+            'BEB025': 'ZERO PEQ', 'BEB029': 'HATSU FRAMBUESA', 'BEB030': 'HATSU UVILLA',
+            'CONG003': 'HELADO VAINILLA', 'CONGP001': 'PORTOBELLO PROCESADO',
+            'CONGP006': 'PAN DE PORTOBELLO', 'CONGP007': 'PORTOBELLO CHEESE',
+            'CONGP020': 'BOLITAS DE PAPA', 'CP001': 'ALAS CRUDAS PAQ',
+            'CP002': 'POLLO ESTANDAR PAQ', 'CP003': 'HAMBURGUESA',
+            'CP005': 'POLLO BOLDER PAQ', 'CP007': 'HAMBURGUESA SMASH',
+            'DOG001': 'HELADO DE PERRO', 'DOG004': 'PUDIN POLLO PEQUENO',
+            'DOMP003': 'GALLETA DE PERRO PAQ', 'DUL002': 'OREO', 'DUL013': 'KIT KAT CHOCOLATE',
+            'EMB002': 'TOCINO', 'FRU012': 'FRUTILLA PORCIONADA PAQ', 'LAC004': 'HUEVOS',
+            'LAC005': 'QUESO AMERICANO', 'LACP002': 'QUESO MOZZARELLA UNIDAD',
+            'PASN008': 'PAN PRETZEL', 'PASN012': 'PAN DE PAPA',
+        },
+        'CACHON': {
+            'ALCH001': 'PILSENER PEQ', 'ALCH002': 'CLUB PEQ', 'ALCH004': 'CORONA',
+            'ALMP001': 'PILSENER 600 ML', 'BEB019': 'AGUA DASANI', 'BEB020': 'GUITIG',
+            'BEB031': 'COCA VIDRIO', 'BEB032': 'SPRITE VIDRIO',
+            'BEB035': 'FANTA VIDRIO', 'BEB040': 'FUZE TE VIDRIO', 'BEB048': 'ZERO VIDRIO',
+            'BEB049': 'FRESA VIDRIO', 'CP012': 'CHULETA PAQ', 'CP013': 'FILETE DE PECHUGA',
+            'CP014': 'PICAÑA A PAQ', 'CP015': 'PICAÑA C PAQ', 'CP016': 'LOMO FINO PAQ',
+            'CP017': 'FILETE DE CARNE', 'CP018': 'COSTILLA PAQ', 'EMB013': 'CHISTORRA',
+            'EMB012': 'MORCILLA', 'EMB010': 'CHORIZO CON ROMERO', 'EMB011': 'CHORIZO CON ALBAHACA',
+            'EMB009': 'CHORIZO CHISTORRA', 'LAC004': 'HUEVOS', 'CP021': 'NEW YORK B PAQ',
+            'CP022': 'RIBEYE B PAQ', 'CP023': 'NEW YORK C PAQ', 'CP024': 'RIBEYE C PAQ',
+            'ZUM007': 'PULPA DE MARACUYA', 'ZUM008': 'PULPA DE MORA',
+            'ZUM009': 'PULPA DE TOMATE DE ARBOL', 'ZUM010': 'PULPA DE NARANJILLA',
+            'POST017': 'CHEESE CAKE', 'POST018': 'TRES LECHES',
+        },
+        'SIMON_BOLON': {
+            'ACOM001': 'EMPANADA DE QUESO', 'ACOM002': 'EMPANADA DE CAMARON',
+            'ACOM003': 'EMPANADA DE POLLO', 'ACOM005': 'CORVICHE DE ALBACORA',
+            'ACOM006': 'MUCHIN', 'ALCH001': 'PILSENER PEQ', 'ALCH002': 'CLUB PEQ',
+            'ALCH004': 'CORONA', 'BEB019': 'AGUA DASANI', 'BEB020': 'GUITIG',
+            'BEB021': 'COCA PEQ', 'BEB023': 'SPRITE PEQ', 'BEB025': 'ZERO PEQ',
+            'BEB031': 'COCA VIDRIO', 'BEB032': 'SPRITE VIDRIO', 'BEB035': 'FANTA VIDRIO',
+            'BEB040': 'FUZE TE VIDRIO', 'BEB047': 'FANTA PEQ',
+            'CP019': 'ESTOFADO DE CARNE PAQ', 'CP020': 'FRITADA PAQ',
+            'DOG001': 'HELADO DE PERRO', 'DOG004': 'PUDIN POLLO PEQUENO',
+            'FRU010': 'MORA', 'LAC004': 'HUEVOS',
+            'MAR002': 'CAMARON', 'MAR003': 'ALBACORA', 'MAR005': 'CAMARON PAQ 110 GR',
+            'MAR006': 'CAMARON PAQ 76 GR', 'PASN010': 'CHIFLES', 'ZUM003': 'ZUMO DE FRESA',
+        },
+    }
+    marca = request.json.get('marca', '') if request.json else ''
+    marcas_cargar = [marca] if marca else list(PRODUCTOS.keys())
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        total = 0
+        for m in marcas_cargar:
+            if m not in PRODUCTOS:
+                continue
+            for codigo, nombre in PRODUCTOS[m].items():
+                cur.execute("""
+                    INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo)
+                    VALUES (%s, %s, %s, TRUE)
+                    ON CONFLICT (marca, codigo) DO NOTHING
+                """, (m, codigo, nombre))
+                total += 1
+        conn.commit()
+        return jsonify({'ok': True, 'insertados': total})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=False)

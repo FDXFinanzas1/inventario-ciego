@@ -204,11 +204,15 @@
                     </div>
                 </div>
 
-                <!-- ADMIN: USUARIOS -->
+                <!-- ADMIN -->
                 <div class="nav-module-separator"></div>
                 <button class="nav-btn" data-view="usuarios" style="display:none;">
                     <i class="fas fa-users-cog"></i>
                     <span>Usuarios</span>
+                </button>
+                <button class="nav-btn" data-view="config-productos" style="display:none;">
+                    <i class="fas fa-boxes-stacked"></i>
+                    <span>Productos</span>
                 </button>
             </nav>
 
@@ -1886,6 +1890,88 @@
                         </div>
                         <div id="roles-config" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;padding:16px;">
                             <!-- Se llena con JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Config Productos (solo admin) -->
+                <div id="view-config-productos" class="view">
+                    <div class="view-header">
+                        <h2><i class="fas fa-boxes-stacked"></i> Configurar Productos por Marca</h2>
+                    </div>
+
+                    <div class="panel-section" style="margin-bottom:16px;">
+                        <div style="display:flex;align-items:center;gap:12px;padding:16px;flex-wrap:wrap;">
+                            <label style="font-weight:600;color:#e2e8f0;"><i class="fas fa-tag"></i> Marca:</label>
+                            <select id="cprod-marca" class="input-merma" style="min-width:200px;" onchange="cprodCargar()">
+                                <option value="">-- Seleccionar marca --</option>
+                                <option value="CHIOS">CHIOS (Hamburguesas)</option>
+                                <option value="CACHON">SANTO CACHON (Cortes)</option>
+                                <option value="SIMON_BOLON">SIMON BOLON (Bolones)</option>
+                            </select>
+                            <button class="btn-primary btn-sm" onclick="cprodMostrarFormAgregar()" id="cprod-btn-agregar" style="display:none;">
+                                <i class="fas fa-plus"></i> Agregar Producto
+                            </button>
+                            <button class="btn-sm" style="background:#065f46;color:#6ee7b7;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;display:none;" id="cprod-btn-carga-inicial" onclick="cprodCargaInicial()">
+                                <i class="fas fa-database"></i> Carga Inicial
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Form agregar producto -->
+                    <div id="cprod-form-agregar" class="panel-section hidden" style="margin-bottom:16px;">
+                        <div style="padding:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:12px;">Codigo</label>
+                                <input type="text" id="cprod-codigo" class="input-merma" placeholder="Ej: BEB050" style="text-transform:uppercase;">
+                            </div>
+                            <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+                                <label style="font-size:12px;">Nombre</label>
+                                <input type="text" id="cprod-nombre" class="input-merma" placeholder="Ej: COCA COLA GRANDE" style="text-transform:uppercase;">
+                            </div>
+                            <button class="btn-primary btn-sm" onclick="cprodAgregar()">
+                                <i class="fas fa-save"></i> Guardar
+                            </button>
+                            <button class="btn-sm btn-secondary" onclick="cprodCerrarForm()">
+                                <i class="fas fa-times"></i> Cancelar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Resumen -->
+                    <div id="cprod-resumen" style="display:none;padding:0 0 12px 0;">
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 20px;display:flex;align-items:center;gap:10px;">
+                                <i class="fas fa-list" style="color:#60a5fa;font-size:18px;"></i>
+                                <div>
+                                    <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;">Total</div>
+                                    <div style="font-size:20px;font-weight:700;color:#e2e8f0;" id="cprod-total">0</div>
+                                </div>
+                            </div>
+                            <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 20px;display:flex;align-items:center;gap:10px;">
+                                <i class="fas fa-check-circle" style="color:#34d399;font-size:18px;"></i>
+                                <div>
+                                    <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;">Activos</div>
+                                    <div style="font-size:20px;font-weight:700;color:#34d399;" id="cprod-activos">0</div>
+                                </div>
+                            </div>
+                            <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 20px;display:flex;align-items:center;gap:10px;">
+                                <i class="fas fa-ban" style="color:#f87171;font-size:18px;"></i>
+                                <div>
+                                    <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;">Inactivos</div>
+                                    <div style="font-size:20px;font-weight:700;color:#f87171;" id="cprod-inactivos">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de productos -->
+                    <div class="panel-section">
+                        <div id="cprod-tabla-container" style="padding:16px;overflow-x:auto;">
+                            <div class="empty-state">
+                                <i class="fas fa-boxes-stacked"></i>
+                                <p>Selecciona una marca para ver sus productos</p>
+                            </div>
                         </div>
                     </div>
                 </div>
