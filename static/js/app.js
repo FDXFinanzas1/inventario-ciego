@@ -9147,84 +9147,109 @@ async function facCargarDashboard() {
 
 // ==================== CONFIG PRODUCTOS POR MARCA ====================
 
+let _cprodCache = [];
+
 async function cprodCargar() {
     const marca = document.getElementById('cprod-marca').value;
     const btnAgregar = document.getElementById('cprod-btn-agregar');
     const btnCargaInicial = document.getElementById('cprod-btn-carga-inicial');
     const resumen = document.getElementById('cprod-resumen');
     const container = document.getElementById('cprod-tabla-container');
+    const buscador = document.getElementById('cprod-buscador');
 
     if (!marca) {
         btnAgregar.style.display = 'none';
         btnCargaInicial.style.display = 'none';
         resumen.style.display = 'none';
-        container.innerHTML = '<div class="empty-state"><i class="fas fa-boxes-stacked"></i><p>Selecciona una marca para ver sus productos</p></div>';
+        if (buscador) buscador.style.display = 'none';
+        container.innerHTML = `<div class="empty-state" style="padding:60px 20px;">
+            <i class="fas fa-boxes-stacked" style="font-size:48px;color:var(--border);margin-bottom:16px;display:block;"></i>
+            <p style="color:var(--text-gray);font-size:14px;">Selecciona una marca para ver y configurar sus productos</p>
+        </div>`;
         return;
     }
 
-    container.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Cargando...</p></div>';
+    container.innerHTML = `<div class="empty-state" style="padding:40px;"><i class="fas fa-spinner fa-spin" style="font-size:24px;color:var(--primary);"></i><p style="color:var(--text-gray);margin-top:12px;">Cargando productos...</p></div>`;
 
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca?marca=${marca}`);
         if (!res.ok) throw new Error('Error cargando productos');
-        const productos = await res.json();
+        _cprodCache = await res.json();
 
         btnAgregar.style.display = '';
-        resumen.style.display = '';
+        resumen.style.display = 'flex';
 
-        const activos = productos.filter(p => p.activo).length;
-        const inactivos = productos.length - activos;
-        document.getElementById('cprod-total').textContent = productos.length;
+        const activos = _cprodCache.filter(p => p.activo).length;
+        const inactivos = _cprodCache.length - activos;
+        document.getElementById('cprod-total').textContent = _cprodCache.length;
         document.getElementById('cprod-activos').textContent = activos;
         document.getElementById('cprod-inactivos').textContent = inactivos;
 
-        // Mostrar boton carga inicial solo si no hay productos
-        btnCargaInicial.style.display = productos.length === 0 ? '' : 'none';
-
-        if (productos.length === 0) {
-            container.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><p>No hay productos configurados para esta marca.<br>Usa <b>Carga Inicial</b> para importar los productos actuales.</p></div>`;
-            return;
+        btnCargaInicial.style.display = _cprodCache.length === 0 ? '' : 'none';
+        if (buscador) {
+            buscador.style.display = _cprodCache.length > 0 ? '' : 'none';
+            document.getElementById('cprod-buscar').value = '';
         }
 
-        let html = `<table class="usuarios-tabla" style="width:100%;">
-            <thead><tr>
-                <th style="width:40px;">#</th>
-                <th>Codigo</th>
-                <th>Nombre</th>
-                <th style="width:90px;text-align:center;">Estado</th>
-                <th style="width:130px;text-align:center;">Acciones</th>
-            </tr></thead><tbody>`;
-
-        productos.forEach((p, i) => {
-            const estadoColor = p.activo ? '#34d399' : '#f87171';
-            const estadoTexto = p.activo ? 'Activo' : 'Inactivo';
-            const estadoIcon = p.activo ? 'fa-check-circle' : 'fa-ban';
-            const toggleIcon = p.activo ? 'fa-toggle-on' : 'fa-toggle-off';
-            const toggleColor = p.activo ? '#f59e0b' : '#34d399';
-            const toggleTitle = p.activo ? 'Desactivar' : 'Activar';
-            const rowOpacity = p.activo ? '1' : '0.5';
-
-            html += `<tr style="opacity:${rowOpacity};">
-                <td style="color:#64748b;font-size:12px;">${i + 1}</td>
-                <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#60a5fa;">${p.codigo}</td>
-                <td>${p.nombre}</td>
-                <td style="text-align:center;"><span style="color:${estadoColor};font-size:13px;"><i class="fas ${estadoIcon}"></i> ${estadoTexto}</span></td>
-                <td style="text-align:center;">
-                    <button onclick="cprodToggle(${p.id})" title="${toggleTitle}" style="background:none;border:none;color:${toggleColor};cursor:pointer;font-size:18px;padding:4px 8px;">
-                        <i class="fas ${toggleIcon}"></i>
-                    </button>
-                    <button onclick="cprodEliminar(${p.id}, '${p.codigo}')" title="Eliminar" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;padding:4px 8px;">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            </tr>`;
-        });
-
-        html += '</tbody></table>';
-        container.innerHTML = html;
+        cprodRenderTabla(_cprodCache);
     } catch (e) {
-        container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color:#f87171;"></i><p>Error: ${e.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state" style="padding:40px;"><i class="fas fa-exclamation-triangle" style="font-size:32px;color:var(--danger);margin-bottom:12px;display:block;"></i><p style="color:var(--text-gray);">Error: ${e.message}</p></div>`;
     }
+}
+
+function cprodFiltrar() {
+    const q = (document.getElementById('cprod-buscar')?.value || '').toUpperCase();
+    if (!q) { cprodRenderTabla(_cprodCache); return; }
+    cprodRenderTabla(_cprodCache.filter(p => p.codigo.includes(q) || p.nombre.includes(q)));
+}
+
+function cprodRenderTabla(productos) {
+    const container = document.getElementById('cprod-tabla-container');
+    if (productos.length === 0) {
+        container.innerHTML = `<div class="empty-state" style="padding:50px 20px;">
+            <i class="fas fa-inbox" style="font-size:40px;color:var(--border);margin-bottom:14px;display:block;"></i>
+            <p style="color:var(--text-gray);font-size:14px;">No hay productos configurados para esta marca.<br>Usa <b>Carga Inicial</b> para importar los productos actuales.</p>
+        </div>`;
+        return;
+    }
+
+    let html = `<table class="usuarios-tabla" style="width:100%;margin:0;">
+        <thead><tr>
+            <th style="width:40px;text-align:center;">#</th>
+            <th style="width:120px;">Codigo</th>
+            <th>Nombre</th>
+            <th style="width:100px;text-align:center;">Estado</th>
+            <th style="width:120px;text-align:center;">Acciones</th>
+        </tr></thead><tbody>`;
+
+    productos.forEach((p, i) => {
+        const badgeClass = p.activo ? 'badge-activo' : 'badge-inactivo';
+        const badgeText = p.activo ? 'Activo' : 'Inactivo';
+        const toggleIcon = p.activo ? 'fa-toggle-on' : 'fa-toggle-off';
+        const toggleColor = p.activo ? 'var(--warning)' : 'var(--success)';
+        const toggleTitle = p.activo ? 'Desactivar' : 'Activar';
+        const rowStyle = p.activo ? '' : 'opacity:0.55;';
+
+        html += `<tr style="${rowStyle}">
+            <td style="text-align:center;color:var(--text-light);font-size:12px;">${i + 1}</td>
+            <td style="font-weight:700;color:var(--primary);letter-spacing:0.02em;">${p.codigo}</td>
+            <td style="color:var(--text-dark);">${p.nombre}</td>
+            <td style="text-align:center;">
+                <span class="badge ${badgeClass}" style="font-size:0.65rem;">${badgeText}</span>
+            </td>
+            <td style="text-align:center;">
+                <button onclick="cprodToggle(${p.id})" title="${toggleTitle}" style="background:none;border:none;color:${toggleColor};cursor:pointer;font-size:20px;padding:4px 8px;transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
+                    <i class="fas ${toggleIcon}"></i>
+                </button>
+                <button onclick="cprodEliminar(${p.id}, '${p.codigo}')" title="Eliminar" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:15px;padding:4px 8px;opacity:0.6;transition:opacity 0.15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
 }
 
 function cprodMostrarFormAgregar() {
