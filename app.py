@@ -5975,13 +5975,19 @@ def listar_productos_marca():
                 codigo VARCHAR(20) NOT NULL,
                 nombre VARCHAR(100) NOT NULL,
                 activo BOOLEAN DEFAULT TRUE,
+                unidad VARCHAR(30) DEFAULT 'Unidad',
+                equivalencia NUMERIC(12,4) DEFAULT 1,
                 created_at TIMESTAMP DEFAULT NOW(),
                 UNIQUE(marca, codigo)
             )
         """)
         conn.commit()
+        # Asegurar columnas nuevas existan
+        cur.execute("ALTER TABLE goti.productos_por_marca ADD COLUMN IF NOT EXISTS unidad VARCHAR(30) DEFAULT 'Unidad'")
+        cur.execute("ALTER TABLE goti.productos_por_marca ADD COLUMN IF NOT EXISTS equivalencia NUMERIC(12,4) DEFAULT 1")
+        conn.commit()
         cur.execute("""
-            SELECT id, marca, codigo, nombre, activo, created_at
+            SELECT id, marca, codigo, nombre, activo, unidad, equivalencia, created_at
             FROM goti.productos_por_marca
             WHERE marca = %s
             ORDER BY codigo
@@ -6001,6 +6007,8 @@ def agregar_producto_marca():
     marca = data.get('marca', '').strip()
     codigo = data.get('codigo', '').strip().upper()
     nombre = data.get('nombre', '').strip().upper()
+    unidad = data.get('unidad', 'Unidad').strip()
+    equivalencia = data.get('equivalencia', 1)
     if not marca or not codigo or not nombre:
         return jsonify({'error': 'marca, codigo y nombre son requeridos'}), 400
     conn = None
@@ -6008,11 +6016,11 @@ def agregar_producto_marca():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo)
-            VALUES (%s, %s, %s, TRUE)
-            ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE
-            RETURNING id, marca, codigo, nombre, activo
-        """, (marca, codigo, nombre))
+            INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo, unidad, equivalencia)
+            VALUES (%s, %s, %s, TRUE, %s, %s)
+            ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE, unidad = EXCLUDED.unidad, equivalencia = EXCLUDED.equivalencia
+            RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia
+        """, (marca, codigo, nombre, unidad, equivalencia))
         conn.commit()
         prod = dict(cur.fetchone())
         return jsonify(prod)
@@ -6040,6 +6048,41 @@ def eliminar_producto_marca(prod_id):
         if conn: release_db(conn)
 
 
+@app.route('/api/admin/productos-marca/<int:prod_id>', methods=['PUT'])
+def editar_producto_marca(prod_id):
+    """Edita unidad y/o equivalencia de un producto"""
+    data = request.json
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        sets = []
+        vals = []
+        if 'unidad' in data:
+            sets.append("unidad = %s")
+            vals.append(data['unidad'])
+        if 'equivalencia' in data:
+            sets.append("equivalencia = %s")
+            vals.append(data['equivalencia'])
+        if 'nombre' in data:
+            sets.append("nombre = %s")
+            vals.append(data['nombre'].strip().upper())
+        if not sets:
+            return jsonify({'error': 'Nada que actualizar'}), 400
+        vals.append(prod_id)
+        cur.execute(f"UPDATE goti.productos_por_marca SET {', '.join(sets)} WHERE id = %s RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia", vals)
+        conn.commit()
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'error': 'Producto no encontrado'}), 404
+        return jsonify(dict(row))
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: release_db(conn)
+
+
 @app.route('/api/admin/productos-marca/toggle/<int:prod_id>', methods=['PUT'])
 def toggle_producto_marca(prod_id):
     """Activa o desactiva un producto"""
@@ -6049,7 +6092,7 @@ def toggle_producto_marca(prod_id):
         cur = conn.cursor()
         cur.execute("""
             UPDATE goti.productos_por_marca SET activo = NOT activo WHERE id = %s
-            RETURNING id, marca, codigo, nombre, activo
+            RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia
         """, (prod_id,))
         conn.commit()
         row = cur.fetchone()

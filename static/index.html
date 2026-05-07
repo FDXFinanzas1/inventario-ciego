@@ -1956,13 +1956,28 @@
                             </span>
                         </div>
                         <div style="padding:16px 20px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;">
-                            <div class="form-group" style="margin:0;min-width:140px;">
+                            <div class="form-group" style="margin:0;min-width:120px;">
                                 <label style="font-size:12px;color:var(--text-gray);font-weight:600;">Codigo</label>
                                 <input type="text" id="cprod-codigo" class="input-merma" placeholder="Ej: BEB050" style="text-transform:uppercase;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);">
                             </div>
-                            <div class="form-group" style="margin:0;flex:1;min-width:220px;">
-                                <label style="font-size:12px;color:var(--text-gray);font-weight:600;">Nombre del Producto</label>
+                            <div class="form-group" style="margin:0;flex:1;min-width:180px;">
+                                <label style="font-size:12px;color:var(--text-gray);font-weight:600;">Nombre</label>
                                 <input type="text" id="cprod-nombre" class="input-merma" placeholder="Ej: COCA COLA GRANDE" style="text-transform:uppercase;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);">
+                            </div>
+                            <div class="form-group" style="margin:0;min-width:120px;">
+                                <label style="font-size:12px;color:var(--text-gray);font-weight:600;">Medida</label>
+                                <select id="cprod-unidad" class="input-merma" style="padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);">
+                                    <option value="Unidad">Unidad</option>
+                                    <option value="Paquete">Paquete</option>
+                                    <option value="Gramos">Gramos</option>
+                                    <option value="Kilogramos">Kilogramos</option>
+                                    <option value="Litros">Litros</option>
+                                    <option value="Mililitros">Mililitros</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin:0;min-width:90px;">
+                                <label style="font-size:12px;color:var(--text-gray);font-weight:600;">Equivalencia</label>
+                                <input type="number" id="cprod-equivalencia" class="input-merma" value="1" min="0" step="0.01" style="padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;">
                             </div>
                             <button class="btn-primary btn-sm" onclick="cprodAgregar()" style="padding:10px 24px;border-radius:var(--radius-sm);">
                                 <i class="fas fa-save"></i> Guardar

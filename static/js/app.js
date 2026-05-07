@@ -9215,11 +9215,13 @@ function cprodRenderTabla(productos) {
 
     let html = `<table class="usuarios-tabla" style="width:100%;margin:0;">
         <thead><tr>
-            <th style="width:40px;text-align:center;">#</th>
-            <th style="width:120px;">Codigo</th>
+            <th style="width:36px;text-align:center;">#</th>
+            <th style="width:110px;">Codigo</th>
             <th>Nombre</th>
-            <th style="width:100px;text-align:center;">Estado</th>
-            <th style="width:120px;text-align:center;">Acciones</th>
+            <th style="width:120px;text-align:center;">Medida</th>
+            <th style="width:100px;text-align:center;">Equivalencia</th>
+            <th style="width:80px;text-align:center;">Estado</th>
+            <th style="width:100px;text-align:center;">Acciones</th>
         </tr></thead><tbody>`;
 
     productos.forEach((p, i) => {
@@ -9229,19 +9231,31 @@ function cprodRenderTabla(productos) {
         const toggleColor = p.activo ? 'var(--warning)' : 'var(--success)';
         const toggleTitle = p.activo ? 'Desactivar' : 'Activar';
         const rowStyle = p.activo ? '' : 'opacity:0.55;';
+        const unidad = p.unidad || 'Unidad';
+        const equiv = parseFloat(p.equivalencia || 1);
 
         html += `<tr style="${rowStyle}">
             <td style="text-align:center;color:var(--text-light);font-size:12px;">${i + 1}</td>
             <td style="font-weight:700;color:var(--primary);letter-spacing:0.02em;">${p.codigo}</td>
             <td style="color:var(--text-dark);">${p.nombre}</td>
             <td style="text-align:center;">
+                <select onchange="cprodEditarCampo(${p.id},'unidad',this.value)" style="padding:5px 8px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;background:var(--bg-white);color:var(--text-dark);cursor:pointer;font-family:'JetBrains Mono',monospace;">
+                    ${['Unidad','Paquete','Gramos','Kilogramos','Litros','Mililitros'].map(u => `<option value="${u}" ${u===unidad?'selected':''}>${u}</option>`).join('')}
+                </select>
+            </td>
+            <td style="text-align:center;">
+                <input type="number" value="${equiv}" min="0" step="0.01"
+                    onchange="cprodEditarCampo(${p.id},'equivalencia',this.value)"
+                    style="width:70px;padding:5px 6px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;text-align:center;background:var(--bg-white);color:var(--text-dark);font-family:'JetBrains Mono',monospace;">
+            </td>
+            <td style="text-align:center;">
                 <span class="badge ${badgeClass}" style="font-size:0.65rem;">${badgeText}</span>
             </td>
             <td style="text-align:center;">
-                <button onclick="cprodToggle(${p.id})" title="${toggleTitle}" style="background:none;border:none;color:${toggleColor};cursor:pointer;font-size:20px;padding:4px 8px;transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
+                <button onclick="cprodToggle(${p.id})" title="${toggleTitle}" style="background:none;border:none;color:${toggleColor};cursor:pointer;font-size:20px;padding:4px 6px;transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
                     <i class="fas ${toggleIcon}"></i>
                 </button>
-                <button onclick="cprodEliminar(${p.id}, '${p.codigo}')" title="Eliminar" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:15px;padding:4px 8px;opacity:0.6;transition:opacity 0.15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">
+                <button onclick="cprodEliminar(${p.id}, '${p.codigo}')" title="Eliminar" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:15px;padding:4px 6px;opacity:0.6;transition:opacity 0.15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">
                     <i class="fas fa-trash-alt"></i>
                 </button>
             </td>
@@ -9250,6 +9264,26 @@ function cprodRenderTabla(productos) {
 
     html += '</tbody></table>';
     container.innerHTML = html;
+}
+
+async function cprodEditarCampo(id, campo, valor) {
+    try {
+        const body = {};
+        body[campo] = campo === 'equivalencia' ? parseFloat(valor) : valor;
+        const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('Error al guardar');
+        const prod = await res.json();
+        showToast(`${prod.codigo}: ${campo} = ${valor}`, 'success');
+        // Actualizar cache local sin recargar toda la tabla
+        const idx = _cprodCache.findIndex(p => p.id === id);
+        if (idx >= 0) { _cprodCache[idx][campo] = campo === 'equivalencia' ? parseFloat(valor) : valor; }
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
 }
 
 function cprodMostrarFormAgregar() {
@@ -9267,6 +9301,8 @@ async function cprodAgregar() {
     const marca = document.getElementById('cprod-marca').value;
     const codigo = document.getElementById('cprod-codigo').value.trim().toUpperCase();
     const nombre = document.getElementById('cprod-nombre').value.trim().toUpperCase();
+    const unidad = document.getElementById('cprod-unidad').value;
+    const equivalencia = parseFloat(document.getElementById('cprod-equivalencia').value) || 1;
 
     if (!marca || !codigo || !nombre) {
         showToast('Completa marca, codigo y nombre', 'error');
@@ -9277,7 +9313,7 @@ async function cprodAgregar() {
         const res = await fetch(`${CONFIG.API_URL}/api/admin/productos-marca`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ marca, codigo, nombre })
+            body: JSON.stringify({ marca, codigo, nombre, unidad, equivalencia })
         });
         if (!res.ok) {
             const err = await res.json();
