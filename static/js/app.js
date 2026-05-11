@@ -1161,6 +1161,14 @@ function showMainScreen() {
     // Inicializar filtros del dashboard
     filtrarBodegasPorMarca();
     _cargarContadoresDash();
+
+    // Restaurar la vista donde estaba antes de recargar
+    const vistaGuardada = localStorage.getItem('vista_activa');
+    if (vistaGuardada && document.getElementById(`view-${vistaGuardada}`)) {
+        cambiarVista(vistaGuardada);
+    } else {
+        cambiarVista('dashboard');
+    }
 }
 
 // ==================== NAVEGACION ====================
@@ -1184,6 +1192,9 @@ function cambiarVista(viewName) {
     const overlay = document.getElementById('sidebar-overlay');
     if (sidebar) sidebar.classList.remove('open');
     if (overlay) overlay.classList.remove('open');
+
+    // Guardar vista activa para restaurar al recargar
+    try { localStorage.setItem('vista_activa', viewName); } catch(e) {}
 
     // Actualizar botones
     document.querySelectorAll('.nav-btn').forEach(btn => {
