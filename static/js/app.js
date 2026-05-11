@@ -1162,8 +1162,8 @@ function showMainScreen() {
     filtrarBodegasPorMarca();
     _cargarContadoresDash();
 
-    // Restaurar la vista donde estaba antes de recargar
-    const vistaGuardada = localStorage.getItem('vista_activa');
+    // Restaurar la vista donde estaba (por pestaña, independiente de otras tabs)
+    const vistaGuardada = sessionStorage.getItem('vista_activa');
     if (vistaGuardada && document.getElementById(`view-${vistaGuardada}`)) {
         cambiarVista(vistaGuardada);
     } else {
@@ -1193,8 +1193,8 @@ function cambiarVista(viewName) {
     if (sidebar) sidebar.classList.remove('open');
     if (overlay) overlay.classList.remove('open');
 
-    // Guardar vista activa para restaurar al recargar
-    try { localStorage.setItem('vista_activa', viewName); } catch(e) {}
+    // Guardar vista activa por pestaña (sessionStorage es independiente por tab)
+    try { sessionStorage.setItem('vista_activa', viewName); } catch(e) {}
 
     // Actualizar botones
     document.querySelectorAll('.nav-btn').forEach(btn => {
