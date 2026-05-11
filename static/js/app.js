@@ -1162,13 +1162,13 @@ function showMainScreen() {
     filtrarBodegasPorMarca();
     _cargarContadoresDash();
 
-    // Restaurar la vista: primero el hash de la URL, luego localStorage, luego dashboard
-    const hashVista = window.location.hash.replace('#', '');
-    const localVista = localStorage.getItem('vista_activa');
-    const vistaInicial = (hashVista && document.getElementById(`view-${hashVista}`)) ? hashVista
-                       : (localVista && document.getElementById(`view-${localVista}`)) ? localVista
-                       : 'dashboard';
-    cambiarVista(vistaInicial);
+    // Restaurar la vista donde estaba antes de recargar
+    const vistaGuardada = localStorage.getItem('vista_activa');
+    if (vistaGuardada && document.getElementById(`view-${vistaGuardada}`)) {
+        cambiarVista(vistaGuardada);
+    } else {
+        cambiarVista('dashboard');
+    }
 }
 
 // ==================== NAVEGACION ====================
@@ -1193,11 +1193,8 @@ function cambiarVista(viewName) {
     if (sidebar) sidebar.classList.remove('open');
     if (overlay) overlay.classList.remove('open');
 
-    // Actualizar URL con el modulo activo
-    try {
-        history.replaceState(null, '', `#${viewName}`);
-        localStorage.setItem('vista_activa', viewName);
-    } catch(e) {}
+    // Guardar vista activa para restaurar al recargar
+    try { localStorage.setItem('vista_activa', viewName); } catch(e) {}
 
     // Actualizar botones
     document.querySelectorAll('.nav-btn').forEach(btn => {
