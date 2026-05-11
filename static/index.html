@@ -66,6 +66,12 @@
 
             <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
             <nav class="sidebar" id="sidebar">
+                <!-- DASHBOARD GENERAL -->
+                <button class="nav-btn" data-view="dash-general" style="font-weight:600;border-bottom:1px solid var(--border);padding:14px 16px;">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </button>
+
                 <!-- MODULO: INVENTARIO -->
                 <div class="nav-module" data-module="inventario">
                     <button class="nav-module-header" onclick="toggleModule('inventario')">
@@ -401,142 +407,175 @@
                 </div>
 
                 <!-- Vista Dashboard -->
-                <div id="view-dashboard" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-chart-pie"></i> Dashboard Gerencial</h2>
+                <!-- ===== DASHBOARD GENERAL ===== -->
+                <div id="view-dash-general" class="view">
+                    <div class="view-header" style="border-bottom:none;padding-bottom:0;">
+                        <h2><i class="fas fa-tachometer-alt"></i> Dashboard</h2>
+                    </div>
+                    <div class="dash-module-tabs">
+                        <button class="dash-module-tab active" data-dashtab="inventario" onclick="cambiarDashTab('inventario')"><i class="fas fa-boxes"></i> Inventario</button>
+                        <button class="dash-module-tab" data-dashtab="depositos" onclick="cambiarDashTab('depositos')"><i class="fas fa-money-bill-wave"></i> Depósitos</button>
+                        <button class="dash-module-tab" data-dashtab="cuadres" onclick="cambiarDashTab('cuadres')"><i class="fas fa-cash-register"></i> Cuadres</button>
+                        <button class="dash-module-tab" data-dashtab="delivery" onclick="cambiarDashTab('delivery')"><i class="fas fa-motorcycle"></i> Delivery</button>
+                        <button class="dash-module-tab" data-dashtab="facturas" onclick="cambiarDashTab('facturas')"><i class="fas fa-file-invoice"></i> Facturas</button>
                     </div>
 
-                    <div class="filtros-dashboard">
-                        <div class="form-group">
-                            <label><i class="fas fa-calendar"></i> Desde</label>
-                            <input type="date" id="dash-fecha-desde">
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-calendar"></i> Hasta</label>
-                            <input type="date" id="dash-fecha-hasta">
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-store"></i> Marca</label>
-                            <select id="dash-marca" onchange="filtrarBodegasPorMarca()">
-                                <option value="">Todas las marcas</option>
-                                <option value="chios">Chios Burger</option>
-                                <option value="santo_cachon">Santo Cachon</option>
-                                <option value="simon_bolon">Simon Bolon</option>
-                                <option value="operaciones">Operaciones</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-warehouse"></i> Local</label>
-                            <select id="dash-bodega">
-                                <option value="">Todos</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-user-check"></i> Contador</label>
-                            <select id="dash-contador">
-                                <option value="">Todos</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label><i class="fas fa-box"></i> Producto</label>
-                            <select id="dash-producto" style="height:36px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;background:var(--bg-white);color:var(--text-dark);outline:none;min-width:200px;max-width:300px;">
-                                <option value="">Todos los productos</option>
-                            </select>
-                        </div>
-                        <button id="btn-cargar-dashboard" class="btn-secondary">
-                            <i class="fas fa-sync-alt"></i> Actualizar
-                        </button>
-                    </div>
-
-                    <div id="dashboard-stats" class="dashboard-stats-grid">
-                        <!-- KPIs gerenciales -->
-                    </div>
-
-                    <div id="dashboard-valor-resumen" style="margin:12px 0;"></div>
-
-                    <div class="dashboard-charts-grid">
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-bullseye"></i> Exactitud del Inventario
+                    <!-- TAB: Inventario Ciego -->
+                    <div id="dash-tab-inventario" class="dash-tab-panel active">
+                        <div class="filtros-dashboard">
+                            <div class="form-group">
+                                <label><i class="fas fa-calendar"></i> Desde</label>
+                                <input type="date" id="dash-fecha-desde">
                             </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-exactitud"></canvas>
+                            <div class="form-group">
+                                <label><i class="fas fa-calendar"></i> Hasta</label>
+                                <input type="date" id="dash-fecha-hasta">
                             </div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-exclamation-circle"></i> Productos que mas Fallan
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-productos-fallan"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-dollar-sign"></i> Descuadre en Valor ($)
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-diferencias-bodega"></canvas>
-                            </div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header" style="display:flex;align-items:center;justify-content:space-between;">
-                                <span><i class="fas fa-tags"></i> Motivos mas Frecuentes</span>
-                                <button id="btn-restaurar-motivos" onclick="_restaurarTodosMotivos()" style="display:none;font-size:11px;padding:3px 8px;border:1px solid #E2E8F0;border-radius:6px;background:#F8FAFC;color:#475569;cursor:pointer;">
-                                    <i class="fas fa-undo"></i> Restaurar todos
-                                </button>
-                            </div>
-                            <div class="chart-card-body">
-                                <canvas id="chart-motivos"></canvas>
-                            </div>
-                            <div id="motivos-leyenda" style="padding:8px 16px 12px;display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;"></div>
-                        </div>
-                        <div class="chart-card chart-card-full">
-                            <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                                <span><i class="fas fa-chart-line"></i> Tendencia de Diferencias</span>
-                                <select id="tendencia-motivo-filter" onchange="actualizarTendenciaMotivo()" style="height:30px; border:1px solid #e2e8f0; border-radius:6px; padding:0 8px; font-size:12px; color:#475569; max-width:220px;">
-                                    <option value="">Todos los motivos</option>
+                            <div class="form-group">
+                                <label><i class="fas fa-store"></i> Marca</label>
+                                <select id="dash-marca" onchange="filtrarBodegasPorMarca()">
+                                    <option value="">Todas las marcas</option>
+                                    <option value="chios">Chios Burger</option>
+                                    <option value="santo_cachon">Santo Cachon</option>
+                                    <option value="simon_bolon">Simon Bolon</option>
+                                    <option value="operaciones">Operaciones</option>
                                 </select>
                             </div>
-                            <div class="chart-card-body chart-card-body-line">
-                                <canvas id="chart-tendencia-temporal"></canvas>
+                            <div class="form-group">
+                                <label><i class="fas fa-warehouse"></i> Local</label>
+                                <select id="dash-bodega">
+                                    <option value="">Todos</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-user-check"></i> Contador</label>
+                                <select id="dash-contador">
+                                    <option value="">Todos</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-box"></i> Producto</label>
+                                <select id="dash-producto" style="height:36px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;background:var(--bg-white);color:var(--text-dark);outline:none;min-width:200px;max-width:300px;">
+                                    <option value="">Todos los productos</option>
+                                </select>
+                            </div>
+                            <button id="btn-cargar-dashboard" class="btn-secondary">
+                                <i class="fas fa-sync-alt"></i> Actualizar
+                            </button>
+                        </div>
+                        <div id="dashboard-stats" class="dashboard-stats-grid"></div>
+                        <div id="dashboard-valor-resumen" style="margin:12px 0;"></div>
+                        <div class="dashboard-charts-grid">
+                            <div class="chart-card">
+                                <div class="chart-card-header"><i class="fas fa-bullseye"></i> Exactitud del Inventario</div>
+                                <div class="chart-card-body"><canvas id="chart-exactitud"></canvas></div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-card-header"><i class="fas fa-exclamation-circle"></i> Productos que mas Fallan</div>
+                                <div class="chart-card-body"><canvas id="chart-productos-fallan"></canvas></div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-card-header"><i class="fas fa-dollar-sign"></i> Descuadre en Valor ($)</div>
+                                <div class="chart-card-body"><canvas id="chart-diferencias-bodega"></canvas></div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                                    <span><i class="fas fa-tags"></i> Motivos mas Frecuentes</span>
+                                    <button id="btn-restaurar-motivos" onclick="_restaurarTodosMotivos()" style="display:none;font-size:11px;padding:3px 8px;border:1px solid #E2E8F0;border-radius:6px;background:#F8FAFC;color:#475569;cursor:pointer;"><i class="fas fa-undo"></i> Restaurar todos</button>
+                                </div>
+                                <div class="chart-card-body"><canvas id="chart-motivos"></canvas></div>
+                                <div id="motivos-leyenda" style="padding:8px 16px 12px;display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;"></div>
+                            </div>
+                            <div class="chart-card chart-card-full">
+                                <div class="chart-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                                    <span><i class="fas fa-chart-line"></i> Tendencia de Diferencias</span>
+                                    <select id="tendencia-motivo-filter" onchange="actualizarTendenciaMotivo()" style="height:30px;border:1px solid #e2e8f0;border-radius:6px;padding:0 8px;font-size:12px;color:#475569;max-width:220px;">
+                                        <option value="">Todos los motivos</option>
+                                    </select>
+                                </div>
+                                <div class="chart-card-body chart-card-body-line"><canvas id="chart-tendencia-temporal"></canvas></div>
+                            </div>
+                        </div>
+                        <div class="chart-card chart-card-full" style="margin-top:12px;">
+                            <div class="chart-card-header"><i class="fas fa-exclamation-circle"></i> Top 10 Productos con Mayor Descuadre en Valor</div>
+                            <div class="chart-card-body" style="padding:0;">
+                                <div style="overflow-x:auto;">
+                                    <table class="usuarios-tabla" id="dash-top-table" style="margin:0;width:100%;">
+                                        <thead><tr><th>Codigo</th><th>Producto</th><th>Diferencia</th><th>Costo Unit.</th><th>Valor Descuadre</th></tr></thead>
+                                        <tbody id="dash-top-tbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-card chart-card-full" style="margin-top:12px;">
+                            <div class="chart-card-header"><i class="fas fa-users"></i> Actividad de Contadores</div>
+                            <div class="chart-card-body" style="padding:0;">
+                                <div id="dash-contadores-wrapper" style="overflow-x:auto;">
+                                    <div style="padding:20px;text-align:center;color:#94A3B8;font-size:13px;">Carga el dashboard para ver actividad</div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="chart-card chart-card-full" style="margin-top:12px;">
-                        <div class="chart-card-header">
-                            <i class="fas fa-exclamation-circle"></i> Top 10 Productos con Mayor Descuadre en Valor
+                    <!-- TAB: Depósitos -->
+                    <div id="dash-tab-depositos" class="dash-tab-panel">
+                        <div class="obs-filtros" style="margin-top:12px;">
+                            <div class="obs-filtro-grupo"><label>Desde</label><input type="date" id="dep-dash-desde" class="obs-filtro-input"></div>
+                            <div class="obs-filtro-grupo"><label>Hasta</label><input type="date" id="dep-dash-hasta" class="obs-filtro-input"></div>
+                            <button class="btn-obs-cargar" onclick="depCargarDashboard()"><i class="fas fa-sync-alt"></i> Actualizar</button>
                         </div>
-                        <div class="chart-card-body" style="padding:0;">
-                            <div style="overflow-x:auto;">
-                                <table class="usuarios-tabla" id="dash-top-table" style="margin:0;width:100%;">
-                                    <thead>
-                                        <tr>
-                                            <th>Codigo</th>
-                                            <th>Producto</th>
-                                            <th>Diferencia</th>
-                                            <th>Costo Unit.</th>
-                                            <th>Valor Descuadre</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="dash-top-tbody"></tbody>
-                                </table>
-                            </div>
-                        </div>
+                        <div id="dep-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                        <div id="dep-dash-locales" style="margin-top:16px;"></div>
                     </div>
 
-                    <div class="chart-card chart-card-full" style="margin-top:12px;">
-                        <div class="chart-card-header">
-                            <i class="fas fa-users"></i> Actividad de Contadores
+                    <!-- TAB: Cuadres de Caja -->
+                    <div id="dash-tab-cuadres" class="dash-tab-panel">
+                        <div class="obs-filtros" style="margin-top:12px;">
+                            <div class="obs-filtro-grupo"><label>Desde</label><input type="date" id="cuadre-dash-desde" class="obs-filtro-input"></div>
+                            <div class="obs-filtro-grupo"><label>Hasta</label><input type="date" id="cuadre-dash-hasta" class="obs-filtro-input"></div>
+                            <button class="btn-obs-cargar" onclick="cuadreCargarDashboard()"><i class="fas fa-sync-alt"></i> Actualizar</button>
                         </div>
-                        <div class="chart-card-body" style="padding:0;">
-                            <div id="dash-contadores-wrapper" style="overflow-x:auto;">
-                                <div style="padding:20px;text-align:center;color:#94A3B8;font-size:13px;">Carga el dashboard para ver actividad</div>
-                            </div>
+                        <div id="cuadre-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;" id="cuadre-dash-charts">
+                            <div class="chart-card"><div class="chart-card-header"><i class="fas fa-store"></i> Descuadre por Local</div><div class="chart-card-body"><canvas id="chart-cuadre-local"></canvas></div></div>
+                            <div class="chart-card"><div class="chart-card-header"><i class="fas fa-chart-line"></i> Tendencia Diaria</div><div class="chart-card-body"><canvas id="chart-cuadre-tendencia"></canvas></div></div>
                         </div>
+                        <div id="cuadre-dash-tabla" style="margin-top:16px;"></div>
+                    </div>
+
+                    <!-- TAB: Delivery -->
+                    <div id="dash-tab-delivery" class="dash-tab-panel">
+                        <div class="obs-filtros" style="margin-top:12px;">
+                            <div class="obs-filtro-grupo"><label>Desde</label><input type="date" id="del-dash-desde" class="obs-filtro-input"></div>
+                            <div class="obs-filtro-grupo"><label>Hasta</label><input type="date" id="del-dash-hasta" class="obs-filtro-input"></div>
+                            <button class="btn-obs-cargar" onclick="delCargarDashboard()"><i class="fas fa-sync-alt"></i> Actualizar</button>
+                        </div>
+                        <div id="del-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+                            <div class="chart-card"><div class="chart-card-header"><i class="fas fa-motorcycle"></i> Ventas por Plataforma</div><div class="chart-card-body"><canvas id="chart-del-plataforma"></canvas></div></div>
+                            <div class="chart-card"><div class="chart-card-header"><i class="fas fa-store"></i> Ventas por Local</div><div class="chart-card-body"><canvas id="chart-del-local"></canvas></div></div>
+                        </div>
+                        <div id="del-dash-tabla" style="margin-top:16px;"></div>
+                    </div>
+
+                    <!-- TAB: Facturas -->
+                    <div id="dash-tab-facturas" class="dash-tab-panel">
+                        <div class="obs-filtros" style="margin-top:12px;">
+                            <div class="obs-filtro-grupo"><label>Desde</label><input type="date" id="fac-dash-desde" class="obs-filtro-input"></div>
+                            <div class="obs-filtro-grupo"><label>Hasta</label><input type="date" id="fac-dash-hasta" class="obs-filtro-input"></div>
+                            <button class="btn-obs-cargar" onclick="facCargarDashboard()"><i class="fas fa-sync-alt"></i> Actualizar</button>
+                        </div>
+                        <div id="fac-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+                            <div class="chart-card"><div class="chart-card-header"><i class="fas fa-tags"></i> Gasto por Categoria</div><div class="chart-card-body"><canvas id="chart-fac-categoria"></canvas></div></div>
+                            <div class="chart-card"><div class="chart-card-header"><i class="fas fa-store"></i> Gasto por Local</div><div class="chart-card-body"><canvas id="chart-fac-local"></canvas></div></div>
+                        </div>
+                        <div id="fac-dash-tabla" style="margin-top:16px;"></div>
                     </div>
                 </div>
+
+                <!-- view-dashboard: contenido movido a view-dash-general -->
+                <div id="view-dashboard" class="view"></div>
 
                 <!-- Vista Bajas Directas (solo admin) -->
                 <div id="view-bajas" class="view">
@@ -1232,26 +1271,8 @@
                 </div>
 
                 <!-- Vista Depositos Dashboard -->
-                <div id="view-dep-dashboard" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-chart-bar"></i> Dashboard Depositos</h2>
-                    </div>
-                    <div class="obs-filtros" style="margin-top:12px;">
-                        <div class="obs-filtro-grupo">
-                            <label>Desde</label>
-                            <input type="date" id="dep-dash-desde" class="obs-filtro-input">
-                        </div>
-                        <div class="obs-filtro-grupo">
-                            <label>Hasta</label>
-                            <input type="date" id="dep-dash-hasta" class="obs-filtro-input">
-                        </div>
-                        <button class="btn-obs-cargar" onclick="depCargarDashboard()">
-                            <i class="fas fa-sync-alt"></i> Actualizar
-                        </button>
-                    </div>
-                    <div id="dep-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
-                    <div id="dep-dash-locales" style="margin-top:16px;"></div>
-                </div>
+                <!-- view-dep-dashboard: contenido movido a view-dash-general tab depositos -->
+                <div id="view-dep-dashboard" class="view"></div>
 
                 <!-- ============ MODULO CUADRES DE CAJA ============ -->
 
@@ -1359,36 +1380,8 @@
                 </div>
 
                 <!-- Vista Cuadre Dashboard -->
-                <div id="view-cuadre-dashboard" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-chart-bar"></i> Dashboard Cuadres de Caja</h2>
-                    </div>
-                    <div class="obs-filtros" style="margin-top:12px;">
-                        <div class="obs-filtro-grupo">
-                            <label>Desde</label>
-                            <input type="date" id="cuadre-dash-desde" class="obs-filtro-input">
-                        </div>
-                        <div class="obs-filtro-grupo">
-                            <label>Hasta</label>
-                            <input type="date" id="cuadre-dash-hasta" class="obs-filtro-input">
-                        </div>
-                        <button class="btn-obs-cargar" onclick="cuadreCargarDashboard()">
-                            <i class="fas fa-sync-alt"></i> Actualizar
-                        </button>
-                    </div>
-                    <div id="cuadre-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;" id="cuadre-dash-charts">
-                        <div class="chart-card">
-                            <div class="chart-card-header"><i class="fas fa-store"></i> Descuadre por Local</div>
-                            <div class="chart-card-body"><canvas id="chart-cuadre-local"></canvas></div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header"><i class="fas fa-chart-line"></i> Tendencia Diaria</div>
-                            <div class="chart-card-body"><canvas id="chart-cuadre-tendencia"></canvas></div>
-                        </div>
-                    </div>
-                    <div id="cuadre-dash-tabla" style="margin-top:16px;"></div>
-                </div>
+                <!-- view-cuadre-dashboard: contenido movido a view-dash-general tab cuadres -->
+                <div id="view-cuadre-dashboard" class="view"></div>
 
                 <!-- ============ MODULO DELIVERY ============ -->
 
@@ -1526,36 +1519,8 @@
                 </div>
 
                 <!-- Vista Delivery Dashboard -->
-                <div id="view-del-dashboard" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-chart-bar"></i> Dashboard Delivery</h2>
-                    </div>
-                    <div class="obs-filtros" style="margin-top:12px;">
-                        <div class="obs-filtro-grupo">
-                            <label>Desde</label>
-                            <input type="date" id="del-dash-desde" class="obs-filtro-input">
-                        </div>
-                        <div class="obs-filtro-grupo">
-                            <label>Hasta</label>
-                            <input type="date" id="del-dash-hasta" class="obs-filtro-input">
-                        </div>
-                        <button class="btn-obs-cargar" onclick="delCargarDashboard()">
-                            <i class="fas fa-sync-alt"></i> Actualizar
-                        </button>
-                    </div>
-                    <div id="del-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
-                        <div class="chart-card">
-                            <div class="chart-card-header"><i class="fas fa-motorcycle"></i> Ventas por Plataforma</div>
-                            <div class="chart-card-body"><canvas id="chart-del-plataforma"></canvas></div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header"><i class="fas fa-store"></i> Ventas por Local</div>
-                            <div class="chart-card-body"><canvas id="chart-del-local"></canvas></div>
-                        </div>
-                    </div>
-                    <div id="del-dash-tabla" style="margin-top:16px;"></div>
-                </div>
+                <!-- view-del-dashboard: contenido movido a view-dash-general tab delivery -->
+                <div id="view-del-dashboard" class="view"></div>
 
                 <!-- ============ MODULO FACTURAS ============ -->
 
@@ -1713,36 +1678,8 @@
                 </div>
 
                 <!-- Vista Facturas Dashboard -->
-                <div id="view-fac-dashboard" class="view">
-                    <div class="view-header">
-                        <h2><i class="fas fa-chart-bar"></i> Dashboard Facturas</h2>
-                    </div>
-                    <div class="obs-filtros" style="margin-top:12px;">
-                        <div class="obs-filtro-grupo">
-                            <label>Desde</label>
-                            <input type="date" id="fac-dash-desde" class="obs-filtro-input">
-                        </div>
-                        <div class="obs-filtro-grupo">
-                            <label>Hasta</label>
-                            <input type="date" id="fac-dash-hasta" class="obs-filtro-input">
-                        </div>
-                        <button class="btn-obs-cargar" onclick="facCargarDashboard()">
-                            <i class="fas fa-sync-alt"></i> Actualizar
-                        </button>
-                    </div>
-                    <div id="fac-dash-stats" class="dashboard-stats-grid" style="margin-top:16px;"></div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
-                        <div class="chart-card">
-                            <div class="chart-card-header"><i class="fas fa-tags"></i> Gasto por Categoria</div>
-                            <div class="chart-card-body"><canvas id="chart-fac-categoria"></canvas></div>
-                        </div>
-                        <div class="chart-card">
-                            <div class="chart-card-header"><i class="fas fa-store"></i> Gasto por Local</div>
-                            <div class="chart-card-body"><canvas id="chart-fac-local"></canvas></div>
-                        </div>
-                    </div>
-                    <div id="fac-dash-tabla" style="margin-top:16px;"></div>
-                </div>
+                <!-- view-fac-dashboard: contenido movido a view-dash-general tab facturas -->
+                <div id="view-fac-dashboard" class="view"></div>
 
                 <!-- ============ DESCUENTOS NOMINA ============ -->
                 <div id="view-descuentos-nomina" class="view">

@@ -110,6 +110,70 @@ async function _cargarContadoresDash() {
     } catch(e) {}
 }
 
+// ==================== DASHBOARD GENERAL TABS ====================
+
+function cambiarDashTab(tab) {
+    try { sessionStorage.setItem('dash_tab', tab); } catch(e) {}
+    // Activar botón de tab
+    document.querySelectorAll('.dash-module-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.dashtab === tab);
+    });
+    // Mostrar panel correspondiente
+    document.querySelectorAll('.dash-tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById(`dash-tab-${tab}`);
+    if (panel) panel.classList.add('active');
+    // Auto-cargar el dashboard del tab
+    _autoCargaDashTab(tab);
+}
+
+function _autoCargaDashTab(tab) {
+    const hoy = new Date().toISOString().split('T')[0];
+    const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30);
+    const desde30 = hace30.toISOString().split('T')[0];
+    switch(tab) {
+        case 'inventario': {
+            const d = document.getElementById('dash-fecha-desde');
+            const h = document.getElementById('dash-fecha-hasta');
+            if (!d.value) d.value = desde30;
+            if (!h.value) h.value = hoy;
+            cargarDashboard();
+            break;
+        }
+        case 'depositos': {
+            const d = document.getElementById('dep-dash-desde');
+            const h = document.getElementById('dep-dash-hasta');
+            if (d && !d.value) d.value = desde30;
+            if (h && !h.value) h.value = hoy;
+            if (typeof depCargarDashboard === 'function') depCargarDashboard();
+            break;
+        }
+        case 'cuadres': {
+            const d = document.getElementById('cuadre-dash-desde');
+            const h = document.getElementById('cuadre-dash-hasta');
+            if (d && !d.value) d.value = desde30;
+            if (h && !h.value) h.value = hoy;
+            if (typeof cuadreCargarDashboard === 'function') cuadreCargarDashboard();
+            break;
+        }
+        case 'delivery': {
+            const d = document.getElementById('del-dash-desde');
+            const h = document.getElementById('del-dash-hasta');
+            if (d && !d.value) d.value = desde30;
+            if (h && !h.value) h.value = hoy;
+            if (typeof delCargarDashboard === 'function') delCargarDashboard();
+            break;
+        }
+        case 'facturas': {
+            const d = document.getElementById('fac-dash-desde');
+            const h = document.getElementById('fac-dash-hasta');
+            if (d && !d.value) d.value = desde30;
+            if (h && !h.value) h.value = hoy;
+            if (typeof facCargarDashboard === 'function') facCargarDashboard();
+            break;
+        }
+    }
+}
+
 let _dashCargando = false;
 async function cargarDashboard() {
     if (_dashCargando) return;
@@ -1167,7 +1231,7 @@ function showMainScreen() {
     if (vistaGuardada && document.getElementById(`view-${vistaGuardada}`)) {
         cambiarVista(vistaGuardada);
     } else {
-        cambiarVista('dashboard');
+        cambiarVista('dash-general');
     }
 }
 
@@ -1340,19 +1404,18 @@ function cambiarVista(viewName) {
         cprodCargar();
     }
 
-    // Auto-cargar dashboard al entrar
-    if (viewName === 'dashboard') {
-        const dashDesde = document.getElementById('dash-fecha-desde');
-        const dashHasta = document.getElementById('dash-fecha-hasta');
-        if (!dashDesde.value || !dashHasta.value) {
-            const hoy = new Date();
-            const hace30 = new Date();
-            hace30.setDate(hoy.getDate() - 30);
-            dashDesde.value = hace30.toISOString().split('T')[0];
-            dashHasta.value = hoy.toISOString().split('T')[0];
-        }
+    // Redireccionar vistas de dashboard vacías al módulo unificado
+    if (viewName === 'dashboard') { cambiarVista('dash-general'); return; }
+    if (viewName === 'dep-dashboard') { cambiarVista('dash-general'); cambiarDashTab('depositos'); return; }
+    if (viewName === 'cuadre-dashboard') { cambiarVista('dash-general'); cambiarDashTab('cuadres'); return; }
+    if (viewName === 'del-dashboard') { cambiarVista('dash-general'); cambiarDashTab('delivery'); return; }
+    if (viewName === 'fac-dashboard') { cambiarVista('dash-general'); cambiarDashTab('facturas'); return; }
+
+    // Inicializar dashboard general al entrar
+    if (viewName === 'dash-general') {
+        const tabGuardado = sessionStorage.getItem('dash_tab') || 'inventario';
+        cambiarDashTab(tabGuardado);
         // Filtrar bodegas del dashboard según permisos del usuario
-        // Admin y Supervisor ven todos los locales
         const esAdminDash = _esAdminOSupervisor();
         if (!esAdminDash) {
             const userBodegas = state.user?.bodegas || [];
@@ -1373,7 +1436,6 @@ function cambiarVista(viewName) {
                 if (dashMarca) dashMarca.closest('.form-group').style.display = 'none';
             }
         }
-        cargarDashboard();
     }
 }
 
