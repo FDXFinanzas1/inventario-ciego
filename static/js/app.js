@@ -72,28 +72,42 @@ const MARCAS_BODEGAS = {
     'operaciones': ['bodega_principal', 'materia_prima', 'planta']
 };
 
+const _TODAS_BODEGAS = [
+    { value: 'real_audiencia',       label: 'Real Audiencia',        marca: 'chios' },
+    { value: 'floreana',             label: 'Floreana',              marca: 'chios' },
+    { value: 'portugal',             label: 'Portugal',              marca: 'chios' },
+    { value: 'santo_cachon_real',    label: 'Santo Cachon Real',     marca: 'santo_cachon' },
+    { value: 'santo_cachon_portugal',label: 'Santo Cachon Portugal', marca: 'santo_cachon' },
+    { value: 'simon_bolon',          label: 'Simon Bolon',           marca: 'simon_bolon' },
+    { value: 'bodega_principal',     label: 'Bodega Principal',      marca: 'operaciones' },
+    { value: 'materia_prima',        label: 'Materia Prima',         marca: 'operaciones' },
+    { value: 'planta',               label: 'Planta de Produccion',  marca: 'operaciones' },
+];
+
 function filtrarBodegasPorMarca() {
     const marca = document.getElementById('dash-marca').value;
     const selectBodega = document.getElementById('dash-bodega');
-    const opciones = selectBodega.querySelectorAll('option[data-marca]');
+    const filtradas = marca ? _TODAS_BODEGAS.filter(b => b.marca === marca) : _TODAS_BODEGAS;
+    const labelTodas = marca ? `Todos los locales de ${document.getElementById('dash-marca').options[document.getElementById('dash-marca').selectedIndex].text}` : 'Todos';
+    selectBodega.innerHTML = `<option value="">${labelTodas}</option>` +
+        filtradas.map(b => `<option value="${b.value}">${b.label}</option>`).join('');
+}
 
-    // Resetear bodega
-    selectBodega.value = '';
-
-    opciones.forEach(opt => {
-        if (!marca || opt.dataset.marca === marca) {
-            opt.style.display = '';
-        } else {
-            opt.style.display = 'none';
-        }
-    });
-
-    // Ocultar bodegas sin data-marca si hay marca seleccionada (excepto "Todas")
-    const sinMarca = selectBodega.querySelectorAll('option:not([data-marca])');
-    sinMarca.forEach(opt => {
-        if (opt.value === '') return; // "Todas las bodegas" siempre visible
-        opt.style.display = marca ? 'none' : '';
-    });
+async function _cargarContadoresDash() {
+    const sel = document.getElementById('dash-contador');
+    if (!sel || sel.options.length > 1) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/personas`);
+        if (!res.ok) return;
+        const personas = await res.json();
+        const sorted = personas.filter(p => p.nombre).sort((a,b) => a.nombre.localeCompare(b.nombre));
+        sorted.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.username || p.nombre;
+            opt.textContent = p.nombre;
+            sel.appendChild(opt);
+        });
+    } catch(e) {}
 }
 
 let _dashCargando = false;
@@ -112,7 +126,8 @@ async function cargarDashboard() {
 
     const productoSel = document.getElementById('dash-producto');
     const producto = productoSel ? productoSel.value : '';
-
+    const contador = document.getElementById('dash-contador')?.value || '';
+    const contadorParam = contador ? `&contador=${encodeURIComponent(contador)}` : '';
     // Mostrar estado de carga
     _dashCargando = true;
     const btn = document.getElementById('btn-cargar-dashboard');
@@ -135,8 +150,8 @@ async function cargarDashboard() {
     try {
         const prodParam = producto ? `&producto=${encodeURIComponent(producto)}` : '';
         const [resDash, resTend] = await Promise.all([
-            fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`),
-            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`)
+            fetch(`${CONFIG.API_URL}/api/reportes/dashboard?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}${contadorParam}`),
+            fetch(`${CONFIG.API_URL}/api/reportes/tendencias-temporal?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}${contadorParam}`)
         ]);
 
         if (resDash.ok && resTend.ok) {
@@ -151,10 +166,11 @@ async function cargarDashboard() {
             renderChartTendenciaTemporal(datosTend);
             _cargarMotivosDropdown();
             renderTopDescuadre(datosDash.top_descuadre);
+            renderContadoresResumen(datosDash.contadores);
 
             // Cargar motivos por separado para no bloquear el resto
             try {
-                const resMotivos = await fetch(`${CONFIG.API_URL}/api/reportes/motivos?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}`);
+                const resMotivos = await fetch(`${CONFIG.API_URL}/api/reportes/motivos?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}${bodegaParam}${prodParam}${contadorParam}`);
                 const datosMotivos = resMotivos.ok ? await resMotivos.json() : [];
                 renderChartMotivos(datosMotivos);
             } catch(e) { console.log('Error cargando motivos:', e); }
@@ -488,6 +504,7 @@ async function actualizarTendenciaMotivo() {
     const fechaHasta = document.getElementById('dash-fecha-hasta')?.value || '';
     const marca = document.getElementById('dash-marca')?.value || '';
     const bodega = document.getElementById('dash-bodega')?.value || '';
+    const contador = document.getElementById('dash-contador')?.value || '';
 
     if (!fechaDesde || !fechaHasta) return;
 
@@ -499,7 +516,8 @@ async function actualizarTendenciaMotivo() {
     }
 
     var motivoParam = motivo ? '&motivo=' + encodeURIComponent(motivo) : '';
-    var url = CONFIG.API_URL + '/api/reportes/tendencias-temporal?fecha_desde=' + fechaDesde + '&fecha_hasta=' + fechaHasta + bodegaParam + motivoParam;
+    var contadorParam = contador ? '&contador=' + encodeURIComponent(contador) : '';
+    var url = CONFIG.API_URL + '/api/reportes/tendencias-temporal?fecha_desde=' + fechaDesde + '&fecha_hasta=' + fechaHasta + bodegaParam + motivoParam + contadorParam;
 
     try {
         var r = await fetch(url);
@@ -621,9 +639,23 @@ async function abrirDetalleTendencia(fecha, bodegaId, bodegaNombre) {
             return;
         }
 
+        const tablaFilas = (lista) => lista.map(p => {
+            const difColor = p.diferencia < 0 ? 'color:var(--accent);' : 'color:var(--success);';
+            return `<tr>
+                <td style="font-weight:500;">${escapeHtml(p.nombre)}</td>
+                <td style="text-align:center;">${p.sistema}</td>
+                <td style="text-align:center;">${p.conteo}</td>
+                <td style="text-align:center;font-weight:700;${difColor}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
+                <td style="font-size:11px;color:#64748B;">${p.motivo || '-'}</td>
+                <td style="font-size:11px;color:#475569;">${p.responsable ? `👤 ${escapeHtml(p.responsable)}` : '<span style="color:#CBD5E1;">—</span>'}</td>
+            </tr>`;
+        }).join('');
+
         body.innerHTML = `
-            <div style="margin-bottom:12px;font-size:13px;color:var(--text-medium);">
-                <strong>${productos.length}</strong> producto${productos.length !== 1 ? 's' : ''} con diferencia
+            <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+                <span style="font-size:13px;color:var(--text-medium);"><strong>${productos.length}</strong> producto${productos.length !== 1 ? 's' : ''} con diferencia</span>
+                <input id="filtro-popup-tend" type="text" placeholder="Buscar producto..." oninput="_filtrarPopupTend(this.value, ${JSON.stringify(productos).replace(/</g,'\\u003c')})"
+                    style="margin-left:auto;padding:5px 10px;border:1px solid #E2E8F0;border-radius:6px;font-size:12px;width:180px;">
             </div>
             <table class="usuarios-tabla" style="margin:0;width:100%;">
                 <thead>
@@ -633,43 +665,83 @@ async function abrirDetalleTendencia(fecha, bodegaId, bodegaNombre) {
                         <th style="text-align:center;">Conteo</th>
                         <th style="text-align:center;">Dif</th>
                         <th style="text-align:left;">Motivo</th>
+                        <th style="text-align:left;">Responsable</th>
                     </tr>
                 </thead>
-                <tbody>
-                    ${productos.map(p => {
-                        const difColor = p.diferencia < 0 ? 'color:var(--accent);' : 'color:var(--success);';
-                        return `<tr>
-                            <td style="font-weight:500;">${p.nombre}</td>
-                            <td style="text-align:center;">${p.sistema}</td>
-                            <td style="text-align:center;">${p.conteo}</td>
-                            <td style="text-align:center;font-weight:700;${difColor}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
-                            <td style="font-size:11px;color:#64748B;">${p.motivo || '-'}</td>
-                        </tr>`;
-                    }).join('')}
-                </tbody>
+                <tbody id="popup-tend-tbody">${tablaFilas(productos)}</tbody>
             </table>
         `;
+        window._popupTendData = productos;
     } catch(e) {
         body.innerHTML = '<p style="text-align:center;color:var(--accent);padding:20px;">Error al cargar detalle</p>';
     }
 }
 
+// ---- Gestión de motivos excluidos (localStorage) ----
+function _getMotivosExcluidos() {
+    try { return JSON.parse(localStorage.getItem('motivos_excluidos') || '[]'); } catch { return []; }
+}
+function _setMotivosExcluidos(arr) {
+    localStorage.setItem('motivos_excluidos', JSON.stringify(arr));
+}
+function _toggleMotivo(motivo) {
+    const excluidos = _getMotivosExcluidos();
+    const idx = excluidos.indexOf(motivo);
+    if (idx === -1) excluidos.push(motivo); else excluidos.splice(idx, 1);
+    _setMotivosExcluidos(excluidos);
+    renderChartMotivos(null);
+}
+function _restaurarTodosMotivos() {
+    _setMotivosExcluidos([]);
+    renderChartMotivos(null);
+}
+
+function _renderMotivosLeyenda(todosLosDatos, excluidos) {
+    const wrapper = document.getElementById('motivos-leyenda');
+    const btnRestaurar = document.getElementById('btn-restaurar-motivos');
+    if (!wrapper) return;
+    if (!todosLosDatos || todosLosDatos.length === 0) { wrapper.innerHTML = ''; return; }
+
+    const hayExcluidos = excluidos.length > 0;
+    if (btnRestaurar) btnRestaurar.style.display = hayExcluidos ? 'inline-block' : 'none';
+
+    wrapper.innerHTML = todosLosDatos.map((d, i) => {
+        const excluido = excluidos.includes(d.motivo);
+        const color = CHART_COLORS[i % CHART_COLORS.length];
+        const label = d.motivo.length > 40 ? d.motivo.substring(0, 38) + '...' : d.motivo;
+        return `<span onclick="_toggleMotivo('${d.motivo.replace(/'/g, "\\'")}')"
+                      title="${excluido ? 'Click para mostrar' : 'Click para ocultar'}: ${escapeHtml(d.motivo)}"
+                      style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:${excluido ? '#94A3B8' : '#334155'};user-select:none;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${excluido ? '#CBD5E1' : color};flex-shrink:0;"></span>
+            <span style="${excluido ? 'text-decoration:line-through;' : ''}">${escapeHtml(label)}</span>
+        </span>`;
+    }).join('');
+}
+
 function renderChartMotivos(datos) {
     if (typeof Chart === 'undefined') return;
+    // Guardar datos completos para poder re-renderizar al cambiar exclusiones
+    if (datos && datos.length > 0) window._motivosDatosCompletos = datos;
+    const todosLosDatos = window._motivosDatosCompletos || [];
+
     destroyChart('motivos');
     const ctx = document.getElementById('chart-motivos');
-    if (!ctx || !datos || datos.length === 0) {
+
+    const excluidos = _getMotivosExcluidos();
+    _renderMotivosLeyenda(todosLosDatos, excluidos);
+
+    const datosFiltrados = todosLosDatos.filter(d => !excluidos.includes(d.motivo));
+
+    if (!ctx || datosFiltrados.length === 0) {
         if (ctx) {
             const parent = ctx.parentElement;
-            if (parent) parent.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94A3B8;font-size:13px;">No hay motivos registrados en este periodo</div>';
+            if (parent) parent.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94A3B8;font-size:13px;">No hay motivos para mostrar</div>';
         }
         return;
     }
 
-    // Guardar datos completos para el onClick
-    const _motivosDatos = datos;
-    const labels = datos.map(d => d.motivo.length > 35 ? d.motivo.substring(0, 33) + '...' : d.motivo);
-    const valores = datos.map(d => d.cantidad);
+    const labels = datosFiltrados.map(d => d.motivo.length > 35 ? d.motivo.substring(0, 33) + '...' : d.motivo);
+    const valores = datosFiltrados.map(d => d.cantidad);
 
     chartInstances['motivos'] = new Chart(ctx, {
         type: 'bar',
@@ -678,8 +750,8 @@ function renderChartMotivos(datos) {
             datasets: [{
                 label: 'Frecuencia',
                 data: valores,
-                backgroundColor: datos.map((_, i) => CHART_COLORS_ALPHA[i % CHART_COLORS_ALPHA.length]),
-                borderColor: datos.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+                backgroundColor: datosFiltrados.map((_, i) => CHART_COLORS_ALPHA[i % CHART_COLORS_ALPHA.length]),
+                borderColor: datosFiltrados.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
                 borderWidth: 1.5,
                 borderRadius: 4
             }]
@@ -691,7 +763,7 @@ function renderChartMotivos(datos) {
             onClick: (evt, elements) => {
                 if (elements.length > 0) {
                     const idx = elements[0].index;
-                    const motivo = _motivosDatos[idx].motivo;
+                    const motivo = datosFiltrados[idx].motivo;
                     abrirDetalleMotivo(motivo);
                 }
             },
@@ -699,7 +771,7 @@ function renderChartMotivos(datos) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: c => `${c.parsed.x} ocurrencia${c.parsed.x !== 1 ? 's' : ''} — click para ver detalle`
+                        label: c => `${c.parsed.x} ocurrencia${c.parsed.x !== 1 ? 's' : ''} — click izquierdo: ver detalle | click derecho: excluir`
                     }
                 }
             },
@@ -718,8 +790,8 @@ function renderChartMotivos(datos) {
         }
     });
 
-    // Cursor pointer al pasar sobre las barras
     ctx.style.cursor = 'pointer';
+    ctx.oncontextmenu = null;
 }
 
 async function abrirDetalleMotivo(motivo) {
@@ -734,10 +806,18 @@ async function abrirDetalleMotivo(motivo) {
     const fechaDesde = document.getElementById('dash-fecha-desde').value;
     const fechaHasta = document.getElementById('dash-fecha-hasta').value;
     const bodega = document.getElementById('dash-bodega')?.value || '';
-    const bodegaParam = bodega ? `&bodega=${bodega}` : '';
+    const marca = document.getElementById('dash-marca')?.value || '';
+    const contador = document.getElementById('dash-contador')?.value || '';
+    let bodegaParam = '';
+    if (bodega) {
+        bodegaParam = `&bodega=${bodega}`;
+    } else if (marca && MARCAS_BODEGAS[marca]) {
+        bodegaParam = MARCAS_BODEGAS[marca].map(b => `&bodega=${b}`).join('');
+    }
+    const contadorParam = contador ? `&contador=${encodeURIComponent(contador)}` : '';
 
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/reportes/motivos/detalle?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}&motivo=${encodeURIComponent(motivo)}${bodegaParam}`);
+        const res = await fetch(`${CONFIG.API_URL}/api/reportes/motivos/detalle?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}&motivo=${encodeURIComponent(motivo)}${bodegaParam}${contadorParam}`);
         if (!res.ok) throw new Error('Error');
         const productos = await res.json();
 
@@ -746,32 +826,49 @@ async function abrirDetalleMotivo(motivo) {
             return;
         }
 
-        const totalVeces = productos.reduce((s, p) => s + p.veces, 0);
+        const filasMotivo = (lista) => lista.map(p => {
+            const difColor = p.diferencia < 0 ? 'color:var(--accent);' : p.diferencia > 0 ? 'color:var(--success);' : 'color:#94A3B8;';
+            return `<tr>
+                <td style="font-size:11px;color:#475569;white-space:nowrap;">${escapeHtml(p.fecha)}</td>
+                <td style="font-weight:500;">${escapeHtml(p.nombre)}</td>
+                <td style="font-size:11px;color:#64748B;">${escapeHtml(p.local)}</td>
+                <td style="text-align:center;font-weight:700;${difColor}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
+                <td style="font-size:11px;color:#475569;">${p.responsable ? `👤 ${escapeHtml(p.responsable)}` : '<span style="color:#CBD5E1;">—</span>'}</td>
+                <td style="font-size:11px;color:#64748B;font-style:italic;">${p.observacion ? escapeHtml(p.observacion) : '<span style="color:#CBD5E1;">—</span>'}</td>
+            </tr>`;
+        }).join('');
+
+        // Locales únicos para el dropdown
+        const localesUnicos = [...new Set(productos.map(p => p.local))].sort();
+        const opcionesLocales = localesUnicos.map(l => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
+
         body.innerHTML = `
-            <div style="margin-bottom:12px;font-size:13px;color:var(--text-medium);">
-                <strong>${totalVeces}</strong> ocurrencia${totalVeces !== 1 ? 's' : ''} en <strong>${productos.length}</strong> producto${productos.length !== 1 ? 's' : ''}
+            <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:13px;color:var(--text-medium);"><strong id="popup-motivo-count">${productos.length}</strong> ocurrencia${productos.length !== 1 ? 's' : ''}</span>
+                <select id="filtro-popup-motivo-local" onchange="_filtrarPopupMotivo()"
+                    style="padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-size:12px;color:#475569;">
+                    <option value="">Todos los locales</option>
+                    ${opcionesLocales}
+                </select>
+                <input id="filtro-popup-motivo" type="text" placeholder="Buscar producto o responsable..." oninput="_filtrarPopupMotivo()"
+                    style="padding:5px 10px;border:1px solid #E2E8F0;border-radius:6px;font-size:12px;flex:1;min-width:160px;">
             </div>
             <table class="usuarios-tabla" style="margin:0;width:100%;">
                 <thead>
                     <tr>
+                        <th style="text-align:left;">Fecha</th>
                         <th style="text-align:left;">Producto</th>
-                        <th style="text-align:center;">Veces</th>
-                        <th style="text-align:center;">Dif. Total</th>
-                        <th style="text-align:left;">Bodegas</th>
+                        <th style="text-align:left;">Local</th>
+                        <th style="text-align:center;">Diferencia</th>
+                        <th style="text-align:left;">Responsable</th>
+                        <th style="text-align:left;">Observación</th>
                     </tr>
                 </thead>
-                <tbody>
-                    ${productos.map(p => `
-                        <tr>
-                            <td style="font-weight:500;">${p.nombre}</td>
-                            <td style="text-align:center;font-weight:700;color:var(--primary);">${p.veces}</td>
-                            <td style="text-align:center;color:${p.diferencia_total > 0 ? 'var(--accent)' : '#94A3B8'};">${p.diferencia_total}</td>
-                            <td style="font-size:11px;color:#64748B;">${p.bodegas}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
+                <tbody id="popup-motivo-tbody">${filasMotivo(productos)}</tbody>
             </table>
         `;
+        window._popupMotivoData = productos;
+        window._filasMotivo = filasMotivo;
     } catch(e) {
         body.innerHTML = '<p style="text-align:center;color:var(--accent);padding:20px;">Error al cargar detalle</p>';
     }
@@ -779,6 +876,81 @@ async function abrirDetalleMotivo(motivo) {
 
 function cerrarModalMotivo() {
     document.getElementById('modal-motivo').classList.add('hidden');
+}
+
+function _filtrarPopupTend(texto, allData) {
+    const data = allData || window._popupTendData || [];
+    const q = texto.toLowerCase().trim();
+    const filtrado = q ? data.filter(p => p.nombre.toLowerCase().includes(q) || (p.motivo||'').toLowerCase().includes(q) || (p.responsable||'').toLowerCase().includes(q)) : data;
+    const tbody = document.getElementById('popup-tend-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = filtrado.map(p => {
+        const difColor = p.diferencia < 0 ? 'color:var(--accent);' : 'color:var(--success);';
+        return `<tr>
+            <td style="font-weight:500;">${escapeHtml(p.nombre)}</td>
+            <td style="text-align:center;">${p.sistema}</td>
+            <td style="text-align:center;">${p.conteo}</td>
+            <td style="text-align:center;font-weight:700;${difColor}">${p.diferencia > 0 ? '+' : ''}${p.diferencia.toFixed(3)}</td>
+            <td style="font-size:11px;color:#64748B;">${p.motivo || '-'}</td>
+            <td style="font-size:11px;color:#475569;">${p.responsable ? `👤 ${escapeHtml(p.responsable)}` : '<span style="color:#CBD5E1;">—</span>'}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="6" style="text-align:center;color:#94A3B8;padding:12px;">Sin resultados</td></tr>';
+}
+
+function _filtrarPopupMotivo() {
+    const data = window._popupMotivoData || [];
+    const q = (document.getElementById('filtro-popup-motivo')?.value || '').toLowerCase().trim();
+    const localSel = (document.getElementById('filtro-popup-motivo-local')?.value || '').toLowerCase();
+    const filtrado = data.filter(p => {
+        const passLocal = !localSel || p.local.toLowerCase() === localSel;
+        const passTexto = !q || p.nombre.toLowerCase().includes(q) || (p.responsable||'').toLowerCase().includes(q) || p.fecha.includes(q) || (p.observacion||'').toLowerCase().includes(q);
+        return passLocal && passTexto;
+    });
+    const tbody = document.getElementById('popup-motivo-tbody');
+    if (!tbody || !window._filasMotivo) return;
+    tbody.innerHTML = window._filasMotivo(filtrado) || '<tr><td colspan="6" style="text-align:center;color:#94A3B8;padding:12px;">Sin resultados</td></tr>';
+    const cnt = document.getElementById('popup-motivo-count');
+    if (cnt) cnt.textContent = filtrado.length;
+}
+
+function renderContadoresResumen(contadores) {
+    const wrapper = document.getElementById('dash-contadores-wrapper');
+    if (!wrapper) return;
+
+    if (!contadores || contadores.length === 0) {
+        wrapper.innerHTML = '<div style="padding:20px;text-align:center;color:#94A3B8;font-size:13px;">Sin actividad de contadores en este periodo</div>';
+        return;
+    }
+
+    const filas = contadores.map(c => `
+        <tr>
+            <td style="font-weight:600;color:#123450;">
+                <span style="display:inline-block;width:28px;height:28px;border-radius:50%;background:#EEF2FF;color:#123450;text-align:center;line-height:28px;font-size:12px;margin-right:8px;font-weight:700;">
+                    ${escapeHtml((c.nombre || '?')[0].toUpperCase())}
+                </span>
+                ${escapeHtml(c.nombre)}
+            </td>
+            <td style="text-align:center;font-weight:700;color:#123450;">${c.dias_contados}</td>
+            <td style="text-align:center;font-weight:700;">${c.total_items}</td>
+            <td style="text-align:center;">${c.bodegas_cubiertas}</td>
+            <td style="text-align:center;color:#64748B;font-size:12px;">${c.ultima_actividad || '—'}</td>
+        </tr>
+    `).join('');
+
+    wrapper.innerHTML = `
+        <table class="usuarios-tabla" style="margin:0;width:100%;">
+            <thead>
+                <tr>
+                    <th style="text-align:left;">Contador</th>
+                    <th style="text-align:center;">Días</th>
+                    <th style="text-align:center;">Items Contados</th>
+                    <th style="text-align:center;">Bodegas</th>
+                    <th style="text-align:center;">Última Actividad</th>
+                </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+        </table>
+    `;
 }
 
 // ==================== FIN DASHBOARD ====================
@@ -985,6 +1157,10 @@ function showMainScreen() {
 
     // Cargar selector de impersonacion si es admin
     cargarSelectorImpersonar();
+
+    // Inicializar filtros del dashboard
+    filtrarBodegasPorMarca();
+    _cargarContadoresDash();
 }
 
 // ==================== NAVEGACION ====================
@@ -1303,7 +1479,9 @@ async function consultarInventario() {
                 corregido: p.corregido || false,
                 justificado: p.justificado || false,
                 cantidad_justificada: parseFloat(p.cantidad_justificada) || 0,
-                costo_unitario: parseFloat(p.costo_unitario) || 0
+                costo_unitario: parseFloat(p.costo_unitario) || 0,
+                contado_por_nombre: p.contado_por_nombre || '',
+                contado2_por_nombre: p.contado2_por_nombre || ''
             }));
 
             // Verificar si ya tiene conteo 1 guardado
@@ -1442,11 +1620,23 @@ function renderProductosInventario() {
                      state.etapaConteo === 2 ? `SEGUNDO CONTEO (${productosAMostrar.length} con diferencia)` :
                      'CONTEO FINALIZADO';
 
+    // Calcular quiénes contaron (nombres únicos de conteo1 y conteo2)
+    const _contadores1 = [...new Set(state.productos.map(p => p.contado_por_nombre).filter(Boolean))];
+    const _contadores2 = [...new Set(state.productos.map(p => p.contado2_por_nombre).filter(Boolean))];
+    let contadorBadgeHtml = '';
+    if (_contadores1.length > 0) {
+        contadorBadgeHtml += `<span class="sem-cerrada-info" style="margin-left:12px;font-size:12px;"><i class="fas fa-user"></i> Conteo 1: ${escapeHtml(_contadores1.join(', '))}</span>`;
+    }
+    if (_contadores2.length > 0) {
+        contadorBadgeHtml += `<span class="sem-cerrada-info" style="margin-left:8px;font-size:12px;"><i class="fas fa-user-check"></i> Conteo 2: ${escapeHtml(_contadores2.join(', '))}</span>`;
+    }
+
     // Construir tabla principal
     let tablaHtml = `
-        <div class="etapa-indicator etapa-${state.etapaConteo}">
-            <i class="fas fa-${state.etapaConteo === 1 ? 'edit' : state.etapaConteo === 2 ? 'exclamation-triangle' : 'check-circle'}"></i>
-            ${etapaTexto}
+        <div class="etapa-indicator etapa-${state.etapaConteo}" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+            <span><i class="fas fa-${state.etapaConteo === 1 ? 'edit' : state.etapaConteo === 2 ? 'exclamation-triangle' : 'check-circle'}"></i>
+            ${etapaTexto}</span>
+            ${contadorBadgeHtml}
         </div>
         <table class="tabla-inventario">
             <thead>
@@ -1578,8 +1768,14 @@ async function guardarConteoDirecto(input) {
             if (prod) {
                 if (conteoNum === 2) {
                     prod.cantidad_contada_2 = cantidad;
+                    if (state.user && !prod.contado2_por_nombre) {
+                        prod.contado2_por_nombre = state.user.nombre || state.user.username || '';
+                    }
                 } else {
                     prod.cantidad_contada = cantidad;
+                    if (state.user && !prod.contado_por_nombre) {
+                        prod.contado_por_nombre = state.user.nombre || state.user.username || '';
+                    }
                 }
             }
 
@@ -1870,7 +2066,9 @@ async function cargarObservaciones() {
             motivo: p.motivo || '',
             corregido: p.corregido || false,
             justificado: p.justificado || false,
-            cantidad_justificada: parseFloat(p.cantidad_justificada) || 0
+            cantidad_justificada: parseFloat(p.cantidad_justificada) || 0,
+            contado_por_nombre: p.contado_por_nombre || '',
+            contado2_por_nombre: p.contado2_por_nombre || ''
         }));
 
         // Cargar observaciones manuales
@@ -1926,6 +2124,24 @@ function renderObservaciones() {
     const esAdmin = _esAdminOSupervisor();
 
     let html = '';
+
+    // Calcular contadores únicos para observaciones
+    const _obsContadores1 = [...new Set(_obsProductos.map(p => p.contado_por_nombre).filter(Boolean))];
+    const _obsContadores2 = [...new Set(_obsProductos.map(p => p.contado2_por_nombre).filter(Boolean))];
+    let obsContadorHtml = '';
+    if (_obsContadores1.length > 0) {
+        obsContadorHtml += `<span class="sem-cerrada-info" style="margin-left:10px;font-size:12px;"><i class="fas fa-user"></i> Conteo 1: ${escapeHtml(_obsContadores1.join(', '))}</span>`;
+    }
+    if (_obsContadores2.length > 0) {
+        obsContadorHtml += `<span class="sem-cerrada-info" style="margin-left:8px;font-size:12px;"><i class="fas fa-user-check"></i> Conteo 2: ${escapeHtml(_obsContadores2.join(', '))}</span>`;
+    }
+    if (obsContadorHtml) {
+        html += `<div style="margin-bottom:10px;padding:10px 14px;background:#EFF6FF;border-radius:8px;border-left:3px solid #123450;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+            <i class="fas fa-users" style="color:#123450;"></i>
+            <span style="font-size:12px;font-weight:600;color:#123450;">Contado por:</span>
+            ${obsContadorHtml}
+        </div>`;
+    }
 
     // === TABLA 1: Productos del conteo con diferencia ===
     if (todosConteo.length > 0) {
@@ -3484,6 +3700,15 @@ function exportarHistoricoExcel() {
     window.open(url, '_blank');
 }
 
+function _fmtContadores(contadores) {
+    if (!contadores || !contadores.length) return '<span style="color:#94A3B8;font-size:10px;">Sin registrar</span>';
+    return contadores.map(c => {
+        const tipo = contadores.length > 1 ? ` <span style="opacity:0.7;font-size:9px;">(${c.tipo})</span>` : '';
+        const hora = c.hora_inicio ? `<br><span style="font-size:9px;color:#94A3B8;">${c.hora_inicio}${c.hora_fin && c.hora_fin !== c.hora_inicio ? ' - ' + c.hora_fin : ''}</span>` : '';
+        return `<span style="font-size:10px;">👤 ${escapeHtml(c.nombre || 'Sin nombre')}${tipo}${hora}</span>`;
+    }).join('<br>');
+}
+
 function _renderHistPivot(data) {
     const container = document.getElementById('historico-list');
     const { fechas, productos } = data;
@@ -3654,7 +3879,11 @@ function _renderHistPivot(data) {
                 <th class="bpiv-cod">Código</th>
                 <th class="bpiv-nom">Producto</th>
                 <th class="bpiv-uni">Unid.</th>
-                ${fechas.map(f => `<th class="bpiv-fecha">${fmtF(f)}</th>`).join('')}
+                ${fechas.map(f => {
+                    const cInfo = (data.contadores || {})[f];
+                    const contHtml = _fmtContadores(cInfo);
+                    return `<th class="bpiv-fecha">${fmtF(f)}<br>${contHtml}</th>`;
+                }).join('')}
                 <th class="bpiv-tot">Total Dif.</th>
             </tr>
         </thead>

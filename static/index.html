@@ -426,18 +426,15 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label><i class="fas fa-warehouse"></i> Bodega</label>
+                            <label><i class="fas fa-warehouse"></i> Local</label>
                             <select id="dash-bodega">
-                                <option value="">Todas las bodegas</option>
-                                <option value="real_audiencia" data-marca="chios">Real Audiencia</option>
-                                <option value="floreana" data-marca="chios">Floreana</option>
-                                <option value="portugal" data-marca="chios">Portugal</option>
-                                <option value="santo_cachon_real" data-marca="santo_cachon">Santo Cachon Real</option>
-                                <option value="santo_cachon_portugal" data-marca="santo_cachon">Santo Cachon Portugal</option>
-                                <option value="simon_bolon" data-marca="simon_bolon">Simon Bolon</option>
-                                <option value="bodega_principal" data-marca="operaciones">Bodega Principal</option>
-                                <option value="materia_prima" data-marca="operaciones">Materia Prima</option>
-                                <option value="planta" data-marca="operaciones">Planta de Produccion</option>
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-user-check"></i> Contador</label>
+                            <select id="dash-contador">
+                                <option value="">Todos</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -483,12 +480,16 @@
                             </div>
                         </div>
                         <div class="chart-card">
-                            <div class="chart-card-header">
-                                <i class="fas fa-tags"></i> Motivos mas Frecuentes
+                            <div class="chart-card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                                <span><i class="fas fa-tags"></i> Motivos mas Frecuentes</span>
+                                <button id="btn-restaurar-motivos" onclick="_restaurarTodosMotivos()" style="display:none;font-size:11px;padding:3px 8px;border:1px solid #E2E8F0;border-radius:6px;background:#F8FAFC;color:#475569;cursor:pointer;">
+                                    <i class="fas fa-undo"></i> Restaurar todos
+                                </button>
                             </div>
                             <div class="chart-card-body">
                                 <canvas id="chart-motivos"></canvas>
                             </div>
+                            <div id="motivos-leyenda" style="padding:8px 16px 12px;display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;"></div>
                         </div>
                         <div class="chart-card chart-card-full">
                             <div class="chart-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
@@ -521,6 +522,17 @@
                                     </thead>
                                     <tbody id="dash-top-tbody"></tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card chart-card-full" style="margin-top:12px;">
+                        <div class="chart-card-header">
+                            <i class="fas fa-users"></i> Actividad de Contadores
+                        </div>
+                        <div class="chart-card-body" style="padding:0;">
+                            <div id="dash-contadores-wrapper" style="overflow-x:auto;">
+                                <div style="padding:20px;text-align:center;color:#94A3B8;font-size:13px;">Carga el dashboard para ver actividad</div>
                             </div>
                         </div>
                     </div>

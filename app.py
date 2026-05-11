@@ -551,6 +551,29 @@ def get_bodegas():
     ]
     return jsonify(bodegas)
 
+@app.route('/api/personas', methods=['GET'])
+def api_personas():
+    """Personas que han realizado conteos (para filtro de contador en dashboard)"""
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT c.contado_por as username,
+                   COALESCE(u.nombre, c.contado_por) as nombre
+            FROM goti.inventario_ciego_conteos c
+            LEFT JOIN goti.usuarios u ON u.username = c.contado_por
+            WHERE c.contado_por IS NOT NULL AND c.contado_por != ''
+            ORDER BY 2
+        """)
+        rows = cur.fetchall()
+        return jsonify([{'username': r['username'], 'nombre': r['nombre']} for r in rows])
+    except Exception as e:
+        print(f"Error en /api/personas: {e}")
+        return jsonify([]), 500
+    finally:
+        if conn: release_db(conn)
+
 @app.route('/api/inventario/consultar', methods=['GET'])
 def consultar_inventario():
     fecha = request.args.get('fecha')
@@ -580,15 +603,24 @@ def consultar_inventario():
         conn.commit()
 
         cur.execute("""
-            SELECT id, codigo, nombre, unidad, cantidad, cantidad_contada, cantidad_contada_2, observaciones,
-                   COALESCE(motivo, '') as motivo,
-                   COALESCE(corregido, FALSE) as corregido,
-                   COALESCE(justificado, FALSE) as justificado,
-                   COALESCE(cantidad_justificada, 0) as cantidad_justificada,
-                   COALESCE(costo_unitario, 0) as costo_unitario
-            FROM goti.inventario_ciego_conteos
-            WHERE fecha = %s AND local = %s
-            ORDER BY codigo
+            SELECT c.id, c.codigo, c.nombre, c.unidad, c.cantidad, c.cantidad_contada, c.cantidad_contada_2,
+                   c.observaciones,
+                   COALESCE(c.motivo, '') as motivo,
+                   COALESCE(c.corregido, FALSE) as corregido,
+                   COALESCE(c.justificado, FALSE) as justificado,
+                   COALESCE(c.cantidad_justificada, 0) as cantidad_justificada,
+                   COALESCE(c.costo_unitario, 0) as costo_unitario,
+                   c.contado_por,
+                   c.contado2_por,
+                   u1.nombre as contado_por_nombre,
+                   u2.nombre as contado2_por_nombre,
+                   c.contado_at,
+                   c.contado2_at
+            FROM goti.inventario_ciego_conteos c
+            LEFT JOIN goti.usuarios u1 ON u1.username = c.contado_por
+            LEFT JOIN goti.usuarios u2 ON u2.username = c.contado2_por
+            WHERE c.fecha = %s AND c.local = %s
+            ORDER BY c.codigo
         """, (fecha, local))
 
         productos = cur.fetchall()
@@ -764,6 +796,7 @@ def reporte_motivos():
     bodegas = request.args.getlist('bodega')
     bodegas = [b for b in bodegas if b]
     producto = request.args.get('producto', '')
+    contador = request.args.get('contador', '').strip()
 
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta requeridos'}), 400
@@ -815,6 +848,9 @@ def reporte_motivos():
         elif len(bodegas) > 1:
             query1 += " AND local IN (" + ",".join(["%s"] * len(bodegas)) + ")"
             params1.extend(bodegas)
+        if contador:
+            query1 += " AND contado_por = %s"
+            params1.append(contador)
         query1 += " GROUP BY motivo"
 
         cur.execute(query1, params1)
@@ -865,6 +901,7 @@ def reporte_diferencias_fecha():
     """Productos con diferencia para una fecha y bodega específica"""
     fecha = request.args.get('fecha')
     bodega = request.args.get('bodega', '')
+    excluir_justificados = request.args.get('excluir_justificados', '0') == '1'
 
     if not fecha:
         return jsonify({'error': 'fecha requerida'}), 400
@@ -875,21 +912,25 @@ def reporte_diferencias_fecha():
         cur = conn.cursor()
 
         query = """
-            SELECT nombre, unidad,
-                   cantidad as sistema,
-                   COALESCE(cantidad_contada_2, cantidad_contada) as conteo,
-                   COALESCE(cantidad_contada_2, cantidad_contada) - cantidad as diferencia,
-                   COALESCE(motivo, '') as motivo
-            FROM goti.inventario_ciego_conteos
-            WHERE fecha = %s
-              AND COALESCE(cantidad_contada_2, cantidad_contada) IS NOT NULL
-              AND COALESCE(cantidad_contada_2, cantidad_contada) - cantidad != 0
+            SELECT c.nombre, c.unidad,
+                   c.cantidad as sistema,
+                   COALESCE(c.cantidad_contada_2, c.cantidad_contada) as conteo,
+                   COALESCE(c.cantidad_contada_2, c.cantidad_contada) - c.cantidad as diferencia,
+                   COALESCE(c.motivo, '') as motivo,
+                   COALESCE(u1.nombre, c.contado_por, '') as responsable
+            FROM goti.inventario_ciego_conteos c
+            LEFT JOIN goti.usuarios u1 ON u1.username = c.contado_por
+            WHERE c.fecha = %s
+              AND COALESCE(c.cantidad_contada_2, c.cantidad_contada) IS NOT NULL
+              AND COALESCE(c.cantidad_contada_2, c.cantidad_contada) - c.cantidad != 0
         """
         params = [fecha]
         if bodega:
-            query += " AND local = %s"
+            query += " AND c.local = %s"
             params.append(bodega)
-        query += " ORDER BY ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad) DESC LIMIT 20"
+        if excluir_justificados:
+            query += " AND (c.justificado IS NULL OR c.justificado = FALSE)"
+        query += " ORDER BY ABS(COALESCE(c.cantidad_contada_2, c.cantidad_contada) - c.cantidad) DESC LIMIT 50"
 
         cur.execute(query, params)
         productos = [{
@@ -898,7 +939,8 @@ def reporte_diferencias_fecha():
             'sistema': float(r['sistema']),
             'conteo': float(r['conteo']),
             'diferencia': float(r['diferencia']),
-            'motivo': r['motivo']
+            'motivo': r['motivo'],
+            'responsable': r['responsable']
         } for r in cur.fetchall()]
 
         return jsonify(productos)
@@ -914,7 +956,10 @@ def reporte_motivo_detalle():
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
     motivo = request.args.get('motivo', '')
-    bodega = request.args.get('bodega', '')
+    bodegas_f = request.args.getlist('bodega')
+    bodegas_f = [b for b in bodegas_f if b]
+    contador = request.args.get('contador', '').strip()
+    excluir_justificados = request.args.get('excluir_justificados', '0') == '1'
 
     if not fecha_desde or not fecha_hasta or not motivo:
         return jsonify({'error': 'fecha_desde, fecha_hasta y motivo requeridos'}), 400
@@ -924,63 +969,69 @@ def reporte_motivo_detalle():
         conn = get_db()
         cur = conn.cursor()
 
-        # Productos de conteos con ese motivo
+        # Ocurrencias individuales de conteos con ese motivo
         query1 = """
-            SELECT nombre, local, COUNT(*) as veces,
-                   SUM(ABS(COALESCE(cantidad_contada_2, cantidad_contada) - cantidad)) as diferencia_total
-            FROM goti.inventario_ciego_conteos
-            WHERE fecha >= %s AND fecha <= %s AND motivo = %s
+            SELECT c.fecha, c.nombre, c.local,
+                   COALESCE(c.cantidad_contada_2, c.cantidad_contada) - c.cantidad as diferencia,
+                   COALESCE(u.nombre, c.contado_por, '') as responsable,
+                   COALESCE(c.observaciones, '') as observacion
+            FROM goti.inventario_ciego_conteos c
+            LEFT JOIN goti.usuarios u ON u.username = c.contado_por
+            WHERE c.fecha >= %s AND c.fecha <= %s AND c.motivo = %s
         """
         params1 = [fecha_desde, fecha_hasta, motivo]
-        if bodega:
-            query1 += " AND local = %s"
-            params1.append(bodega)
-        query1 += " GROUP BY nombre, local ORDER BY veces DESC, diferencia_total DESC"
+        if len(bodegas_f) == 1:
+            query1 += " AND c.local = %s"
+            params1.append(bodegas_f[0])
+        elif len(bodegas_f) > 1:
+            query1 += " AND c.local IN (" + ",".join(["%s"] * len(bodegas_f)) + ")"
+            params1.extend(bodegas_f)
+        if contador:
+            query1 += " AND c.contado_por = %s"
+            params1.append(contador)
+        if excluir_justificados:
+            query1 += " AND (c.justificado IS NULL OR c.justificado = FALSE)"
+        query1 += " ORDER BY c.fecha DESC, c.local"
         cur.execute(query1, params1)
-        productos_conteo = cur.fetchall()
+        rows_conteo = cur.fetchall()
 
-        # Productos de observaciones manuales con ese motivo
+        # Ocurrencias individuales de observaciones manuales con ese motivo
         query2 = """
-            SELECT nombre, local, COUNT(*) as veces,
-                   SUM(ABS(diferencia)) as diferencia_total
+            SELECT fecha, nombre, local, diferencia, '' as responsable
             FROM goti.observaciones_manuales
             WHERE fecha >= %s AND fecha <= %s AND motivo = %s
         """
         params2 = [fecha_desde, fecha_hasta, motivo]
-        if bodega:
+        if len(bodegas_f) == 1:
             query2 += " AND local = %s"
-            params2.append(bodega)
-        query2 += " GROUP BY nombre, local ORDER BY veces DESC"
+            params2.append(bodegas_f[0])
+        elif len(bodegas_f) > 1:
+            query2 += " AND local IN (" + ",".join(["%s"] * len(bodegas_f)) + ")"
+            params2.extend(bodegas_f)
+        query2 += " ORDER BY fecha DESC, local"
         cur.execute(query2, params2)
-        productos_manual = cur.fetchall()
-
-        # Combinar
-        combinado = {}
-        for p in productos_conteo:
-            key = p['nombre']
-            if key not in combinado:
-                combinado[key] = {'nombre': p['nombre'], 'veces': 0, 'diferencia_total': 0, 'bodegas': set()}
-            combinado[key]['veces'] += p['veces']
-            combinado[key]['diferencia_total'] += float(p['diferencia_total'] or 0)
-            combinado[key]['bodegas'].add(BODEGAS_NOMBRES.get(p['local'], p['local']))
-
-        for p in productos_manual:
-            key = p['nombre']
-            if key not in combinado:
-                combinado[key] = {'nombre': p['nombre'], 'veces': 0, 'diferencia_total': 0, 'bodegas': set()}
-            combinado[key]['veces'] += p['veces']
-            combinado[key]['diferencia_total'] += float(p['diferencia_total'] or 0)
-            combinado[key]['bodegas'].add(BODEGAS_NOMBRES.get(p['local'], p['local']))
+        rows_manual = cur.fetchall()
 
         resultado = []
-        for v in combinado.values():
+        for r in rows_conteo:
             resultado.append({
-                'nombre': v['nombre'],
-                'veces': v['veces'],
-                'diferencia_total': round(v['diferencia_total'], 3),
-                'bodegas': ', '.join(sorted(v['bodegas']))
+                'fecha': r['fecha'].strftime('%d/%m/%Y'),
+                'nombre': r['nombre'],
+                'local': BODEGAS_NOMBRES.get(r['local'], r['local']),
+                'diferencia': round(float(r['diferencia'] or 0), 3),
+                'responsable': r['responsable'],
+                'observacion': r['observacion']
             })
-        resultado.sort(key=lambda x: x['veces'], reverse=True)
+        for r in rows_manual:
+            resultado.append({
+                'fecha': r['fecha'].strftime('%d/%m/%Y'),
+                'nombre': r['nombre'],
+                'local': BODEGAS_NOMBRES.get(r['local'], r['local']),
+                'diferencia': round(float(r['diferencia'] or 0), 3),
+                'responsable': '',
+                'observacion': ''
+            })
+        resultado.sort(key=lambda x: x['fecha'], reverse=True)
 
         return jsonify(resultado)
     except Exception as e:
@@ -1479,7 +1530,39 @@ def historico_pivot():
             GROUP BY c.codigo, a.persona
         """, (fecha_desde, fecha_hasta, local))
         asig_rows = cur.fetchall()
+
+        # Obtener contadores (quién contó) por fecha
+        cur.execute("""
+            SELECT c.fecha,
+                   u.nombre as contador_nombre,
+                   MIN(c.contado_at) as hora_inicio,
+                   MAX(c.contado_at) as hora_fin,
+                   'conteo1' as tipo
+            FROM goti.inventario_ciego_conteos c
+            LEFT JOIN goti.usuarios u ON u.username = c.contado_por
+            WHERE c.fecha >= %s AND c.fecha <= %s AND c.local = %s
+              AND c.contado_por IS NOT NULL
+            GROUP BY c.fecha, u.nombre
+
+            UNION ALL
+
+            SELECT c.fecha,
+                   u.nombre as contador_nombre,
+                   MIN(c.contado2_at) as hora_inicio,
+                   MAX(c.contado2_at) as hora_fin,
+                   'conteo2' as tipo
+            FROM goti.inventario_ciego_conteos c
+            LEFT JOIN goti.usuarios u ON u.username = c.contado2_por
+            WHERE c.fecha >= %s AND c.fecha <= %s AND c.local = %s
+              AND c.contado2_por IS NOT NULL
+            GROUP BY c.fecha, u.nombre
+
+            ORDER BY fecha, tipo
+        """, (fecha_desde, fecha_hasta, local, fecha_desde, fecha_hasta, local))
+        cont_rows = cur.fetchall()
+
         release_db(conn)
+        conn = None
 
         # Mapa codigo -> {persona: {cant_neta, desc_neto, cant_ajustada, desc_ajustado}}
         personas_por_codigo = {}
@@ -1523,10 +1606,25 @@ def historico_pivot():
         # Lista de todas las personas únicas del periodo
         todas_personas = sorted({p for ps in personas_por_codigo.values() for p in ps.keys()})
 
+        contadores_por_fecha = {}
+        for cr in cont_rows:
+            f = str(cr['fecha'])
+            if f not in contadores_por_fecha:
+                contadores_por_fecha[f] = []
+            hi = cr['hora_inicio'].strftime('%H:%M') if cr['hora_inicio'] else ''
+            hf = cr['hora_fin'].strftime('%H:%M') if cr['hora_fin'] else ''
+            contadores_por_fecha[f].append({
+                'nombre': cr['contador_nombre'] or '',
+                'hora_inicio': hi,
+                'hora_fin': hf,
+                'tipo': 'Conteo 1' if cr['tipo'] == 'conteo1' else 'Conteo 2'
+            })
+
         return jsonify({
             'fechas': sorted(fechas),
             'productos': list(productos.values()),
-            'personas': todas_personas
+            'personas': todas_personas,
+            'contadores': contadores_por_fecha
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1830,6 +1928,8 @@ def reporte_dashboard():
     bodegas = request.args.getlist('bodega')
     bodegas = [b for b in bodegas if b]  # filtrar vacíos
     producto = request.args.get('producto', '').strip()
+    contador = request.args.get('contador', '').strip()
+    excluir_justificados = request.args.get('excluir_justificados', '0') == '1'
 
     if not fecha_desde or not fecha_hasta:
         return jsonify({'error': 'fecha_desde y fecha_hasta son requeridos'}), 400
@@ -1851,6 +1951,11 @@ def reporte_dashboard():
         if producto:
             filtro_extra += " AND codigo = %s"
             params.append(producto)
+        if contador:
+            filtro_extra += " AND (contado_por = %s OR contado2_por = %s)"
+            params.extend([contador, contador])
+        if excluir_justificados:
+            filtro_extra += " AND (justificado IS NULL OR justificado = FALSE)"
 
         # Resumen por bodega
         query = """
@@ -1966,11 +2071,42 @@ def reporte_dashboard():
             'total_dias': prom['total_dias'] or 0
         }
 
+        # Actividad de contadores en el periodo
+        query_cont = """
+            SELECT
+                u.nombre as contador,
+                c.contado_por as username,
+                COUNT(DISTINCT c.fecha) as dias_contados,
+                COUNT(*) as total_items,
+                COUNT(DISTINCT c.local) as bodegas_cubiertas,
+                MAX(c.contado_at) as ultima_actividad
+            FROM goti.inventario_ciego_conteos c
+            JOIN goti.usuarios u ON u.username = c.contado_por
+            WHERE c.fecha >= %s AND c.fecha <= %s
+              AND c.contado_por IS NOT NULL
+        """ + filtro_extra + """
+            GROUP BY u.nombre, c.contado_por
+            ORDER BY total_items DESC
+        """
+        cur.execute(query_cont, params)
+        contadores_data = []
+        for r in cur.fetchall():
+            ua = r['ultima_actividad']
+            contadores_data.append({
+                'nombre': r['contador'],
+                'username': r['username'],
+                'dias_contados': r['dias_contados'],
+                'total_items': r['total_items'],
+                'bodegas_cubiertas': r['bodegas_cubiertas'],
+                'ultima_actividad': ua.strftime('%d/%m %H:%M') if ua else ''
+            })
+
         return jsonify({
             'bodegas': bodegas_data,
             'top_descuadre': top_descuadre,
             'cumplimiento': cumplimiento,
-            'promedios': promedios
+            'promedios': promedios,
+            'contadores': contadores_data
         })
     except Exception as e:
         print(f"Error en /api/reportes/dashboard: {e}")
@@ -1989,6 +2125,8 @@ def reporte_tendencias_temporal():
     fecha_hasta = request.args.get('fecha_hasta')
     motivo = request.args.get('motivo', '')
     producto = request.args.get('producto', '')
+    contador = request.args.get('contador', '').strip()
+    excluir_justificados = request.args.get('excluir_justificados', '0') == '1'
 
     conn = None
     try:
@@ -2010,6 +2148,13 @@ def reporte_tendencias_temporal():
         if producto:
             motivo_filter += " AND codigo = %s"
             params.append(producto)
+
+        if contador:
+            motivo_filter += " AND (contado_por = %s OR contado2_por = %s)"
+            params.extend([contador, contador])
+
+        if excluir_justificados:
+            motivo_filter += " AND (justificado IS NULL OR justificado = FALSE)"
 
         query = f"""
             SELECT
