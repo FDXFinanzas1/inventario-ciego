@@ -2722,10 +2722,9 @@ def _cargar_personas_airtable():
         data = json_lib.loads(urllib.request.urlopen(req, timeout=10).read())
         for r in data.get('records', []):
             f = r.get('fields', {})
-            if f.get('estado') == 'Activo':
-                nombre = f.get('nombre', '')
-                if nombre:
-                    todos.append(nombre)
+            nombre = f.get('nombre', '')
+            if nombre:
+                todos.append(nombre)
         offset = data.get('offset')
         if not offset:
             break
