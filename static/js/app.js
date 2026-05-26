@@ -6207,6 +6207,9 @@ async function semanalCargar() {
         _semanalSemanaActual = dataDif.semana || semana;
         _semanalDiferencias = dataDif.diferencias || [];
 
+        // Reconstruir grupos desde asignaciones guardadas (necesario para semanas cerradas)
+        _semReconstruirGruposDesdeAsignaciones();
+
         // Mostrar info de semana
         semanalRenderInfo(_semanalSemanaActual);
         semanalRenderDiferencias(dataDif);
@@ -6372,10 +6375,14 @@ function semanalRenderDiferencias(data) {
     const diferencias = data.diferencias || [];
 
     if (diferencias.length === 0) {
-        container.classList.remove('hidden');
-        listEl.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay diferencias netas en esta semana (todo se compensó)</p></div>';
-        document.getElementById('btn-sem-guardar-todo').style.display = 'none';
-        return;
+        // Para semanas cerradas con asignaciones guardadas, continuar para mostrar el resumen
+        const gruposConDatos = (_semGrupos || []).filter(g => g.productos.length > 0 && g.personas.length > 0);
+        if (!esCerrada || gruposConDatos.length === 0) {
+            container.classList.remove('hidden');
+            listEl.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><p>No hay diferencias netas en esta semana (todo se compensó)</p></div>';
+            document.getElementById('btn-sem-guardar-todo').style.display = 'none';
+            return;
+        }
     }
 
     container.classList.remove('hidden');
@@ -9522,6 +9529,7 @@ function cprodRenderTabla(productos) {
             <th>Nombre</th>
             <th style="width:120px;text-align:center;">Medida</th>
             <th style="width:100px;text-align:center;">Equivalencia</th>
+            <th style="width:130px;text-align:center;">Tipo Conteo</th>
             <th style="width:80px;text-align:center;">Estado</th>
             <th style="width:100px;text-align:center;">Acciones</th>
         </tr></thead><tbody>`;
@@ -9535,6 +9543,13 @@ function cprodRenderTabla(productos) {
         const rowStyle = p.activo ? '' : 'opacity:0.55;';
         const unidad = p.unidad || 'Unidad';
         const equiv = parseFloat(p.equivalencia || 1);
+        const tipoConteo = p.tipo_conteo || 'diario';
+        const tipoConteoOpts = [
+            {v:'diario', label:'Control Diario'},
+            {v:'cruce', label:'Cruce Operativo'},
+            {v:'ambos', label:'Ambos'},
+        ];
+        const tipoConteoColors = {diario:'#3B82F6', cruce:'#F59E0B', ambos:'#10B981'};
 
         html += `<tr style="${rowStyle}">
             <td style="text-align:center;color:var(--text-light);font-size:12px;">${i + 1}</td>
@@ -9549,6 +9564,11 @@ function cprodRenderTabla(productos) {
                 <input type="number" value="${equiv}" min="0" step="0.01"
                     onchange="cprodEditarCampo(${p.id},'equivalencia',this.value)"
                     style="width:70px;padding:5px 6px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;text-align:center;background:var(--bg-white);color:var(--text-dark);font-family:'JetBrains Mono',monospace;">
+            </td>
+            <td style="text-align:center;">
+                <select onchange="cprodEditarCampo(${p.id},'tipo_conteo',this.value)" style="padding:5px 8px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;background:var(--bg-white);color:${tipoConteoColors[tipoConteo]||'#6B7280'};cursor:pointer;font-weight:600;font-family:'Inter',sans-serif;">
+                    ${tipoConteoOpts.map(o => `<option value="${o.v}" ${o.v===tipoConteo?'selected':''}>${o.label}</option>`).join('')}
+                </select>
             </td>
             <td style="text-align:center;">
                 <span class="badge ${badgeClass}" style="font-size:0.65rem;">${badgeText}</span>

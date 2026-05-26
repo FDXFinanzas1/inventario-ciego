@@ -755,9 +755,21 @@
                         <div class="form-group" style="flex:1; max-width:300px;">
                             <label><i class="fas fa-warehouse"></i> Bodega</label>
                             <select id="cruce-bodega-global" onchange="cruceBodegaGlobalCambio()">
-                                <option value="bodega_principal">Bodega Principal</option>
-                                <option value="materia_prima">Materia Prima</option>
-                                <option value="planta">Planta de Produccion</option>
+                                <optgroup label="── Bodegas Centrales ──">
+                                    <option value="bodega_principal">Bodega Principal</option>
+                                    <option value="materia_prima">Materia Prima</option>
+                                    <option value="planta">Planta de Produccion</option>
+                                </optgroup>
+                                <optgroup label="── Chios Burger ──">
+                                    <option value="real_audiencia">Real Audiencia</option>
+                                    <option value="floreana">Floreana</option>
+                                    <option value="portugal">Portugal</option>
+                                </optgroup>
+                                <optgroup label="── Otros Locales ──">
+                                    <option value="santo_cachon_real">Santo Cachon Real</option>
+                                    <option value="santo_cachon_portugal">Santo Cachon Portugal</option>
+                                    <option value="simon_bolon">Simon Bolon</option>
+                                </optgroup>
                             </select>
                         </div>
                     </div>
@@ -1927,6 +1939,14 @@
                             <div class="form-group" style="margin:0;min-width:90px;">
                                 <label style="font-size:12px;color:var(--text-gray);font-weight:600;">Equivalencia</label>
                                 <input type="number" id="cprod-equivalencia" class="input-merma" value="1" min="0" step="0.01" style="padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;">
+                            </div>
+                            <div class="form-group" style="margin:0;min-width:140px;">
+                                <label style="font-size:12px;color:var(--text-gray);font-weight:600;">Tipo Conteo</label>
+                                <select id="cprod-tipo-conteo" class="input-merma" style="padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);">
+                                    <option value="diario">Control Diario</option>
+                                    <option value="cruce">Cruce Operativo</option>
+                                    <option value="ambos">Ambos</option>
+                                </select>
                             </div>
                             <button class="btn-primary btn-sm" onclick="cprodAgregar()" style="padding:10px 24px;border-radius:var(--radius-sm);">
                                 <i class="fas fa-save"></i> Guardar

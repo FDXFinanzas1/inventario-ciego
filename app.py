@@ -2290,7 +2290,13 @@ BODEGA_CENTROS = {
 BODEGAS_OPERATIVAS = {
     'bodega_principal': 'Bodega Principal',
     'materia_prima': 'Materia Prima',
-    'planta': 'Planta de Produccion'
+    'planta': 'Planta de Produccion',
+    'real_audiencia': 'Real Audiencia (Chios)',
+    'floreana': 'Floreana (Chios)',
+    'portugal': 'Portugal (Chios)',
+    'santo_cachon_real': 'Santo Cachon Real',
+    'santo_cachon_portugal': 'Santo Cachon Portugal',
+    'simon_bolon': 'Simon Bolon',
 }
 
 @app.route('/api/cruce/ejecuciones', methods=['GET'])
@@ -3693,12 +3699,15 @@ def diferencias_semana(semana_id):
         for a in asignaciones:
             asig_map[a['codigo']] = {
                 'id': a['id'],
-                'diferencia_semanal': a['diferencia_semanal'],
-                'costo_unitario': a['costo_unitario'],
+                'nombre': a['nombre'],
+                'unidad': a['unidad'],
+                'diferencia_semanal': float(a['diferencia_semanal']) if a['diferencia_semanal'] else 0,
+                'costo_unitario': float(a['costo_unitario']) if a['costo_unitario'] else 0,
                 'personas': a['personas'] or []
             }
 
         # Combinar diferencias con asignaciones
+        codigos_en_resultado = set()
         resultado = []
         for d in diferencias:
             item = dict(d)
@@ -3707,13 +3716,35 @@ def diferencias_semana(semana_id):
             else:
                 item['asignacion'] = None
             resultado.append(item)
+            codigos_en_resultado.add(d['codigo'])
+
+        # Para semanas cerradas: incluir tambien productos asignados que ya no tienen diferencia neta
+        # (puede ocurrir si se agregaron conteos retroactivos despues del cierre)
+        if semana['estado'] == 'cerrada':
+            for codigo, asig in asig_map.items():
+                if codigo not in codigos_en_resultado and asig['personas']:
+                    resultado.append({
+                        'codigo': codigo,
+                        'nombre': asig['nombre'],
+                        'unidad': asig['unidad'],
+                        'diferencia': asig['diferencia_semanal'],
+                        'costo_unitario': asig['costo_unitario'],
+                        'dias_contados': 0,
+                        'justificado': False,
+                        'total_justificado': 0,
+                        'tiene_correccion': False,
+                        'detalle_diario': [],
+                        'asignacion': asig,
+                    })
 
         semana_info = {
             'id': semana['id'],
             'fecha_inicio': str(semana['fecha_inicio']),
             'fecha_fin': str(semana['fecha_fin']),
             'local': semana['local'],
-            'estado': semana['estado']
+            'estado': semana['estado'],
+            'cerrada_por': semana.get('cerrada_por'),
+            'cerrada_at': str(semana['cerrada_at']) if semana.get('cerrada_at') else None,
         }
 
         return jsonify({
@@ -4029,7 +4060,7 @@ def cruce_op_solicitar():
     usuario = data.get('usuario', 'panel')
     rol = data.get('rol', '')
 
-    if bodega not in ('bodega_principal', 'materia_prima', 'planta'):
+    if bodega not in BODEGAS_OPERATIVAS:
         return jsonify({'error': 'bodega invalida'}), 400
     if not fecha_toma:
         return jsonify({'error': 'fecha_toma requerida'}), 400
@@ -4339,7 +4370,7 @@ def cruce_op_fechas():
 def carga_contifico_fechas_con_cruce():
     """Devuelve las fechas que tienen cruce operativo completado para una bodega."""
     bodega = request.args.get('bodega')
-    if bodega not in ('bodega_principal', 'materia_prima', 'planta'):
+    if bodega not in BODEGAS_OPERATIVAS:
         return jsonify({'error': 'bodega invalida'}), 400
     conn = None
     try:
@@ -4411,7 +4442,7 @@ def carga_contifico_solicitar():
     usuario = data.get('usuario', 'panel')
     rol = data.get('rol', '')
 
-    if bodega not in ('bodega_principal', 'materia_prima', 'planta'):
+    if bodega not in BODEGAS_OPERATIVAS:
         return jsonify({'error': 'bodega invalida'}), 400
     if not fecha_toma:
         return jsonify({'error': 'fecha_toma requerida'}), 400
@@ -6129,9 +6160,10 @@ def listar_productos_marca():
         # Asegurar columnas nuevas existan
         cur.execute("ALTER TABLE goti.productos_por_marca ADD COLUMN IF NOT EXISTS unidad VARCHAR(30) DEFAULT 'Unidad'")
         cur.execute("ALTER TABLE goti.productos_por_marca ADD COLUMN IF NOT EXISTS equivalencia NUMERIC(12,4) DEFAULT 1")
+        cur.execute("ALTER TABLE goti.productos_por_marca ADD COLUMN IF NOT EXISTS tipo_conteo VARCHAR(20) DEFAULT 'diario'")
         conn.commit()
         cur.execute("""
-            SELECT id, marca, codigo, nombre, activo, unidad, equivalencia, created_at
+            SELECT id, marca, codigo, nombre, activo, unidad, equivalencia, tipo_conteo, created_at
             FROM goti.productos_por_marca
             WHERE marca = %s
             ORDER BY codigo
@@ -6153,6 +6185,9 @@ def agregar_producto_marca():
     nombre = data.get('nombre', '').strip().upper()
     unidad = data.get('unidad', 'Unidad').strip()
     equivalencia = data.get('equivalencia', 1)
+    tipo_conteo = data.get('tipo_conteo', 'diario').strip()
+    if tipo_conteo not in ('diario', 'cruce', 'ambos'):
+        tipo_conteo = 'diario'
     if not marca or not codigo or not nombre:
         return jsonify({'error': 'marca, codigo y nombre son requeridos'}), 400
     conn = None
@@ -6160,11 +6195,11 @@ def agregar_producto_marca():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo, unidad, equivalencia)
-            VALUES (%s, %s, %s, TRUE, %s, %s)
-            ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE, unidad = EXCLUDED.unidad, equivalencia = EXCLUDED.equivalencia
-            RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia
-        """, (marca, codigo, nombre, unidad, equivalencia))
+            INSERT INTO goti.productos_por_marca (marca, codigo, nombre, activo, unidad, equivalencia, tipo_conteo)
+            VALUES (%s, %s, %s, TRUE, %s, %s, %s)
+            ON CONFLICT (marca, codigo) DO UPDATE SET nombre = EXCLUDED.nombre, activo = TRUE, unidad = EXCLUDED.unidad, equivalencia = EXCLUDED.equivalencia, tipo_conteo = EXCLUDED.tipo_conteo
+            RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia, tipo_conteo
+        """, (marca, codigo, nombre, unidad, equivalencia, tipo_conteo))
         conn.commit()
         prod = dict(cur.fetchone())
         return jsonify(prod)
@@ -6211,10 +6246,16 @@ def editar_producto_marca(prod_id):
         if 'nombre' in data:
             sets.append("nombre = %s")
             vals.append(data['nombre'].strip().upper())
+        if 'tipo_conteo' in data:
+            tc = data['tipo_conteo'].strip()
+            if tc not in ('diario', 'cruce', 'ambos'):
+                tc = 'diario'
+            sets.append("tipo_conteo = %s")
+            vals.append(tc)
         if not sets:
             return jsonify({'error': 'Nada que actualizar'}), 400
         vals.append(prod_id)
-        cur.execute(f"UPDATE goti.productos_por_marca SET {', '.join(sets)} WHERE id = %s RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia", vals)
+        cur.execute(f"UPDATE goti.productos_por_marca SET {', '.join(sets)} WHERE id = %s RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia, tipo_conteo", vals)
         conn.commit()
         row = cur.fetchone()
         if not row:
@@ -6236,7 +6277,7 @@ def toggle_producto_marca(prod_id):
         cur = conn.cursor()
         cur.execute("""
             UPDATE goti.productos_por_marca SET activo = NOT activo WHERE id = %s
-            RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia
+            RETURNING id, marca, codigo, nombre, activo, unidad, equivalencia, tipo_conteo
         """, (prod_id,))
         conn.commit()
         row = cur.fetchone()
