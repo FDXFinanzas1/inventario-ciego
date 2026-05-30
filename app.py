@@ -295,6 +295,14 @@ def init_db():
         except Exception:
             cur.execute("ROLLBACK TO SAVEPOINT migrate_roles")
 
+        # Garantizar que gerente siempre tenga acceso a semanal con edicion
+        for mod in ['semanal', 'cruce', 'bajas', 'correccion']:
+            cur.execute("""
+                INSERT INTO goti.rol_modulos (rol, modulo, puede_ver, puede_editar, puede_eliminar)
+                VALUES ('gerente', %s, TRUE, TRUE, FALSE)
+                ON CONFLICT (rol, modulo) DO UPDATE SET puede_ver = TRUE, puede_editar = TRUE
+            """, (mod,))
+
         # ---- Tabla Cuadres de Caja ----
         cur.execute("""
             CREATE TABLE IF NOT EXISTS goti.cuadres_caja (
